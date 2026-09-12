@@ -386,9 +386,11 @@ app.post('/api/research', requireAuth, async (c) => {
     typeof body?.domain === 'string'
       ? body.domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*/, '')
       : '';
+  const focus =
+    typeof body?.focus === 'string' ? body.focus.trim().slice(0, 300) : '';
   if (!DOMAIN_RE.test(domain)) return bad(c, 'enter a valid domain like acme.com');
   try {
-    const result = await researchOrg(domain);
+    const result = await researchOrg(domain, focus || undefined);
     return c.json(result);
   } catch (err) {
     console.error('research failed', err);

@@ -47,13 +47,18 @@ import {
   Lightbulb,
   Loader2,
   Redo2,
+  Search,
   Share2,
+  Sparkles,
   Ungroup,
   Undo2,
   Group,
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
+import CommandPalette from '../components/CommandPalette';
+import type { PaletteAction } from '../components/CommandPalette';
+import DeepResearchModal from '../components/DeepResearchModal';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
 import PersonPanel from '../components/PersonPanel';
@@ -68,6 +73,7 @@ import type {
   MapState,
   MapVersion,
   Person,
+  ResearchResult,
 } from '../types';
 
 const nodeTypes = { person: PersonNode };
@@ -181,10 +187,12 @@ function MapInner() {
   const [showShare, setShowShare] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showInitiatives, setShowInitiatives] = useState(false);
+  const [showCommands, setShowCommands] = useState(false);
+  const [showDeepResearch, setShowDeepResearch] = useState(false);
+  const [deepResearchFocus, setDeepResearchFocus] = useState('');
   const [versions, setVersions] = useState<MapVersion[]>([]);
   const [presence, setPresence] = useState<MapPresence[]>([]);
   const [selfId, setSelfId] = useState<string | null>(null);
-  const [isCompact, setIsCompact] = useState(false);
   const [importNotice, setImportNotice] = useState('');
   const [notFound, setNotFound] = useState(false);
   const [past, setPast] = useState<CanvasSnapshot[]>([]);
@@ -208,14 +216,6 @@ function MapInner() {
   useEffect(() => {
     saveStateRef.current = saveState;
   }, [saveState]);
-
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 639px)');
-    const update = () => setIsCompact(media.matches);
-    update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
 
   useEffect(() => {
     if (!mapId) return;
@@ -511,7 +511,7 @@ function MapInner() {
     [setEdges, markDirty, nodes, recordHistory]
   );
 
-  const addPerson = useCallback(() => {
+  const addPerson = useCallback((draft?: Partial<Person>) => {
     recordHistory();
     const center = rf.screenToFlowPosition({
       x: window.innerWidth / 2,
@@ -519,9 +519,12 @@ function MapInner() {
     });
     const person: Person = {
       id: crypto.randomUUID(),
-      name: 'New person',
-      title: '',
-      department: null,
+      name: draft?.name ?? 'New person',
+      title: draft?.title ?? '',
+      department: draft?.department ?? null,
+      team: draft?.team ?? null,
+      productLine: draft?.productLine ?? null,
+      teamEvidence: draft?.team ? 'inferred' : null,
       role: 'none',
       confidence: 'high',
       sources: [],
@@ -550,6 +553,28 @@ function MapInner() {
     });
     setSelectedId(person.id);
   }, [rf, setNodes, setEdges, markDirty, recordHistory]);
+
+  const focusPeople = useCallback(
+    (matches: Person[]) => {
+      if (matches.length === 0) return;
+      const ids = new Set(matches.map((person) => person.id));
+      setNodes((items) =>
+        items.map((node) => ({ ...node, selected: ids.has(node.id) }))
+      );
+      setSelectedId(matches.length === 1 ? matches[0].id : null);
+      const matchedNodes = nodes.filter((node) => ids.has(node.id));
+      window.setTimeout(
+        () =>
+          rf.fitView({
+            nodes: matchedNodes,
+            padding: matches.length === 1 ? 1.3 : 0.35,
+            duration: 450,
+          }),
+        30
+      );
+    },
+    [nodes, rf, setNodes]
+  );
 
   const deletePerson = useCallback(
     (personId: string) => {
@@ -744,8 +769,13 @@ function MapInner() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
       const command = event.metaKey || event.ctrlKey;
+      if (command && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setShowCommands(true);
+        return;
+      }
+      if (isTypingTarget(event.target)) return;
       if (command && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         if (event.shiftKey) redo();
@@ -770,6 +800,201 @@ function MapInner() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [undo, redo, copySelection, pasteSelection]);
+
+  const runPaletteAction = useCallback(
+    (action: PaletteAction) => {
+      if (action === 'layout') autoLayout();
+      if (action === 'overview') {
+        setSelectedId(null);
+        void rf.fitView({ padding: 0.2, duration: 450 });
+      }
+      if (action === 'initiatives') setShowInitiatives(true);
+      if (action === 'share') setShowShare(true);
+    },
+    [autoLayout, rf]
+  );
+
+  const runAgentCommand = useCallback(
+    (raw: string): string => {
+      const query = raw.trim();
+      const lower = query.toLowerCase();
+      if (!query) return 'I couldn’t find a command to run.';
+
+      if (/\b(arrange|organize|layout|tidy)\b/.test(lower)) {
+        if (readOnly) return 'I couldn’t edit this read-only map.';
+        autoLayout();
+        return 'I arranged the org chart.';
+      }
+      if (/\b(overview|show all|whole account|fit all)\b/.test(lower)) {
+        setSelectedId(null);
+        void rf.fitView({ padding: 0.2, duration: 450 });
+        return 'Showing the whole account.';
+      }
+      if (/\b(research|enrich|find more people)\b/.test(lower)) {
+        if (readOnly) return 'I couldn’t edit this read-only map.';
+        setDeepResearchFocus(
+          query
+            .replace(/\b(deep research|research|enrich|find more people)\b/gi, '')
+            .replace(/\b(for|about|on|in)\b/gi, '')
+            .trim()
+        );
+        setShowDeepResearch(true);
+        return 'Opening targeted deep research.';
+      }
+      if (/\b(initiative|strategy|strategic|why now)\b/.test(lower)) {
+        setShowInitiatives(true);
+        return 'Opening initiative intelligence.';
+      }
+      if (/\bshare\b/.test(lower)) {
+        setShowShare(true);
+        return 'Opening sharing controls.';
+      }
+
+      const matchedPeople = [...people]
+        .sort((a, b) => b.name.length - a.name.length)
+        .filter((person) => lower.includes(person.name.toLowerCase()));
+      const matchedPerson = matchedPeople[0];
+
+      if (lower.includes('reports to') && matchedPeople.length >= 2) {
+        if (readOnly) return 'I couldn’t edit this read-only map.';
+        const divider = lower.indexOf('reports to');
+        const subordinate = matchedPeople.find(
+          (person) => lower.indexOf(person.name.toLowerCase()) < divider
+        );
+        const manager = matchedPeople.find(
+          (person) => lower.indexOf(person.name.toLowerCase()) > divider
+        );
+        if (subordinate && manager) {
+          setManager(subordinate.id, manager.id);
+          focusPeople([subordinate, manager]);
+          return `${subordinate.name} now reports to ${manager.name}.`;
+        }
+      }
+
+      if (matchedPeople.length >= 2 && /\binfluences?\b/.test(lower)) {
+        if (readOnly) return 'I couldn’t edit this read-only map.';
+        const divider = lower.search(/\binfluences?\b/);
+        const from = matchedPeople.find(
+          (person) => lower.indexOf(person.name.toLowerCase()) < divider
+        );
+        const to = matchedPeople.find(
+          (person) => lower.indexOf(person.name.toLowerCase()) > divider
+        );
+        if (from && to) {
+          addInfluence(from.id, to.id, 'influences');
+          focusPeople([from, to]);
+          return `Added an influence link from ${from.name} to ${to.name}.`;
+        }
+      }
+
+      const roles: { terms: string[]; role: BuyingRole; label: string }[] = [
+        { terms: ['economic buyer', 'budget owner'], role: 'economic_buyer', label: 'economic buyer' },
+        { terms: ['decision maker'], role: 'decision_maker', label: 'decision maker' },
+        { terms: ['technical buyer'], role: 'technical_buyer', label: 'technical buyer' },
+        { terms: ['champion'], role: 'champion', label: 'champion' },
+        { terms: ['influencer'], role: 'influencer', label: 'influencer' },
+        { terms: ['blocker'], role: 'blocker', label: 'blocker' },
+      ];
+      const matchedRole = roles.find(({ terms }) =>
+        terms.some((term) => lower.includes(term))
+      );
+      if (
+        matchedPerson &&
+        matchedRole &&
+        /\b(make|mark|set|assign)\b/.test(lower)
+      ) {
+        if (readOnly) return 'I couldn’t edit this read-only map.';
+        updatePerson({ ...matchedPerson, role: matchedRole.role });
+        focusPeople([matchedPerson]);
+        return `${matchedPerson.name} is now marked as ${matchedRole.label}.`;
+      }
+
+      const titleMatch = query.match(/\btitle\s+to\s+(.+)$/i);
+      if (
+        matchedPerson &&
+        titleMatch &&
+        /\b(set|change|update)\b/.test(lower)
+      ) {
+        if (readOnly) return 'I couldn’t edit this read-only map.';
+        const title = titleMatch[1].trim();
+        updatePerson({ ...matchedPerson, title });
+        focusPeople([matchedPerson]);
+        return `Updated ${matchedPerson.name}’s title to ${title}.`;
+      }
+
+      const teamMove = lower.match(
+        /^(?:move|put) .+? (?:to|on|in) (?:the )?(.+?)(?: team)?$/
+      );
+      if (matchedPerson && teamMove) {
+        if (readOnly) return 'I couldn’t edit this read-only map.';
+        const team = query.slice(
+          query.toLowerCase().lastIndexOf(teamMove[1])
+        ).replace(/\s+team$/i, '');
+        updatePerson({
+          ...matchedPerson,
+          team,
+          teamEvidence: 'inferred',
+        });
+        focusPeople([matchedPerson]);
+        return `Moved ${matchedPerson.name} to the ${team} team as an inferred assignment.`;
+      }
+
+      const addMatch = query.match(
+        /^(?:add|create)\s+(.+?)(?:\s+(?:as|,)\s+(.+))?$/i
+      );
+      if (addMatch) {
+        if (readOnly) return 'I couldn’t edit this read-only map.';
+        const name = addMatch[1].trim();
+        const title = addMatch[2]?.trim() ?? '';
+        addPerson({ name, title });
+        return `Added ${name}${title ? ` as ${title}` : ''}.`;
+      }
+
+      if (matchedPerson) {
+        focusPeople([matchedPerson]);
+        return `Found ${matchedPerson.name}.`;
+      }
+
+      const searchTerms = lower
+        .replace(
+          /\b(show|find|open|focus|take me to|people|person|everyone|the|team|department|product|in)\b/g,
+          ' '
+        )
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      const matches = people.filter((person) => {
+        const text = [
+          person.name,
+          person.title,
+          person.department,
+          person.team,
+          person.productLine,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return searchTerms.length > 0 && searchTerms.every((term) => text.includes(term));
+      });
+      if (matches.length > 0) {
+        focusPeople(matches);
+        return `Found ${matches.length} ${matches.length === 1 ? 'person' : 'people'}.`;
+      }
+
+      return 'I couldn’t confidently interpret that yet. Try finding a person or team, adding someone, arranging the map, or assigning a buying role.';
+    },
+    [
+      people,
+      readOnly,
+      autoLayout,
+      rf,
+      updatePerson,
+      focusPeople,
+      addPerson,
+      setManager,
+      addInfluence,
+    ]
+  );
 
   const exportPng = useCallback(async () => {
     const el = document.querySelector('.react-flow__viewport') as HTMLElement;
@@ -902,6 +1127,161 @@ function MapInner() {
     [readOnly, recordHistory, rf, setNodes, markDirty, edges]
   );
 
+  const mergeResearch = useCallback(
+    (result: ResearchResult) => {
+      if (readOnly) return { added: 0, enriched: 0 };
+      recordHistory();
+      const center = rf.screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const normalizeName = (value: string) =>
+        value.trim().toLowerCase().replace(/\s+/g, ' ');
+      const nextNodes = [...nodes];
+      let added = 0;
+      let enriched = 0;
+
+      for (const researched of result.people) {
+        const matchIndex = nextNodes.findIndex(
+          (node) =>
+            normalizeName(node.data.person.name) ===
+            normalizeName(researched.name)
+        );
+        if (matchIndex >= 0) {
+          const node = nextNodes[matchIndex];
+          const person = node.data.person;
+          nextNodes[matchIndex] = {
+            ...node,
+            data: {
+              ...node.data,
+              person: {
+                ...person,
+                title:
+                  !person.title || person.sources.length === 0
+                    ? researched.title
+                    : person.title,
+                department: person.department ?? researched.department,
+                team: person.team ?? researched.team,
+                productLine: person.productLine ?? researched.productLine,
+                teamEvidence:
+                  person.teamEvidence ?? researched.teamEvidence,
+                confidence: researched.confidence,
+                sources: Array.from(
+                  new Set([
+                    ...person.sources,
+                    ...researched.sources,
+                    ...(researched.source ? [researched.source] : []),
+                  ])
+                ),
+                conflictingTitles: Array.from(
+                  new Set([
+                    ...(person.conflictingTitles ?? []),
+                    ...researched.conflictingTitles,
+                  ])
+                ),
+                researchStatus: researched.researchStatus,
+              },
+            },
+          };
+          enriched += 1;
+          continue;
+        }
+
+        const person: Person = {
+          id: crypto.randomUUID(),
+          name: researched.name,
+          title: researched.title,
+          department: researched.department,
+          team: researched.team,
+          productLine: researched.productLine,
+          teamEvidence: researched.teamEvidence,
+          role: 'none',
+          confidence: researched.confidence,
+          sources:
+            researched.sources.length > 0
+              ? researched.sources
+              : researched.source
+                ? [researched.source]
+                : [],
+          conflictingTitles: researched.conflictingTitles,
+          researchStatus: researched.researchStatus,
+          notes: '',
+          email: null,
+          linkedin: null,
+          x: center.x + (added % 3) * 280,
+          y: center.y + Math.floor(added / 3) * 180,
+        };
+        nextNodes.push({
+          id: person.id,
+          type: 'person',
+          position: { x: person.x, y: person.y },
+          data: { person, readOnly: false },
+          style: { width: 250 },
+        });
+        added += 1;
+      }
+
+      const idByName = new Map(
+        nextNodes.map((node) => [
+          normalizeName(node.data.person.name),
+          node.id,
+        ])
+      );
+      const nextEdges = [...edges];
+      for (const researched of result.people) {
+        if (!researched.reportsToName) continue;
+        const from = idByName.get(normalizeName(researched.reportsToName));
+        const to = idByName.get(normalizeName(researched.name));
+        if (
+          !from ||
+          !to ||
+          from === to ||
+          nextEdges.some(
+            (edge) => edge.data?.kind === 'reports' && edge.target === to
+          )
+        ) {
+          continue;
+        }
+        nextEdges.push(reportsEdge(from, to));
+      }
+
+      const nextMeta = meta
+        ? {
+            ...meta,
+            researchedAt: new Date().toISOString(),
+            provider: result.provider,
+          }
+        : meta;
+      metaRef.current = nextMeta;
+      setMeta(nextMeta);
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+      markDirty(nextNodes, nextEdges);
+      const addedIds = nextNodes.slice(nodes.length).map((node) => node.id);
+      if (addedIds.length > 0) {
+        window.setTimeout(() => {
+          void rf.fitView({
+            nodes: nextNodes.filter((node) => addedIds.includes(node.id)),
+            padding: 0.5,
+            duration: 450,
+          });
+        }, 50);
+      }
+      return { added, enriched };
+    },
+    [
+      edges,
+      markDirty,
+      meta,
+      nodes,
+      readOnly,
+      recordHistory,
+      rf,
+      setEdges,
+      setNodes,
+    ]
+  );
+
   if (notFound) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
@@ -991,10 +1371,19 @@ function MapInner() {
               </button>
             </div>
             <button
-              onClick={addPerson}
+              onClick={() => addPerson()}
               className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
             >
               <UserPlus size={15} /> Person
+            </button>
+            <button
+              onClick={() => {
+                setDeepResearchFocus('');
+                setShowDeepResearch(true);
+              }}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20"
+            >
+              <Sparkles size={15} /> Deep research
             </button>
             <button
               onClick={autoLayout}
@@ -1047,6 +1436,21 @@ function MapInner() {
       </header>
 
       <div className="relative flex-1 bg-[#f6f7f2]">
+        <button
+          onClick={() => setShowCommands(true)}
+          className="absolute left-1/2 top-3 z-30 flex w-[calc(100%_-_7rem)] max-w-md -translate-x-1/2 items-center gap-2.5 rounded-2xl border border-white/90 bg-white/90 px-3.5 py-2.5 text-left text-sm text-slate-500 shadow-[0_12px_40px_rgba(15,23,42,.12)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_16px_45px_rgba(15,23,42,.16)] sm:top-4 sm:px-4"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#eeecff] text-[#5b4cf0]">
+            <Search size={15} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            Search or ask TopDown
+          </span>
+          <Sparkles size={14} className="shrink-0 text-[#5b4cf0]" />
+          <kbd className="hidden rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400 sm:block">
+            ⌘K
+          </kbd>
+        </button>
         {importNotice && (
           <div className="absolute right-3 top-3 z-30 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
             {importNotice}
@@ -1091,8 +1495,9 @@ function MapInner() {
           nodesDraggable={!readOnly}
           nodesConnectable={!readOnly}
           elementsSelectable
-          selectionOnDrag={!readOnly && !isCompact}
-          panOnDrag={isCompact ? true : [1, 2]}
+          selectionOnDrag={false}
+          selectionKeyCode={readOnly ? null : 'Shift'}
+          panOnDrag
           multiSelectionKeyCode={['Meta', 'Control']}
           deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
           fitView
@@ -1185,7 +1590,7 @@ function MapInner() {
 
         {/* buying-committee coverage strip */}
         {people.length > 0 && (
-          <div className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-2xl border border-white/80 bg-white/85 px-3.5 py-2.5 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:left-4 sm:top-4">
+          <div className="pointer-events-none absolute left-2 top-16 z-10 max-w-[calc(100%-1rem)] rounded-2xl border border-white/80 bg-white/85 px-3.5 py-2.5 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:left-4 sm:top-20">
             <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
               <span className="h-1.5 w-1.5 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
               Buying committee · {people.length} people
@@ -1253,6 +1658,19 @@ function MapInner() {
 
       {showShare && mapId && (
         <ShareModal mapId={mapId} onClose={() => setShowShare(false)} />
+      )}
+      {showDeepResearch && (
+        <DeepResearchModal
+          domain={domain}
+          people={people}
+          selected={selected}
+          initialFocus={deepResearchFocus}
+          onClose={() => {
+            setShowDeepResearch(false);
+            setDeepResearchFocus('');
+          }}
+          onMerge={mergeResearch}
+        />
       )}
       {showHistory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
@@ -1393,6 +1811,19 @@ function MapInner() {
           </div>
         </div>
       )}
+      <AnimatePresence>
+        {showCommands && (
+          <CommandPalette
+            people={people}
+            readOnly={readOnly}
+            hasInitiatives={(meta?.initiatives?.length ?? 0) > 0}
+            onClose={() => setShowCommands(false)}
+            onFocusPerson={(person) => focusPeople([person])}
+            onRunAction={runPaletteAction}
+            onRunAgent={runAgentCommand}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

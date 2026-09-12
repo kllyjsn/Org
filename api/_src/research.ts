@@ -345,20 +345,31 @@ function fixtureOrg(domain: string): ResearchResult {
   };
 }
 
-export async function researchOrg(domain: string): Promise<ResearchResult> {
+export async function researchOrg(
+  domain: string,
+  requestedFocus?: string
+): Promise<ResearchResult> {
   const provider = activeProvider();
   if (provider === 'fixture') return fixtureOrg(domain);
 
   try {
-    const initiativesPromise = chat([
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: initiativesPrompt(domain) },
-    ]).catch(() => null);
-    const focuses = [
-      'executive leadership and company-wide reporting structure',
-      'engineering, product, design, data, security, and technology leadership',
-      'sales, marketing, customer success, finance, operations, legal, and people leadership',
-    ];
+    const initiativesPromise = requestedFocus
+      ? Promise.resolve(null)
+      : chat([
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: initiativesPrompt(domain) },
+        ]).catch(() => null);
+    const focuses = requestedFocus
+      ? [
+          `targeted enrichment for: ${requestedFocus}. Find the named person or ` +
+            'team first, then include closely related leaders and reporting lines ' +
+            'only when public evidence supports them.',
+        ]
+      : [
+          'executive leadership and company-wide reporting structure',
+          'engineering, product, design, data, security, and technology leadership',
+          'sales, marketing, customer success, finance, operations, legal, and people leadership',
+        ];
     const passes = await Promise.allSettled(
       focuses.map(async (focus) => {
         const result = await chat([
@@ -383,7 +394,7 @@ export async function researchOrg(domain: string): Promise<ResearchResult> {
         Array.isArray(pass.parsed.people) ? pass.parsed.people : []
       )
     );
-    const missing = missingFunctions(people);
+    const missing = requestedFocus ? [] : missingFunctions(people);
     if (missing.length > 0) {
       try {
         const followUp = await chat([
