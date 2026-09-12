@@ -1,8 +1,54 @@
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Search, Sparkles } from 'lucide-react';
+import { Building2, Loader2, Search, Sparkles, Users } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { stateFromResearch } from '../lib/layout';
-import type { ResearchResult } from '../types';
+import type { MapState, Person, ResearchResult } from '../types';
+
+function templateState(
+  domain: string,
+  template: 'executive' | 'buying-committee'
+): MapState {
+  const executive = [
+    ['Chief Executive Officer', 'Executive', 'economic_buyer'],
+    ['Chief Financial Officer', 'Finance', 'decision_maker'],
+    ['Chief Technology Officer', 'Engineering', 'technical_buyer'],
+    ['Chief Revenue Officer', 'Sales', 'champion'],
+  ] as const;
+  const buyingCommittee = [
+    ['Executive Sponsor', 'Executive', 'economic_buyer'],
+    ['Business Champion', 'Operations', 'champion'],
+    ['Decision Maker', 'Operations', 'decision_maker'],
+    ['Technical Buyer', 'Engineering', 'technical_buyer'],
+    ['Key Influencer', 'Operations', 'influencer'],
+    ['Potential Blocker', 'Finance', 'blocker'],
+  ] as const;
+  const source = template === 'executive' ? executive : buyingCommittee;
+  const people: Person[] = source.map(([title, department, role], index) => ({
+    id: crypto.randomUUID(),
+    name: title,
+    title,
+    department,
+    role,
+    confidence: 'high',
+    sources: [],
+    notes: '',
+    email: null,
+    linkedin: null,
+    x: (index % 3) * 300,
+    y: Math.floor(index / 3) * 180,
+  }));
+  return {
+    people,
+    edges: [],
+    meta: {
+      domain,
+      companyName: null,
+      researchedAt: null,
+      tier: 'template',
+      provider: null,
+    },
+  };
+}
 
 const STAGES = [
   'Searching leadership pages and public sources…',
@@ -74,6 +120,26 @@ export default function CreateMapModal({
         : stateFromResearch(result!);
       const name = result?.companyName || d;
       const { id } = await api.createMap(workspaceId, name, d, state);
+      onCreated(id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'failed to create map');
+      setCreating(false);
+    }
+  };
+
+  const createFromTemplate = async (
+    template: 'executive' | 'buying-committee'
+  ) => {
+    setCreating(true);
+    setError(null);
+    try {
+      const d = domain.trim();
+      const { id } = await api.createMap(
+        workspaceId,
+        d,
+        d,
+        templateState(d, template)
+      );
       onCreated(id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'failed to create map');
@@ -165,6 +231,34 @@ export default function CreateMapModal({
         {error && (
           <div className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {error}
+          </div>
+        )}
+
+        {!result && !researching && (
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Or start with a template
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => void createFromTemplate('executive')}
+                disabled={!domain.trim() || creating}
+                className="rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
+              >
+                <Building2 size={17} className="mb-2 text-indigo-600" />
+                <span className="block text-sm font-medium">Executive map</span>
+                <span className="text-xs text-slate-500">CEO and functional leaders</span>
+              </button>
+              <button
+                onClick={() => void createFromTemplate('buying-committee')}
+                disabled={!domain.trim() || creating}
+                className="rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
+              >
+                <Users size={17} className="mb-2 text-indigo-600" />
+                <span className="block text-sm font-medium">Buying committee</span>
+                <span className="text-xs text-slate-500">Roles for a live opportunity</span>
+              </button>
+            </div>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, NodeResizer, Position } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import { StickyNote } from 'lucide-react';
 import { deptColor, initials, ROLE_META } from '../lib/colors';
@@ -7,6 +7,7 @@ import type { Person } from '../types';
 
 export interface PersonNodeData {
   person: Person;
+  readOnly?: boolean;
 }
 
 function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
@@ -16,10 +17,17 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
 
   return (
     <div
-      className={`w-[250px] rounded-xl border bg-white px-3 py-2.5 text-left shadow-sm transition ${
+      className={`h-full min-h-[74px] w-full min-w-[210px] rounded-xl border bg-white px-3 py-2.5 text-left shadow-sm transition ${
         selected ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-200'
       } ${unverified ? 'border-dashed border-amber-300 bg-amber-50/40' : ''}`}
     >
+      <NodeResizer
+        isVisible={selected && !data.readOnly}
+        minWidth={210}
+        minHeight={74}
+        lineClassName="!border-indigo-400"
+        handleClassName="!h-2.5 !w-2.5 !border-indigo-500 !bg-white"
+      />
       <Handle type="target" position={Position.Top} className="!bg-slate-400" />
       <div className="flex items-start gap-2.5">
         <div

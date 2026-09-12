@@ -44,7 +44,9 @@ import {
   Loader2,
   Redo2,
   Share2,
+  Ungroup,
   Undo2,
+  Group,
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
@@ -99,12 +101,16 @@ function influenceEdge(from: string, to: string, label: string | null, id?: stri
   };
 }
 
-function toFlow(state: MapState): { nodes: Node<PersonNodeData>[]; edges: FlowEdge[] } {
+function toFlow(
+  state: MapState,
+  readOnly = false
+): { nodes: Node<PersonNodeData>[]; edges: FlowEdge[] } {
   const nodes: Node<PersonNodeData>[] = state.people.map((p) => ({
     id: p.id,
     type: 'person',
     position: { x: p.x, y: p.y },
-    data: { person: p },
+    data: { person: p, readOnly },
+    style: { width: p.width ?? 250, height: p.height },
   }));
   const edges: FlowEdge[] = state.edges.map((e) =>
     e.kind === 'reports'
@@ -124,6 +130,8 @@ function toState(
       ...n.data.person,
       x: n.position.x,
       y: n.position.y,
+      width: n.width ?? n.data.person.width,
+      height: n.height ?? n.data.person.height,
     })),
     edges: edges.map(edgeToMap),
     meta,
@@ -188,7 +196,7 @@ function MapInner() {
     api
       .getMap(mapId)
       .then(({ map }) => {
-        const flow = toFlow(map.state);
+        const flow = toFlow(map.state, map.role === 'viewer');
         setNodes(flow.nodes);
         setEdges(flow.edges);
         setMapName(map.name);
@@ -228,7 +236,7 @@ function MapInner() {
     async (versionId: string) => {
       if (!mapId) return;
       const restored = await api.restoreVersion(mapId, versionId);
-      const flow = toFlow(restored.state);
+      const flow = toFlow(restored.state, readOnly);
       setMapName(restored.name);
       setMeta(restored.state.meta);
       setNodes(flow.nodes);
@@ -238,7 +246,7 @@ function MapInner() {
       setShowHistory(false);
       setSaveState('saved');
     },
-    [mapId, setNodes, setEdges]
+    [mapId, readOnly, setNodes, setEdges]
   );
 
   const persist = useCallback(
@@ -388,7 +396,9 @@ function MapInner() {
       }, 750);
       setNodes((ns) => {
         const next = ns.map((n) =>
-          n.id === updated.id ? { ...n, data: { person: updated } } : n
+          n.id === updated.id
+            ? { ...n, data: { ...n.data, person: updated } }
+            : n
         );
         setEdges((es) => {
           markDirty(next, es);
@@ -459,7 +469,8 @@ function MapInner() {
           id: person.id,
           type: 'person' as const,
           position: { x: center.x, y: center.y },
-          data: { person },
+          data: { person, readOnly: false },
+          style: { width: 250 },
         },
       ];
       setEdges((es) => {
@@ -547,6 +558,49 @@ function MapInner() {
           ? node
           : { ...node, position: { ...node.position, x } };
       });
+      markDirty(next, edges);
+      return next;
+    });
+  }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
+
+  const groupSelection = useCallback(() => {
+    if (selectedNodes.length < 2) return;
+    recordHistory();
+    const selectedIds = new Set(selectedNodes.map((node) => node.id));
+    const groupId = crypto.randomUUID();
+    setNodes((items) => {
+      const next = items.map((node) =>
+        selectedIds.has(node.id)
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                person: { ...node.data.person, groupId },
+              },
+            }
+          : node
+      );
+      markDirty(next, edges);
+      return next;
+    });
+  }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
+
+  const ungroupSelection = useCallback(() => {
+    if (selectedNodes.length === 0) return;
+    recordHistory();
+    const selectedIds = new Set(selectedNodes.map((node) => node.id));
+    setNodes((items) => {
+      const next = items.map((node) =>
+        selectedIds.has(node.id)
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                person: { ...node.data.person, groupId: undefined },
+              },
+            }
+          : node
+      );
       markDirty(next, edges);
       return next;
     });
@@ -814,7 +868,18 @@ function MapInner() {
           onNodeDragStop={() => {
             dragHistoryRecorded.current = false;
           }}
-          onNodeClick={(_, n) => setSelectedId(n.id)}
+          onNodeClick={(_, n) => {
+            setSelectedId(n.id);
+            const groupId = n.data.person.groupId;
+            if (groupId) {
+              setNodes((items) =>
+                items.map((node) => ({
+                  ...node,
+                  selected: node.data.person.groupId === groupId,
+                }))
+              );
+            }
+          }}
           onPaneClick={() => setSelectedId(null)}
           nodeTypes={nodeTypes}
           nodesDraggable={!readOnly}
@@ -852,6 +917,20 @@ function MapInner() {
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:text-slate-300"
             >
               <AlignHorizontalDistributeCenter size={16} />
+            </button>
+            <button
+              onClick={groupSelection}
+              title="Group selection"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <Group size={16} />
+            </button>
+            <button
+              onClick={ungroupSelection}
+              title="Ungroup selection"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <Ungroup size={16} />
             </button>
             <button
               onClick={() => {

@@ -22,6 +22,9 @@ export interface Person {
   linkedin: string | null;
   x: number;
   y: number;
+  width?: number;
+  height?: number;
+  groupId?: string;
 }
 
 export interface MapEdge {
