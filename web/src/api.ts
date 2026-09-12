@@ -1,5 +1,6 @@
 import type {
   LoadedMap,
+  MapChangeAlert,
   MapComment,
   MapListItem,
   MapPresence,
@@ -114,6 +115,10 @@ export const api = {
     req<{ ok: true }>(`/api/maps/${id}`, { method: 'DELETE' }),
   listVersions: (mapId: string) =>
     req<{ versions: MapVersion[] }>(`/api/maps/${mapId}/versions`),
+  listChanges: (mapId: string) =>
+    req<{ baselineAt: string | null; changes: MapChangeAlert[] }>(
+      `/api/maps/${mapId}/changes`
+    ),
   restoreVersion: (mapId: string, versionId: string) =>
     req<{ name: string; state: MapState }>(
       `/api/maps/${mapId}/versions/${versionId}/restore`,

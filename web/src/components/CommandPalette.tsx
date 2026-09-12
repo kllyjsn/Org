@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowRight,
+  BellRing,
   Building2,
+  Compass,
   CornerDownLeft,
   LayoutGrid,
   Lightbulb,
@@ -13,7 +15,13 @@ import {
 } from 'lucide-react';
 import type { Person } from '../types';
 
-export type PaletteAction = 'layout' | 'overview' | 'initiatives' | 'share';
+export type PaletteAction =
+  | 'layout'
+  | 'overview'
+  | 'strategy'
+  | 'changes'
+  | 'initiatives'
+  | 'share';
 
 type Choice =
   | { kind: 'person'; person: Person }
@@ -40,6 +48,20 @@ const ACTIONS: Extract<Choice, { kind: 'action' }>[] = [
     label: 'Arrange the org chart',
     detail: 'Rebuild a clean reporting layout',
     icon: LayoutGrid,
+  },
+  {
+    kind: 'action',
+    id: 'strategy',
+    label: 'Build the account strategy',
+    detail: 'Find the best path in and copy a meeting brief',
+    icon: Compass,
+  },
+  {
+    kind: 'action',
+    id: 'changes',
+    label: 'Show account changes',
+    detail: 'Compare this map with its latest saved version',
+    icon: BellRing,
   },
   {
     kind: 'action',

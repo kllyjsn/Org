@@ -39,6 +39,8 @@ import {
   AlignHorizontalDistributeCenter,
   AlignStartHorizontal,
   ArrowLeft,
+  BellRing,
+  Compass,
   Copy,
   Download,
   FileUp,
@@ -56,6 +58,8 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
+import AccountStrategyModal from '../components/AccountStrategyModal';
+import ChangeAlertsModal from '../components/ChangeAlertsModal';
 import CommandPalette from '../components/CommandPalette';
 import type { PaletteAction } from '../components/CommandPalette';
 import DeepResearchModal from '../components/DeepResearchModal';
@@ -187,6 +191,8 @@ function MapInner() {
   const [showShare, setShowShare] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showInitiatives, setShowInitiatives] = useState(false);
+  const [showStrategy, setShowStrategy] = useState(false);
+  const [showChanges, setShowChanges] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [showDeepResearch, setShowDeepResearch] = useState(false);
   const [deepResearchFocus, setDeepResearchFocus] = useState('');
@@ -808,6 +814,8 @@ function MapInner() {
         setSelectedId(null);
         void rf.fitView({ padding: 0.2, duration: 450 });
       }
+      if (action === 'strategy') setShowStrategy(true);
+      if (action === 'changes') setShowChanges(true);
       if (action === 'initiatives') setShowInitiatives(true);
       if (action === 'share') setShowShare(true);
     },
@@ -841,7 +849,23 @@ function MapInner() {
         setShowDeepResearch(true);
         return 'Opening targeted deep research.';
       }
-      if (/\b(initiative|strategy|strategic|why now)\b/.test(lower)) {
+      if (
+        /\b(account brief|relationship path|deal plan|account strategy|path in)\b/.test(
+          lower
+        )
+      ) {
+        setShowStrategy(true);
+        return 'Opening the account strategy.';
+      }
+      if (
+        /\b(what changed|show changes|change alerts?|account movement)\b/.test(
+          lower
+        )
+      ) {
+        setShowChanges(true);
+        return 'Opening account change alerts.';
+      }
+      if (/\b(initiative|strategic|why now)\b/.test(lower)) {
         setShowInitiatives(true);
         return 'Opening initiative intelligence.';
       }
@@ -1410,6 +1434,18 @@ function MapInner() {
             >
               <History size={15} /> History
             </button>
+            <button
+              onClick={() => setShowChanges(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
+            >
+              <BellRing size={15} /> Changes
+            </button>
+            <button
+              onClick={() => setShowStrategy(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+            >
+              <Compass size={15} /> Strategy
+            </button>
             {(meta?.initiatives?.length ?? 0) > 0 && (
               <button
                 onClick={() => setShowInitiatives(true)}
@@ -1810,6 +1846,31 @@ function MapInner() {
             </div>
           </div>
         </div>
+      )}
+      {showStrategy && meta && (
+        <AccountStrategyModal
+          companyName={meta.companyName}
+          domain={domain}
+          people={people}
+          edges={edges.map(edgeToMap)}
+          initiatives={meta.initiatives ?? []}
+          onClose={() => setShowStrategy(false)}
+          onFocusPerson={(person) => {
+            setShowStrategy(false);
+            focusPeople([person]);
+          }}
+        />
+      )}
+      {showChanges && mapId && (
+        <ChangeAlertsModal
+          mapId={mapId}
+          people={people}
+          onClose={() => setShowChanges(false)}
+          onFocusPerson={(person) => {
+            setShowChanges(false);
+            focusPeople([person]);
+          }}
+        />
       )}
       <AnimatePresence>
         {showCommands && (

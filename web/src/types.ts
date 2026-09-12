@@ -151,6 +151,22 @@ export interface MapVersion {
   created_at: string;
 }
 
+export interface MapChangeAlert {
+  id: string;
+  type:
+    | 'person_added'
+    | 'person_removed'
+    | 'title_changed'
+    | 'team_changed'
+    | 'role_changed'
+    | 'initiative_added'
+    | 'initiative_removed';
+  title: string;
+  detail: string;
+  personId?: string;
+  sources?: string[];
+}
+
 export interface MapPresence {
   id: string;
   name: string;

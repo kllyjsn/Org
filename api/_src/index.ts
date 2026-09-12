@@ -3,6 +3,7 @@ import type { Context, Next } from 'hono';
 import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
 import { researchOrg } from './research.js';
 import { activeProvider } from './llm.js';
@@ -568,6 +569,22 @@ app.get('/api/maps/:id/versions', requireAuth, async (c) => {
     [map.id]
   );
   return c.json({ versions });
+});
+
+app.get('/api/maps/:id/changes', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const versions = await query<{ state: MapState; created_at: string }>(
+    `SELECT state, created_at FROM map_versions
+     WHERE map_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [map.id]
+  );
+  const baseline = versions[0];
+  if (!baseline) return c.json({ baselineAt: null, changes: [] });
+
+  const changes = compareMapStates(baseline.state, map.state as MapState);
+  return c.json({ baselineAt: baseline.created_at, changes });
 });
 
 app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => {
