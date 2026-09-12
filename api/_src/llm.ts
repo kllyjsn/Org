@@ -103,7 +103,7 @@ export async function chat(messages: ChatMessage[]): Promise<ChatResult> {
       const payload = await postJson(
         p.url,
         { authorization: `Bearer ${process.env[p.envKey]}` },
-        { model: p.model, messages }
+        { model: p.model, messages, max_tokens: 8_000 }
       );
       return {
         content: extractContent(payload),
