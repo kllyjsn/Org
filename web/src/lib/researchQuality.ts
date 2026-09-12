@@ -76,3 +76,60 @@ export function evidenceFreshness(
   if (newestAge <= 540) return 'aging';
   return 'stale';
 }
+
+const FIRST_NAME_ALIASES: Record<string, string> = {
+  bob: 'robert', rob: 'robert', bobby: 'robert', robbie: 'robert',
+  bill: 'william', billy: 'william', will: 'william', liam: 'william',
+  mike: 'michael', mikey: 'michael',
+  dave: 'david', davey: 'david',
+  jim: 'james', jimmy: 'james', jamie: 'james',
+  rich: 'richard', rick: 'richard', ricky: 'richard', dick: 'richard',
+  tom: 'thomas', tommy: 'thomas',
+  chris: 'christopher', topher: 'christopher',
+  matt: 'matthew', matty: 'matthew',
+  joe: 'joseph', joey: 'joseph',
+  dan: 'daniel', danny: 'daniel',
+  ben: 'benjamin', benny: 'benjamin',
+  tony: 'anthony',
+  ed: 'edward', ted: 'edward', eddie: 'edward', teddy: 'edward',
+  charlie: 'charles', chuck: 'charles', chas: 'charles',
+  jack: 'john', johnny: 'john',
+  andy: 'andrew', drew: 'andrew',
+  josh: 'joshua',
+  nick: 'nicholas', nicky: 'nicholas',
+  steve: 'steven', stevie: 'steven',
+  greg: 'gregory',
+  jeff: 'jeffrey',
+  phil: 'philip',
+  larry: 'lawrence',
+  liz: 'elizabeth', beth: 'elizabeth', lizzy: 'elizabeth', betty: 'elizabeth',
+  kate: 'katherine', katie: 'katherine', katy: 'katherine', cathy: 'katherine',
+  meg: 'margaret', peggy: 'margaret', maggie: 'margaret',
+  sue: 'susan', suzy: 'susan', susie: 'susan',
+  jenny: 'jennifer', jen: 'jennifer',
+  vicky: 'victoria', vicki: 'victoria', tori: 'victoria',
+  becky: 'rebecca',
+  cindy: 'cynthia',
+  debbie: 'deborah', deb: 'deborah',
+  jerry: 'gerald',
+  ron: 'ronald', ronnie: 'ronald',
+  don: 'donald', donnie: 'donald',
+  ray: 'raymond',
+  fred: 'frederick', freddy: 'frederick',
+  kenny: 'kenneth', ken: 'kenneth',
+  tim: 'timothy', timmy: 'timothy',
+  zach: 'zachary', zack: 'zachary',
+  pete: 'peter',
+};
+
+/**
+ * Person match key shared with the server: lowercase name with the first
+ * name canonicalized, so "Bob Komin" merges into an existing "Robert Komin".
+ */
+export function canonicalPersonName(name: string): string {
+  const normalized = name.trim().toLowerCase().replace(/\s+/g, ' ');
+  const parts = normalized.split(' ');
+  const first = FIRST_NAME_ALIASES[parts[0] ?? ''];
+  if (first) parts[0] = first;
+  return parts.join(' ');
+}

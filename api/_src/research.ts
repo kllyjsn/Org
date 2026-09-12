@@ -93,6 +93,12 @@ Rules:
 - "high" confidence = named on the company's official site or filings.
 - "medium" = credible secondary source (press, reputable directories).
 - "low" = inferred or possibly stale.
+- Every "sources" URL must directly support the person's claimed role on that
+  page — never cite a page that does not name them or their current title.
+  If you are unsure the page names them, drop the citation and lower
+  confidence instead.
+- If two entries name the same person under a nickname (Bob/Robert,
+  Mike/Michael, etc.), merge them into one entry.
 - Research specific sub-teams and product lines, not just broad departments.
 - Mark teamEvidence "inferred" when the team comes only from title/context.
 - Use "conflicting" when credible sources disagree on the current title.
@@ -463,6 +469,65 @@ export async function deadSourceUrls(
   return dead;
 }
 
+// Common nickname → canonical first name, so "Bob Komin" and "Robert Komin"
+// dedupe to one person.
+const FIRST_NAME_ALIASES: Record<string, string> = {
+  bob: 'robert', rob: 'robert', bobby: 'robert', robbie: 'robert',
+  bill: 'william', billy: 'william', will: 'william', liam: 'william',
+  mike: 'michael', mikey: 'michael',
+  dave: 'david', davey: 'david',
+  jim: 'james', jimmy: 'james', jamie: 'james',
+  rich: 'richard', rick: 'richard', ricky: 'richard', dick: 'richard',
+  tom: 'thomas', tommy: 'thomas',
+  chris: 'christopher', topher: 'christopher',
+  matt: 'matthew', matty: 'matthew',
+  joe: 'joseph', joey: 'joseph',
+  dan: 'daniel', danny: 'daniel',
+  ben: 'benjamin', benny: 'benjamin',
+  tony: 'anthony',
+  ed: 'edward', ted: 'edward', eddie: 'edward', teddy: 'edward',
+  charlie: 'charles', chuck: 'charles', chas: 'charles',
+  jack: 'john', johnny: 'john',
+  andy: 'andrew', drew: 'andrew',
+  josh: 'joshua',
+  nick: 'nicholas', nicky: 'nicholas',
+  steve: 'steven', stevie: 'steven',
+  greg: 'gregory',
+  jeff: 'jeffrey',
+  phil: 'philip',
+  larry: 'lawrence',
+  liz: 'elizabeth', beth: 'elizabeth', lizzy: 'elizabeth', betty: 'elizabeth',
+  kate: 'katherine', katie: 'katherine', katy: 'katherine', cathy: 'katherine',
+  meg: 'margaret', peggy: 'margaret', maggie: 'margaret',
+  sue: 'susan', suzy: 'susan', susie: 'susan',
+  jenny: 'jennifer', jen: 'jennifer',
+  vicky: 'victoria', vicki: 'victoria', tori: 'victoria',
+  becky: 'rebecca',
+  cindy: 'cynthia',
+  debbie: 'deborah', deb: 'deborah',
+  jerry: 'gerald',
+  ron: 'ronald', ronnie: 'ronald',
+  don: 'donald', donnie: 'donald',
+  ray: 'raymond',
+  fred: 'frederick', freddy: 'frederick',
+  kenny: 'kenneth', ken: 'kenneth',
+  tim: 'timothy', timmy: 'timothy',
+  zach: 'zachary', zack: 'zachary',
+  pete: 'peter',
+};
+
+/**
+ * Person dedupe/merge key: lowercase full name with the first name resolved
+ * through the alias table. Same last name required, so false merges are rare.
+ */
+export function canonicalPersonName(name: string): string {
+  const normalized = name.trim().toLowerCase().replace(/\s+/g, ' ');
+  const parts = normalized.split(' ');
+  const first = FIRST_NAME_ALIASES[parts[0] ?? ''];
+  if (first) parts[0] = first;
+  return parts.join(' ');
+}
+
 // Public suffixes where the meaningful publisher boundary sits one level up.
 const MULTI_PART_SUFFIXES = new Set([
   'ac.uk',
@@ -551,7 +616,7 @@ export function normalizePeople(
     const name = typeof p.name === 'string' ? stripFootnotes(p.name) : '';
     const title = typeof p.title === 'string' ? stripFootnotes(p.title) : '';
     if (!name || !title) continue;
-    const key = name.toLowerCase();
+    const key = canonicalPersonName(name);
     const conf = CONFIDENCES.includes(p.confidence as Confidence)
       ? (p.confidence as Confidence)
       : typeof p.confidence === 'number'

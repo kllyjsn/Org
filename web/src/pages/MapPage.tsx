@@ -87,6 +87,7 @@ import { parseCsv } from '../lib/csv';
 import {
   corroborationCount,
   evidenceFreshness,
+  canonicalPersonName,
 } from '../lib/researchQuality';
 import type {
   AccountAgentAction,
@@ -1460,8 +1461,7 @@ function MapInner() {
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
       });
-      const normalizeName = (value: string) =>
-        value.trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizeName = canonicalPersonName;
       const nextNodes = [...nodes];
       let added = 0;
       let enriched = 0;
@@ -1633,43 +1633,52 @@ function MapInner() {
         : meta;
       // Drop stored citations the server verified as dead, then recompute the
       // displayed provenance for every card — including ones this pass did not
-      // return.
-      if (dead.size > 0) {
-        for (let i = 0; i < nextNodes.length; i++) {
-          const person = nextNodes[i].data.person;
-          const sourceDetails = (person.sourceDetails ?? []).filter(
-            (s) => !dead.has(s.url)
-          );
-          const sources = person.sources.filter((url) => !dead.has(url));
-          if (
-            sourceDetails.length === (person.sourceDetails?.length ?? 0) &&
-            sources.length === person.sources.length
-          ) {
-            continue;
-          }
-          const freshness = evidenceFreshness(sourceDetails);
-          nextNodes[i] = {
-            ...nextNodes[i],
-            data: {
-              ...nextNodes[i].data,
-              person: {
-                ...person,
-                sources,
-                sourceDetails,
-                freshness,
-                corroborationCount: corroborationCount(sourceDetails),
-                lastVerifiedAt:
-                  sources.length > 0 ? new Date().toISOString() : null,
-                researchStatus:
-                  person.researchStatus === 'conflicting'
-                    ? 'conflicting'
-                    : sources.length === 0 || freshness === 'stale'
-                      ? 'possibly_stale'
-                      : person.researchStatus,
-              },
+      // return — and clamp evidence labels on people left with no sources.
+      for (let i = 0; i < nextNodes.length; i++) {
+        const person = nextNodes[i].data.person;
+        const sourceDetails = (person.sourceDetails ?? []).filter(
+          (s) => !dead.has(s.url)
+        );
+        const sources = person.sources.filter((url) => !dead.has(url));
+        const removed =
+          sourceDetails.length !== (person.sourceDetails?.length ?? 0) ||
+          sources.length !== person.sources.length;
+        const needsClamp =
+          sources.length === 0 &&
+          (person.researchStatus === 'verified' ||
+            person.confidence === 'high' ||
+            person.teamEvidence === 'sourced');
+        if (!removed && !needsClamp) continue;
+        const freshness = evidenceFreshness(sourceDetails);
+        nextNodes[i] = {
+          ...nextNodes[i],
+          data: {
+            ...nextNodes[i].data,
+            person: {
+              ...person,
+              sources,
+              sourceDetails,
+              freshness,
+              corroborationCount: corroborationCount(sourceDetails),
+              lastVerifiedAt:
+                sources.length > 0 ? new Date().toISOString() : null,
+              confidence:
+                person.confidence === 'high' && sources.length === 0
+                  ? 'medium'
+                  : person.confidence,
+              teamEvidence:
+                person.teamEvidence === 'sourced' && sources.length === 0
+                  ? 'inferred'
+                  : person.teamEvidence,
+              researchStatus:
+                person.researchStatus === 'conflicting'
+                  ? 'conflicting'
+                  : sources.length === 0 || freshness === 'stale'
+                    ? 'possibly_stale'
+                    : person.researchStatus,
             },
-          };
-        }
+          },
+        };
       }
       metaRef.current = nextMeta;
       setMeta(nextMeta);

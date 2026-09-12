@@ -206,3 +206,21 @@ test('sourceless claims are not presented as verified', () => {
   assert.equal(person.teamEvidence, 'inferred');
   assert.equal(person.researchStatus, 'possibly_stale');
 });
+
+test('dedupes nickname + full-name aliases for the same person', () => {
+  const people = normalizePeople([
+    { name: 'Robert Komin', title: 'Chief Financial Officer' },
+    { name: 'Bob Komin', title: 'CFO' },
+    { name: 'Mike Feldman', title: 'COO' },
+    { name: 'Michael Feldman', title: 'Chief Operating Officer' },
+  ]);
+  assert.equal(people.length, 2);
+});
+
+test('does not merge distinct people sharing a last name', () => {
+  const people = normalizePeople([
+    { name: 'Andrew Feldman', title: 'CEO' },
+    { name: 'Michael Feldman', title: 'COO' },
+  ]);
+  assert.equal(people.length, 2);
+});
