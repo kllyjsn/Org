@@ -304,6 +304,8 @@ export async function resolveSourceUrls(
     person.corroborationCount = quality.corroborationCount;
     if (person.sources.length === 0) {
       person.lastVerifiedAt = null;
+      if (person.confidence === 'high') person.confidence = 'medium';
+      if (person.teamEvidence === 'sourced') person.teamEvidence = 'inferred';
       if (person.researchStatus === 'verified')
         person.researchStatus = 'possibly_stale';
     } else {
@@ -573,6 +575,13 @@ export function normalizePeople(
       p.teamEvidence === 'sourced' || p.teamEvidence === 'inferred'
         ? p.teamEvidence
         : null;
+    // Claims without usable sources cannot be presented as verified:
+    // downgrade confidence and treat sourced assignments as inferred.
+    const hasSources = sourceDetails.length > 0;
+    const adjustedConf: Confidence =
+      conf === 'high' && !hasSources ? 'medium' : conf;
+    const adjustedTeamEvidence =
+      teamEvidence === 'sourced' && !hasSources ? 'inferred' : teamEvidence;
     const candidate: ResearchedPerson = {
       name,
       title,
@@ -581,14 +590,14 @@ export function normalizePeople(
       team: typeof p.team === 'string' ? stripFootnotes(p.team) : null,
       productLine:
         typeof p.productLine === 'string' ? stripFootnotes(p.productLine) : null,
-      teamEvidence,
+      teamEvidence: adjustedTeamEvidence,
       reportsToName:
         typeof p.reportsTo === 'string' && p.reportsTo.trim()
           ? stripFootnotes(p.reportsTo)
           : typeof p.reportsToName === 'string' && p.reportsToName.trim()
             ? stripFootnotes(p.reportsToName)
             : null,
-      confidence: conf,
+      confidence: adjustedConf,
       source: sources[0] ?? null,
       sources,
       sourceDetails,

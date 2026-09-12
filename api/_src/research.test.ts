@@ -189,3 +189,20 @@ test('a person whose only citation is dead is downgraded', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('sourceless claims are not presented as verified', () => {
+  const [person] = normalizePeople([
+    {
+      name: 'Jean-Philippe Fricker',
+      title: 'Chief System Architect',
+      confidence: 'high',
+      teamEvidence: 'sourced',
+      team: 'Engineering',
+      sources: [],
+    },
+  ]);
+
+  assert.equal(person.confidence, 'medium');
+  assert.equal(person.teamEvidence, 'inferred');
+  assert.equal(person.researchStatus, 'possibly_stale');
+});
