@@ -39,6 +39,7 @@ import {
   ArrowLeft,
   Copy,
   Download,
+  History,
   LayoutGrid,
   Loader2,
   Redo2,
@@ -53,7 +54,14 @@ import PersonPanel from '../components/PersonPanel';
 import ShareModal from '../components/ShareModal';
 import { applyLayout } from '../lib/layout';
 import { ROLE_META } from '../lib/colors';
-import type { BuyingRole, MapEdge, MapState, Person } from '../types';
+import type {
+  BuyingRole,
+  MapEdge,
+  MapPresence,
+  MapState,
+  MapVersion,
+  Person,
+} from '../types';
 
 const nodeTypes = { person: PersonNode };
 
@@ -157,6 +165,9 @@ function MapInner() {
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [versions, setVersions] = useState<MapVersion[]>([]);
+  const [presence, setPresence] = useState<MapPresence[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [past, setPast] = useState<CanvasSnapshot[]>([]);
   const [future, setFuture] = useState<CanvasSnapshot[]>([]);
@@ -191,6 +202,44 @@ function MapInner() {
       })
       .catch(() => setNotFound(true));
   }, [mapId, setNodes, setEdges, rf]);
+
+  useEffect(() => {
+    if (!mapId) return;
+    const update = () => {
+      void api
+        .updatePresence(mapId)
+        .then(({ people: activePeople }) => setPresence(activePeople))
+        .catch(() => undefined);
+    };
+    update();
+    const interval = window.setInterval(update, 15_000);
+    return () => window.clearInterval(interval);
+  }, [mapId]);
+
+  const openHistory = useCallback(() => {
+    if (!mapId) return;
+    setShowHistory(true);
+    void api
+      .listVersions(mapId)
+      .then(({ versions: items }) => setVersions(items));
+  }, [mapId]);
+
+  const restoreVersion = useCallback(
+    async (versionId: string) => {
+      if (!mapId) return;
+      const restored = await api.restoreVersion(mapId, versionId);
+      const flow = toFlow(restored.state);
+      setMapName(restored.name);
+      setMeta(restored.state.meta);
+      setNodes(flow.nodes);
+      setEdges(flow.edges);
+      setPast([]);
+      setFuture([]);
+      setShowHistory(false);
+      setSaveState('saved');
+    },
+    [mapId, setNodes, setEdges]
+  );
 
   const persist = useCallback(
     (ns: Node<PersonNodeData>[], es: FlowEdge[]) => {
@@ -678,6 +727,22 @@ function MapInner() {
               ? 'Unsaved changes'
               : 'Saved'}
         </span>
+        <div className="flex -space-x-1">
+          {presence.slice(0, 4).map((person) => (
+            <span
+              key={person.id}
+              title={`${person.name} is viewing`}
+              className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-indigo-100 text-[10px] font-semibold text-indigo-700"
+            >
+              {person.name
+                .split(' ')
+                .map((part) => part[0])
+                .join('')
+                .slice(0, 2)
+                .toUpperCase()}
+            </span>
+          ))}
+        </div>
         {!readOnly && (
           <>
             <div className="flex overflow-hidden rounded-lg border border-slate-200">
@@ -709,6 +774,12 @@ function MapInner() {
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
             >
               <LayoutGrid size={15} /> Layout
+            </button>
+            <button
+              onClick={openHistory}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              <History size={15} /> History
             </button>
             <button
               onClick={() => setShowShare(true)}
@@ -863,6 +934,54 @@ function MapInner() {
 
       {showShare && mapId && (
         <ShareModal mapId={mapId} onClose={() => setShowShare(false)} />
+      )}
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-slate-900">Version history</h2>
+                <p className="text-xs text-slate-500">
+                  Restore an earlier collaborative save.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {versions.length === 0 && (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  No earlier versions yet.
+                </p>
+              )}
+              {versions.map((version) => (
+                <div
+                  key={version.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 p-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">
+                      {version.author_name}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {new Date(version.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => void restoreVersion(version.id)}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

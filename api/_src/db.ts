@@ -67,8 +67,24 @@ CREATE TABLE IF NOT EXISTS comments (
   body TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS map_versions (
+  id TEXT PRIMARY KEY,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  state JSONB NOT NULL,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS map_presence (
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  last_seen TEXT NOT NULL,
+  PRIMARY KEY (map_id, user_id)
+);
 CREATE INDEX IF NOT EXISTS idx_maps_workspace ON maps(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_comments_map ON comments(map_id);
+CREATE INDEX IF NOT EXISTS idx_map_versions_map ON map_versions(map_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_map_presence_map ON map_presence(map_id, last_seen DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 `;
 

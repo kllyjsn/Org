@@ -458,6 +458,10 @@ app.post('/api/maps', requireAuth, async (c) => {
       now(),
     ]
   );
+  await query(
+    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), id, name, JSON.stringify(state), user.id, now()]
+  );
   return c.json({ id });
 });
 
@@ -478,8 +482,17 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
   const state =
     body?.state !== undefined ? sanitizeState(body.state) : (map.state as MapState);
   await query(
+    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
+  );
+  await query(
     'UPDATE maps SET name = $1, state = $2, company_name = $3, updated_at = $4 WHERE id = $5',
     [name, JSON.stringify(state), state.meta.companyName ?? map.company_name, now(), map.id]
+  );
+  await query(
+    `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
+     (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
+    [map.id]
   );
   return c.json({ ok: true });
 });
@@ -491,6 +504,63 @@ app.delete('/api/maps/:id', requireAuth, async (c) => {
   if (!canWrite(role)) return bad(c, 'viewers cannot delete', 403);
   await query('DELETE FROM maps WHERE id = $1', [map.id]);
   return c.json({ ok: true });
+});
+
+// ---------- collaborative history and presence ----------
+
+app.get('/api/maps/:id/versions', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const versions = await query(
+    `SELECT v.id, v.name, v.created_at, u.name AS author_name
+     FROM map_versions v JOIN users u ON u.id = v.created_by
+     WHERE v.map_id = $1 ORDER BY v.created_at DESC LIMIT 50`,
+    [map.id]
+  );
+  return c.json({ versions });
+});
+
+app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot restore versions', 403);
+  const versions = await query<{ name: string; state: MapState }>(
+    'SELECT name, state FROM map_versions WHERE id = $1 AND map_id = $2',
+    [param(c, 'versionId'), map.id]
+  );
+  const version = versions[0];
+  if (!version) return bad(c, 'version not found', 404);
+  await query(
+    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
+  );
+  await query(
+    'UPDATE maps SET name = $1, state = $2, updated_at = $3 WHERE id = $4',
+    [version.name, JSON.stringify(version.state), now(), map.id]
+  );
+  return c.json({ name: version.name, state: version.state });
+});
+
+app.post('/api/maps/:id/presence', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  await query(
+    `INSERT INTO map_presence (map_id, user_id, last_seen) VALUES ($1,$2,$3)
+     ON CONFLICT (map_id, user_id) DO UPDATE SET last_seen = EXCLUDED.last_seen`,
+    [map.id, user.id, now()]
+  );
+  const cutoff = new Date(Date.now() - 45_000).toISOString();
+  await query('DELETE FROM map_presence WHERE last_seen < $1', [cutoff]);
+  const people = await query(
+    `SELECT u.id, u.name, u.email, p.last_seen
+     FROM map_presence p JOIN users u ON u.id = p.user_id
+     WHERE p.map_id = $1 AND p.last_seen >= $2 ORDER BY p.last_seen DESC`,
+    [map.id, cutoff]
+  );
+  return c.json({ people });
 });
 
 // ---------- comments ----------

@@ -117,3 +117,17 @@ export interface MapComment {
   created_at: string;
   author_name: string;
 }
+
+export interface MapVersion {
+  id: string;
+  name: string;
+  author_name: string;
+  created_at: string;
+}
+
+export interface MapPresence {
+  id: string;
+  name: string;
+  email: string;
+  last_seen: string;
+}

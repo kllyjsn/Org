@@ -2,7 +2,9 @@ import type {
   LoadedMap,
   MapComment,
   MapListItem,
+  MapPresence,
   MapState,
+  MapVersion,
   ResearchResult,
   SessionUser,
   ShareLink,
@@ -110,6 +112,17 @@ export const api = {
     }),
   deleteMap: (id: string) =>
     req<{ ok: true }>(`/api/maps/${id}`, { method: 'DELETE' }),
+  listVersions: (mapId: string) =>
+    req<{ versions: MapVersion[] }>(`/api/maps/${mapId}/versions`),
+  restoreVersion: (mapId: string, versionId: string) =>
+    req<{ name: string; state: MapState }>(
+      `/api/maps/${mapId}/versions/${versionId}/restore`,
+      { method: 'POST' }
+    ),
+  updatePresence: (mapId: string) =>
+    req<{ people: MapPresence[] }>(`/api/maps/${mapId}/presence`, {
+      method: 'POST',
+    }),
 
   listComments: (mapId: string) =>
     req<{ comments: MapComment[] }>(`/api/maps/${mapId}/comments`),
