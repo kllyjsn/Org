@@ -3,5 +3,8 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build -w web",
   "outputDirectory": "web/dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "functions": {
+    "api/[...route].ts": { "maxDuration": 60 }
+  },
+  "rewrites": [{ "source": "/api/(.*)", "destination": "/api/$1" }]
 }

@@ -36,7 +36,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
         <div className="mb-6">
           <div className="text-2xl font-bold tracking-tight">
-            <span className="text-indigo-600">Org</span>
+            <span className="text-indigo-600">TopDown</span>
           </div>
           <p className="mt-1 text-sm text-slate-500">
             Account maps that build themselves.

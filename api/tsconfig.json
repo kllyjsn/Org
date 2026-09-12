@@ -11,9 +11,10 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "declaration": false,
     "noEmit": false
   },
-  "include": ["src"]
+  "include": ["_src"],
+  "files": ["[...route].ts"]
 }

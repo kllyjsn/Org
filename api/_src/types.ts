@@ -81,7 +81,7 @@ export interface MapRow {
   name: string;
   domain: string;
   company_name: string | null;
-  state_json: string;
+  state: MapState;
   created_by: string;
   created_at: string;
   updated_at: string;

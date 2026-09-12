@@ -121,7 +121,7 @@ function ShareInner() {
         <p className="text-lg font-medium">{error}</p>
         <p className="text-sm">This share link may have been revoked or expired.</p>
         <Link to="/" className="mt-2 text-sm text-indigo-600 hover:underline">
-          Org — build your own account maps →
+          TopDown — build your own account maps →
         </Link>
       </div>
     );
@@ -138,7 +138,7 @@ function ShareInner() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
-        <span className="text-lg font-bold text-indigo-600">Org</span>
+        <span className="text-lg font-bold text-indigo-600">TopDown</span>
         <span className="text-sm font-semibold text-slate-800">
           {shared.company_name || shared.name}
         </span>
