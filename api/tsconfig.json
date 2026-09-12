@@ -16,5 +16,5 @@
     "noEmit": false
   },
   "include": ["_src"],
-  "files": ["[...route].ts"]
+  "files": ["index.ts"]
 }

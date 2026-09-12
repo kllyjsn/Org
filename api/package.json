@@ -8,7 +8,7 @@
     "build": "tsc -b",
     "start": "node dist/_src/serve.js",
     "typecheck": "tsc -b --noEmit",
-    "lint": "eslint _src '[[]...route].ts'"
+    "lint": "eslint _src index.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

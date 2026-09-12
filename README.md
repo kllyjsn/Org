@@ -26,7 +26,7 @@ blockers, and the reporting lines between them.
 | Piece | Choice |
 |---|---|
 | `web/` | React 18 + TypeScript + Vite + Tailwind + Zustand + React Flow |
-| `api/` | Hono + Postgres — `api/[...route].ts` is the Vercel serverless entry, `_src/serve.ts` is the local dev server |
+| `api/` | Hono + Postgres — `api/index.ts` is the Vercel serverless entry, `_src/serve.ts` is the local dev server |
 | LLM | OpenRouter (primary, `OPENROUTER_API_KEY`) → Perplexity → Gemini → demo fixture |
 
 ## Dev
