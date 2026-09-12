@@ -414,8 +414,9 @@ export async function resolveSourceUrls(
 
 /**
  * HEAD-check candidate URLs and return the ones that definitively do not
- * resolve (404/410). Timeouts, 403s, and other ambiguous responses are kept —
- * only a certain "gone" answer drops a citation.
+ * resolve (404/410). Some hosts hang or reject HEAD entirely, so any
+ * ambiguous answer (timeout, 403/405/5xx) falls back to GET — only a certain
+ * "gone" answer drops a citation; anything inconclusive keeps the link.
  */
 export async function deadSourceUrls(
   urls: Iterable<string>,
@@ -432,15 +433,29 @@ export async function deadSourceUrls(
     );
     await Promise.all(
       list.slice(i, i + batchSize).map(async (url) => {
-        try {
-          const res = await fetch(url, {
-            method: 'HEAD',
-            redirect: 'follow',
-            signal: AbortSignal.timeout(requestTimeout),
-          });
-          if (res.status === 404 || res.status === 410) dead.add(url);
-        } catch {
-          // Unreachable is not proof the citation is dead — keep it.
+        const probe = async (method: 'HEAD' | 'GET'): Promise<number> => {
+          try {
+            const res = await fetch(url, {
+              method,
+              redirect: 'follow',
+              signal: AbortSignal.timeout(requestTimeout),
+            });
+            await res.body?.cancel().catch(() => undefined);
+            return res.status;
+          } catch {
+            return -1;
+          }
+        };
+        const head = await probe('HEAD');
+        if (head === 404 || head === 410) {
+          dead.add(url);
+          return;
+        }
+        // HEAD inconclusive (timeout, bot shield, method not allowed, server
+        // error) — GET is the authoritative check.
+        if (head === -1 || head === 403 || head === 405 || head >= 500) {
+          const get = await probe('GET');
+          if (get === 404 || get === 410) dead.add(url);
         }
       })
     );
