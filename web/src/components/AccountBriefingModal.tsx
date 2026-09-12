@@ -18,10 +18,12 @@ const PROVENANCE_LABELS = {
 
 export default function AccountBriefingModal({
   mapId,
+  readOnly,
   onClose,
   onRunAction,
 }: {
   mapId: string;
+  readOnly: boolean;
   onClose: () => void;
   onRunAction: (action: BriefingAction) => void;
 }) {
@@ -131,10 +133,26 @@ export default function AccountBriefingModal({
                         </p>
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <button
-                            onClick={() => onRunAction(action)}
-                            className="flex items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6b5cf8]"
+                            onClick={() => {
+                              if (
+                                !readOnly ||
+                                action.type !== 'deep_research'
+                              ) {
+                                onRunAction(action);
+                              }
+                            }}
+                            disabled={
+                              readOnly && action.type === 'deep_research'
+                            }
+                            className="flex items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6b5cf8] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
                           >
-                            Take action <ArrowRight size={13} />
+                            {readOnly && action.type === 'deep_research'
+                              ? 'View only'
+                              : 'Take action'}
+                            {(!readOnly ||
+                              action.type !== 'deep_research') && (
+                              <ArrowRight size={13} />
+                            )}
                           </button>
                           {action.evidence.slice(0, 2).map((source, sourceIndex) =>
                             /^https?:\/\//.test(source) ? (

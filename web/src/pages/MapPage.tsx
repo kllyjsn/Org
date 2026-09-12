@@ -2131,6 +2131,7 @@ function MapInner() {
       {showBriefing && mapId && (
         <AccountBriefingModal
           mapId={mapId}
+          readOnly={readOnly}
           onClose={() => setShowBriefing(false)}
           onRunAction={(action: BriefingAction) => {
             setShowBriefing(false);
