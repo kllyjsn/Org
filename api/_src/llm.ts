@@ -112,7 +112,7 @@ async function postGroundedGemini(
   provider: ProviderSpec,
   messages: ChatMessage[],
   maxTokens: number,
-  timeoutMs = 40_000
+  timeoutMs = 34_000
 ): Promise<ChatResult> {
   const system = messages
     .filter((message) => message.role === 'system')
@@ -190,7 +190,7 @@ export async function chat(
             p,
             messages,
             options.maxTokens ?? 8_000,
-            Math.min(40_000, remaining())
+            Math.min(34_000, remaining())
           );
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

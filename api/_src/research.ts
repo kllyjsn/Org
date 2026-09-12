@@ -337,7 +337,7 @@ export async function resolveSourceUrls(
 
   if (pending.length > 0) {
     const resolved = new Map<string, string | null>();
-    const batchSize = 10;
+    const batchSize = 16;
     for (let i = 0; i < pending.length; i += batchSize) {
       if (Date.now() >= deadlineMs) break;
       const requestTimeout = Math.max(
@@ -421,7 +421,7 @@ export async function deadSourceUrls(
 ): Promise<Set<string>> {
   const dead = new Set<string>();
   const list = Array.from(urls).slice(0, 48);
-  const batchSize = 12;
+  const batchSize = 16;
   for (let i = 0; i < list.length; i += batchSize) {
     if (Date.now() >= deadlineMs) break;
     const requestTimeout = Math.max(
