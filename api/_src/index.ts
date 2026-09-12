@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { answerAccountQuestion } from './account-agent.js';
+import { buildAccountBriefing } from './briefing.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
 import { researchOrg } from './research.js';
@@ -449,6 +450,8 @@ app.get('/api/maps', requireAuth, async (c) => {
     maps: rows.map(({ state, ...m }) => ({
       ...m,
       peopleCount: (state as MapState).people?.length ?? 0,
+      initiativeCount:
+        (state as MapState).meta.initiatives?.length ?? 0,
     })),
   });
 });
@@ -621,6 +624,23 @@ app.get('/api/maps/:id/changes', requireAuth, async (c) => {
 
   const changes = compareMapStates(baseline.state, map.state as MapState);
   return c.json({ baselineAt: baseline.created_at, changes });
+});
+
+app.get('/api/maps/:id/briefing', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const versions = await query<{ state: MapState; created_at: string }>(
+    `SELECT state, created_at FROM map_versions
+     WHERE map_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [map.id]
+  );
+  const baseline = versions[0];
+  const state = map.state as MapState;
+  const changes = baseline ? compareMapStates(baseline.state, state) : [];
+  return c.json(
+    buildAccountBriefing(state, changes, baseline?.created_at ?? null)
+  );
 });
 
 app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => {

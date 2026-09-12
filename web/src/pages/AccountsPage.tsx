@@ -192,7 +192,10 @@ export default function AccountsPage() {
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const totalPeople = maps.reduce((sum, map) => sum + map.peopleCount, 0);
-  const researchedMaps = maps.filter((map) => map.peopleCount > 0).length;
+  const initiativeCount = maps.reduce(
+    (sum, map) => sum + map.initiativeCount,
+    0
+  );
 
   const refreshMaps = useCallback(() => {
     if (!workspaceId) return;
@@ -314,7 +317,7 @@ export default function AccountsPage() {
             {[
               [String(maps.length), 'accounts'],
               [String(totalPeople), 'people'],
-              [String(researchedMaps), 'researched'],
+              [String(initiativeCount), 'signals'],
             ].map(([value, label], index) => (
               <div
                 key={label}
@@ -410,10 +413,21 @@ export default function AccountsPage() {
                       <Clock3 size={13} /> {new Date(m.updated_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <ArrowUpRight
-                    size={17}
-                    className="text-slate-300 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#5b4cf0]"
-                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate(`/app/maps/${m.id}?briefing=1`);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg bg-[#eeecff] px-2.5 py-1.5 text-[10px] font-semibold text-[#5b4cf0] opacity-0 transition group-hover:opacity-100 hover:bg-[#e3dfff]"
+                    >
+                      <Radar size={12} /> Next moves
+                    </button>
+                    <ArrowUpRight
+                      size={17}
+                      className="text-slate-300 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#5b4cf0]"
+                    />
+                  </div>
                 </div>
               </div>
             ))}

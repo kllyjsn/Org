@@ -1,4 +1,5 @@
 import type {
+  AccountBriefing,
   AccountAgentAnswer,
   AccountAgentMessage,
   LoadedMap,
@@ -121,6 +122,8 @@ export const api = {
     req<{ baselineAt: string | null; changes: MapChangeAlert[] }>(
       `/api/maps/${mapId}/changes`
     ),
+  getBriefing: (mapId: string) =>
+    req<AccountBriefing>(`/api/maps/${mapId}/briefing`),
   askMap: (mapId: string, messages: AccountAgentMessage[]) =>
     req<AccountAgentAnswer>(`/api/maps/${mapId}/ask`, {
       method: 'POST',

@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Lightbulb,
   Loader2,
+  Radar,
   Search,
   Send,
   X,
@@ -28,6 +29,7 @@ import type { AgentCommandResult } from '../lib/agentCanvas';
 export type PaletteAction =
   | 'layout'
   | 'overview'
+  | 'briefing'
   | 'strategy'
   | 'changes'
   | 'initiatives'
@@ -51,6 +53,13 @@ interface ConversationMessage extends AccountAgentMessage {
 }
 
 const ACTIONS: Extract<Choice, { kind: 'action' }>[] = [
+  {
+    kind: 'action',
+    id: 'briefing',
+    label: 'Brief me on this account',
+    detail: 'See what changed and the next best moves',
+    icon: Radar,
+  },
   {
     kind: 'action',
     id: 'overview',

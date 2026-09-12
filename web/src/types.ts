@@ -88,6 +88,7 @@ export interface MapListItem {
   created_at: string;
   updated_at: string;
   peopleCount: number;
+  initiativeCount: number;
 }
 
 export interface LoadedMap {
@@ -165,6 +166,31 @@ export interface MapChangeAlert {
   detail: string;
   personId?: string;
   sources?: string[];
+}
+
+export interface BriefingAction {
+  id: string;
+  title: string;
+  reason: string;
+  confidence: Confidence;
+  provenance: 'sourced' | 'map' | 'hypothesis';
+  type:
+    | 'focus_people'
+    | 'open_strategy'
+    | 'open_initiatives'
+    | 'deep_research';
+  personIds?: string[];
+  focus?: string;
+  evidence: string[];
+}
+
+export interface AccountBriefing {
+  generatedAt: string;
+  baselineAt: string | null;
+  headline: string;
+  summary: string;
+  changes: MapChangeAlert[];
+  actions: BriefingAction[];
 }
 
 export interface AccountAgentMessage {

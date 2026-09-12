@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ReactFlow, {
   Background,
   Controls,
@@ -49,6 +49,7 @@ import {
   LayoutGrid,
   Lightbulb,
   Loader2,
+  Radar,
   Redo2,
   Search,
   Share2,
@@ -59,6 +60,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
+import AccountBriefingModal from '../components/AccountBriefingModal';
 import AccountStrategyModal from '../components/AccountStrategyModal';
 import ChangeAlertsModal from '../components/ChangeAlertsModal';
 import CommandPalette from '../components/CommandPalette';
@@ -85,6 +87,7 @@ import { parseCsv } from '../lib/csv';
 import type {
   AccountAgentAction,
   AccountAgentMessage,
+  BriefingAction,
   BuyingRole,
   MapEdge,
   MapPresence,
@@ -191,6 +194,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 function MapInner() {
   const { mapId } = useParams<{ mapId: string }>();
+  const [searchParams] = useSearchParams();
   const rf = useReactFlow();
   const viewport = useViewport();
   const [mapName, setMapName] = useState('');
@@ -206,6 +210,7 @@ function MapInner() {
   const [showHistory, setShowHistory] = useState(false);
   const [showInitiatives, setShowInitiatives] = useState(false);
   const [showStrategy, setShowStrategy] = useState(false);
+  const [showBriefing, setShowBriefing] = useState(false);
   const [showChanges, setShowChanges] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [showDeepResearch, setShowDeepResearch] = useState(false);
@@ -257,6 +262,10 @@ function MapInner() {
       })
       .catch(() => setNotFound(true));
   }, [mapId, setNodes, setEdges, rf]);
+
+  useEffect(() => {
+    if (searchParams.get('briefing') === '1') setShowBriefing(true);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!mapId) return;
@@ -954,6 +963,7 @@ function MapInner() {
   const runPaletteAction = useCallback(
     (action: PaletteAction) => {
       if (action === 'layout') autoLayout();
+      if (action === 'briefing') setShowBriefing(true);
       if (action === 'overview') {
         setSelectedId(null);
         void rf.fitView({ padding: 0.2, duration: 450 });
@@ -1038,6 +1048,14 @@ function MapInner() {
         );
         setShowDeepResearch(true);
         return say('Opening targeted deep research.');
+      }
+      if (
+        /\b(brief me|daily brief|account pulse|next best action|what should i do|what matters now)\b/.test(
+          lower
+        )
+      ) {
+        setShowBriefing(true);
+        return say('Opening the account briefing.');
       }
       if (
         /\b(build|open|show|create|generate|view)\b.*\b(account brief|relationship path|deal plan|account strategy|path in)\b/.test(
@@ -1678,6 +1696,12 @@ function MapInner() {
               <History size={15} /> History
             </button>
             <button
+              onClick={() => setShowBriefing(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20"
+            >
+              <Radar size={15} /> Briefing
+            </button>
+            <button
               onClick={() => setShowChanges(true)}
               className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
             >
@@ -2101,6 +2125,27 @@ function MapInner() {
           onFocusPerson={(person) => {
             setShowStrategy(false);
             focusPeople([person]);
+          }}
+        />
+      )}
+      {showBriefing && mapId && (
+        <AccountBriefingModal
+          mapId={mapId}
+          onClose={() => setShowBriefing(false)}
+          onRunAction={(action: BriefingAction) => {
+            setShowBriefing(false);
+            if (action.type === 'focus_people') {
+              const matches = people.filter((person) =>
+                action.personIds?.includes(person.id)
+              );
+              if (matches.length > 0) focusPeople(matches);
+            }
+            if (action.type === 'open_strategy') setShowStrategy(true);
+            if (action.type === 'open_initiatives') setShowInitiatives(true);
+            if (action.type === 'deep_research' && !readOnly) {
+              setDeepResearchFocus(action.focus ?? '');
+              setShowDeepResearch(true);
+            }
           }}
         />
       )}
