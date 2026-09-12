@@ -239,6 +239,10 @@ function MapInner() {
   const saveStateRef = useRef<SaveState>('saved');
 
   const readOnly = role === 'viewer';
+  const researchDue = Boolean(
+    meta?.researchedAt &&
+      (!meta.nextRefreshAt || Date.parse(meta.nextRefreshAt) <= Date.now())
+  );
 
   useEffect(() => {
     metaRef.current = meta;
@@ -1476,6 +1480,17 @@ function MapInner() {
                     ...(researched.source ? [researched.source] : []),
                   ])
                 ),
+                sourceDetails: Array.from(
+                  new Map(
+                    [
+                      ...(person.sourceDetails ?? []),
+                      ...researched.sourceDetails,
+                    ].map((source) => [source.url, source])
+                  ).values()
+                ),
+                freshness: researched.freshness,
+                corroborationCount: researched.corroborationCount,
+                lastVerifiedAt: researched.lastVerifiedAt,
                 conflictingTitles: Array.from(
                   new Set([
                     ...(person.conflictingTitles ?? []),
@@ -1506,6 +1521,10 @@ function MapInner() {
               : researched.source
                 ? [researched.source]
                 : [],
+          sourceDetails: researched.sourceDetails,
+          freshness: researched.freshness,
+          corroborationCount: researched.corroborationCount,
+          lastVerifiedAt: researched.lastVerifiedAt,
           conflictingTitles: researched.conflictingTitles,
           researchStatus: researched.researchStatus,
           notes: '',
@@ -1553,6 +1572,15 @@ function MapInner() {
             ...meta,
             researchedAt: new Date().toISOString(),
             provider: result.provider,
+            refreshCadence: meta.refreshCadence ?? 'weekly',
+            nextRefreshAt: new Date(
+              Date.now() +
+                (meta.refreshCadence === 'monthly' ? 30 : 7) * 86_400_000
+            ).toISOString(),
+            initiatives:
+              result.initiatives.length > 0
+                ? result.initiatives
+                : meta.initiatives,
           }
         : meta;
       metaRef.current = nextMeta;
@@ -1627,6 +1655,28 @@ function MapInner() {
           <span className="hidden rounded-full bg-[#c9f04b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-950 md:inline">
             {meta.tier} · {meta.provider}
           </span>
+        )}
+        {meta?.researchedAt && (
+          <button
+            onClick={() => {
+              if (readOnly) return;
+              setDeepResearchFocus('');
+              setShowDeepResearch(true);
+            }}
+            disabled={readOnly}
+            title={
+              meta.nextRefreshAt
+                ? `Next research check ${new Date(meta.nextRefreshAt).toLocaleDateString()}`
+                : 'Refresh research'
+            }
+            className={`hidden rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide md:inline ${
+              researchDue
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-white/10 text-slate-300'
+            }`}
+          >
+            {researchDue ? 'Refresh due' : 'Research current'}
+          </button>
         )}
         <div className="hidden flex-1 sm:block" />
         <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-500 sm:inline">

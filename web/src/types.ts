@@ -9,6 +9,23 @@ export type BuyingRole =
 
 export type Confidence = 'high' | 'medium' | 'low';
 
+export interface ResearchSource {
+  url: string;
+  title: string | null;
+  publisher: string | null;
+  publishedAt: string | null;
+  retrievedAt: string;
+  sourceType:
+    | 'official'
+    | 'filing'
+    | 'press'
+    | 'news'
+    | 'profile'
+    | 'job'
+    | 'conference'
+    | 'other';
+}
+
 export interface Person {
   id: string;
   name: string;
@@ -20,6 +37,10 @@ export interface Person {
   role: BuyingRole;
   confidence: Confidence;
   sources: string[];
+  sourceDetails?: ResearchSource[];
+  freshness?: 'fresh' | 'aging' | 'stale' | 'unknown';
+  corroborationCount?: number;
+  lastVerifiedAt?: string | null;
   conflictingTitles?: string[];
   researchStatus?: 'verified' | 'possibly_stale' | 'conflicting';
   notes: string;
@@ -47,6 +68,8 @@ export interface MapMeta {
   researchedAt: string | null;
   tier: string;
   provider: string | null;
+  refreshCadence?: 'weekly' | 'monthly' | 'manual';
+  nextRefreshAt?: string | null;
   initiatives?: StrategicInitiative[];
 }
 
@@ -55,6 +78,7 @@ export interface StrategicInitiative {
   summary: string;
   category: 'product' | 'growth' | 'operations' | 'technology' | 'market';
   evidence: string[];
+  evidenceDetails?: ResearchSource[];
   relevantPeople: string[];
   relevantTeams: string[];
   salesAngles: string[];
@@ -117,6 +141,10 @@ export interface ResearchedPerson {
   confidence: Confidence;
   source: string | null;
   sources: string[];
+  sourceDetails: ResearchSource[];
+  freshness: 'fresh' | 'aging' | 'stale' | 'unknown';
+  corroborationCount: number;
+  lastVerifiedAt: string | null;
   conflictingTitles: string[];
   researchStatus: 'verified' | 'possibly_stale' | 'conflicting';
 }

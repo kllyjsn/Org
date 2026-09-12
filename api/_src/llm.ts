@@ -10,7 +10,7 @@ interface ProviderSpec {
   envKey: string;
   url: string;
   model: string;
-  /** has real-time web search */
+  /** supports real-time web search for research requests */
   webSearch: boolean;
 }
 
@@ -20,7 +20,7 @@ const PROVIDERS: ProviderSpec[] = [
     envKey: 'GEMINI_API_KEY',
     url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     model: 'gemini-2.5-flash',
-    webSearch: false,
+    webSearch: true,
   },
   {
     name: 'openrouter',
@@ -99,6 +99,57 @@ export interface ChatResult {
   webSearch: boolean;
 }
 
+interface GeminiGenerateContentResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+}
+
+async function postGroundedGemini(
+  provider: ProviderSpec,
+  messages: ChatMessage[],
+  maxTokens: number
+): Promise<ChatResult> {
+  const system = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n');
+  const contents = messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => ({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: message.content }],
+    }));
+  const payload = (await postJson(
+    `https://generativelanguage.googleapis.com/v1beta/models/${provider.model}:generateContent`,
+    { 'x-goog-api-key': process.env[provider.envKey] ?? '' },
+    {
+      ...(system
+        ? { system_instruction: { parts: [{ text: system }] } }
+        : {}),
+      contents,
+      tools: [{ google_search: {} }],
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        temperature: 0.1,
+      },
+    }
+  )) as GeminiGenerateContentResponse;
+  const content = payload.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text ?? '')
+    .join('')
+    .trim();
+  if (!content) throw new Error('Gemini returned an empty grounded response');
+  return {
+    content,
+    provider: provider.name,
+    model: provider.model,
+    webSearch: true,
+  };
+}
+
 /**
  * Try each configured provider in priority order. A failing or quota-exhausted
  * key falls through to the next so a dead credential never breaks research.
@@ -106,7 +157,7 @@ export interface ChatResult {
  */
 export async function chat(
   messages: ChatMessage[],
-  options?: { maxTokens?: number; json?: boolean }
+  options?: { maxTokens?: number; json?: boolean; webSearch?: boolean }
 ): Promise<ChatResult> {
   const providers = availableProviders();
   if (providers.length === 0) throw new Error('No LLM provider key configured');
@@ -114,6 +165,14 @@ export async function chat(
   const errors: string[] = [];
   for (const p of providers) {
     try {
+      if (options?.webSearch && p.name === 'gemini') {
+        return await postGroundedGemini(
+          p,
+          messages,
+          options.maxTokens ?? 8_000
+        );
+      }
+      if (options?.webSearch && !p.webSearch) continue;
       const payload = await postJson(
         p.url,
         { authorization: `Bearer ${process.env[p.envKey]}` },

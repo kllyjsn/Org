@@ -16,7 +16,8 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
   const unverified = p.confidence === 'low';
   const needsReview =
     p.researchStatus === 'conflicting' ||
-    p.researchStatus === 'possibly_stale';
+    p.researchStatus === 'possibly_stale' ||
+    p.freshness === 'stale';
 
   return (
     <div
@@ -78,7 +79,11 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
           )}
           {needsReview && (
             <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700">
-              {p.researchStatus === 'conflicting' ? 'title conflict' : 'may be stale'}
+              {p.researchStatus === 'conflicting'
+                ? 'title conflict'
+                : p.freshness === 'stale'
+                  ? 'refresh required'
+                  : 'may be stale'}
             </span>
           )}
           {unverified && (

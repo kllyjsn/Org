@@ -59,6 +59,17 @@ export default function PersonPanel({
   const influenceEdges = edges.filter(
     (e) => e.kind === 'influence' && (e.from === person.id || e.to === person.id)
   );
+  const sourceDetails =
+    person.sourceDetails && person.sourceDetails.length > 0
+      ? person.sourceDetails
+      : person.sources.map((url) => ({
+          url,
+          title: null,
+          publisher: null,
+          publishedAt: null,
+          retrievedAt: person.lastVerifiedAt ?? '',
+          sourceType: 'other' as const,
+        }));
   const relevantInitiatives = initiatives.filter(
     (initiative) =>
       initiative.relevantPeople.some(
@@ -276,18 +287,30 @@ export default function PersonPanel({
           </div>
         )}
 
-        {person.sources.length > 0 && (
+        {sourceDetails.length > 0 && (
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Sources
-            </label>
-            <ul className="space-y-1">
-              {person.sources.map((s, i) => (
-                <li key={i} className="break-all text-xs text-slate-500">
-                  {s.startsWith('http') ? (
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Evidence
+              </label>
+              <span className="text-[10px] font-medium text-slate-400">
+                {person.corroborationCount ?? sourceDetails.length} independent
+                source
+                {(person.corroborationCount ?? sourceDetails.length) === 1
+                  ? ''
+                  : 's'}
+              </span>
+            </div>
+            <ul className="space-y-2">
+              {sourceDetails.map((source, i) => (
+                <li
+                  key={`${source.url}-${i}`}
+                  className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-500"
+                >
+                  {source.url.startsWith('http') ? (
                     <a
-                      className="text-indigo-600 hover:underline"
-                      href={s}
+                      className="font-medium text-indigo-600 hover:underline"
+                      href={source.url}
                       target="_blank"
                       rel="noreferrer"
                       onClick={() => {
@@ -298,14 +321,38 @@ export default function PersonPanel({
                           .catch(() => undefined);
                       }}
                     >
-                      {s}
+                      {source.title || source.publisher || source.url}
                     </a>
                   ) : (
-                    s
+                    source.title || source.url
                   )}
+                  <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">
+                    {[
+                      source.sourceType,
+                      source.publisher,
+                      source.publishedAt
+                        ? new Date(source.publishedAt).toLocaleDateString()
+                        : 'date unavailable',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
                 </li>
               ))}
             </ul>
+            <p className="mt-2 text-[10px] text-slate-400">
+              {person.lastVerifiedAt
+                ? `Checked ${new Date(person.lastVerifiedAt).toLocaleDateString()}`
+                : 'Verification date unavailable'}
+              {' · '}
+              {person.freshness === 'fresh'
+                ? 'recent evidence'
+                : person.freshness === 'aging'
+                  ? 'evidence is aging'
+                  : person.freshness === 'stale'
+                    ? 'refresh required'
+                    : 'source date unavailable'}
+            </p>
           </div>
         )}
 

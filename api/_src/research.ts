@@ -1,5 +1,5 @@
 import { chat, activeProvider, type Provider } from './llm.js';
-import type { Confidence } from './types.js';
+import type { Confidence, ResearchSource } from './types.js';
 
 export interface ResearchedPerson {
   name: string;
@@ -12,6 +12,10 @@ export interface ResearchedPerson {
   confidence: Confidence;
   source: string | null;
   sources: string[];
+  sourceDetails: ResearchSource[];
+  freshness: 'fresh' | 'aging' | 'stale' | 'unknown';
+  corroborationCount: number;
+  lastVerifiedAt: string | null;
   conflictingTitles: string[];
   researchStatus: 'verified' | 'possibly_stale' | 'conflicting';
 }
@@ -31,6 +35,7 @@ export interface StrategicInitiative {
   summary: string;
   category: 'product' | 'growth' | 'operations' | 'technology' | 'market';
   evidence: string[];
+  evidenceDetails: ResearchSource[];
   relevantPeople: string[];
   relevantTeams: string[];
   salesAngles: string[];
@@ -67,7 +72,13 @@ Return ONLY this JSON object:
       "teamEvidence": "sourced | inferred | null",
       "reportsTo": "full name of their manager, or null if unknown/CEO",
       "confidence": "high | medium | low",
-      "sources": ["up to three source URLs or specific source labels"],
+      "sources": [{
+        "url": "direct source URL",
+        "title": "page or document title",
+        "publisher": "publisher or company name",
+        "publishedAt": "YYYY-MM-DD or null",
+        "sourceType": "official | filing | press | news | profile | job | conference | other"
+      }],
       "conflictingTitles": ["other current-looking titles found, if any"],
       "researchStatus": "verified | possibly_stale | conflicting"
     }
@@ -76,6 +87,9 @@ Return ONLY this JSON object:
 
 Rules:
 - Only include real people you found evidence for in public sources.
+- Return direct, inspectable source URLs, never search-result URLs.
+- Include publication dates when the page or document provides one.
+- Prefer official company pages and filings, then recent reputable reporting.
 - "high" confidence = named on the company's official site or filings.
 - "medium" = credible secondary source (press, reputable directories).
 - "low" = inferred or possibly stale.
@@ -99,7 +113,13 @@ Return ONLY this JSON:
     "name": "short initiative name",
     "summary": "what changed and why it matters",
     "category": "product | growth | operations | technology | market",
-    "evidence": ["up to three URLs or specific source labels"],
+    "evidence": [{
+      "url": "direct source URL",
+      "title": "page or document title",
+      "publisher": "publisher or company name",
+      "publishedAt": "YYYY-MM-DD or null",
+      "sourceType": "official | filing | press | news | profile | job | conference | other"
+    }],
     "relevantPeople": ["names of leaders publicly connected to it"],
     "relevantTeams": ["teams likely accountable for it"],
     "salesAngles": ["evidence-backed hypothesis for a seller, not a claimed fact"]
@@ -108,6 +128,7 @@ Return ONLY this JSON:
 
 Rules:
 - Prefer initiatives with recent, specific public evidence.
+- Return direct source URLs and publication dates when available.
 - Sales angles must connect a likely business pressure to the initiative.
 - Do not invent budgets, pain, purchase intent, or internal plans.
 - JSON only.`;
@@ -142,8 +163,106 @@ const CORE_FUNCTIONS = [
   'customer success',
 ];
 
-function normalizePeople(raw: unknown, limit = 60): ResearchedPerson[] {
+const SOURCE_TYPES: ResearchSource['sourceType'][] = [
+  'official',
+  'filing',
+  'press',
+  'news',
+  'profile',
+  'job',
+  'conference',
+  'other',
+];
+
+function normalizeDate(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function normalizeSources(
+  raw: unknown,
+  retrievedAt: string,
+  limit = 5
+): ResearchSource[] {
   if (!Array.isArray(raw)) return [];
+  const sources = new Map<string, ResearchSource>();
+  for (const item of raw) {
+    const value =
+      typeof item === 'string'
+        ? { url: item }
+        : item && typeof item === 'object'
+          ? (item as Record<string, unknown>)
+          : null;
+    if (!value || typeof value.url !== 'string') continue;
+    const url = stripFootnotes(value.url).trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    const sourceType = SOURCE_TYPES.includes(
+      value.sourceType as ResearchSource['sourceType']
+    )
+      ? (value.sourceType as ResearchSource['sourceType'])
+      : 'other';
+    sources.set(url, {
+      url,
+      title:
+        typeof value.title === 'string' ? stripFootnotes(value.title) : null,
+      publisher:
+        typeof value.publisher === 'string'
+          ? stripFootnotes(value.publisher)
+          : null,
+      publishedAt: normalizeDate(value.publishedAt),
+      retrievedAt,
+      sourceType,
+    });
+    if (sources.size >= limit) break;
+  }
+  return Array.from(sources.values());
+}
+
+function sourceDomain(source: ResearchSource): string {
+  try {
+    return new URL(source.url).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function sourceQuality(
+  sources: ResearchSource[],
+  nowMs: number
+): {
+  freshness: ResearchedPerson['freshness'];
+  corroborationCount: number;
+} {
+  const datedAges = sources.flatMap((source) => {
+    if (!source.publishedAt) return [];
+    const publishedMs = Date.parse(source.publishedAt);
+    return Number.isFinite(publishedMs)
+      ? [(nowMs - publishedMs) / 86_400_000]
+      : [];
+  });
+  const newestAge = datedAges.length > 0 ? Math.min(...datedAges) : null;
+  const freshness =
+    newestAge === null
+      ? 'unknown'
+      : newestAge <= 180
+        ? 'fresh'
+        : newestAge <= 540
+          ? 'aging'
+          : 'stale';
+  const corroborationCount = new Set(
+    sources.map(sourceDomain).filter(Boolean)
+  ).size;
+  return { freshness, corroborationCount };
+}
+
+function normalizePeople(
+  raw: unknown,
+  limit = 60,
+  nowMs = Date.now()
+): ResearchedPerson[] {
+  if (!Array.isArray(raw)) return [];
+  const retrievedAt = new Date(nowMs).toISOString();
   const people = new Map<string, ResearchedPerson>();
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
@@ -155,12 +274,16 @@ function normalizePeople(raw: unknown, limit = 60): ResearchedPerson[] {
     const conf = CONFIDENCES.includes(p.confidence as Confidence)
       ? (p.confidence as Confidence)
       : 'low';
-    const rawSources = Array.isArray(p.sources)
-      ? p.sources.filter((source): source is string => typeof source === 'string')
-      : typeof p.source === 'string'
-        ? [p.source]
-        : [];
-    const sources = rawSources.map(stripFootnotes).filter(Boolean).slice(0, 3);
+    const sourceDetails = normalizeSources(
+      Array.isArray(p.sources)
+        ? p.sources
+        : typeof p.source === 'string'
+          ? [p.source]
+          : [],
+      retrievedAt
+    );
+    const sources = sourceDetails.map((source) => source.url);
+    const quality = sourceQuality(sourceDetails, nowMs);
     const conflictingTitles = Array.isArray(p.conflictingTitles)
       ? p.conflictingTitles
           .filter((value): value is string => typeof value === 'string')
@@ -171,7 +294,9 @@ function normalizePeople(raw: unknown, limit = 60): ResearchedPerson[] {
       p.researchStatus === 'possibly_stale' ||
       p.researchStatus === 'conflicting'
         ? p.researchStatus
-        : conf === 'low' || sources.length === 0
+        : conf === 'low' ||
+            sources.length === 0 ||
+            quality.freshness === 'stale'
           ? 'possibly_stale'
           : 'verified';
     const teamEvidence =
@@ -196,6 +321,10 @@ function normalizePeople(raw: unknown, limit = 60): ResearchedPerson[] {
       confidence: conf,
       source: sources[0] ?? null,
       sources,
+      sourceDetails,
+      freshness: quality.freshness,
+      corroborationCount: quality.corroborationCount,
+      lastVerifiedAt: sources.length > 0 ? retrievedAt : null,
       conflictingTitles,
       researchStatus: status,
     };
@@ -232,6 +361,28 @@ function normalizePeople(raw: unknown, limit = 60): ResearchedPerson[] {
         0,
         5
       ),
+      sourceDetails: Array.from(
+        new Map(
+          [...existing.sourceDetails, ...candidate.sourceDetails].map((source) => [
+            source.url,
+            source,
+          ])
+        ).values()
+      ).slice(0, 5),
+      freshness:
+        existing.freshness === 'fresh' || candidate.freshness === 'fresh'
+          ? 'fresh'
+          : existing.freshness === 'aging' || candidate.freshness === 'aging'
+            ? 'aging'
+            : existing.freshness === 'stale' || candidate.freshness === 'stale'
+              ? 'stale'
+              : 'unknown',
+      corroborationCount: new Set(
+        [...existing.sourceDetails, ...candidate.sourceDetails]
+          .map(sourceDomain)
+          .filter(Boolean)
+      ).size,
+      lastVerifiedAt: existing.lastVerifiedAt ?? candidate.lastVerifiedAt,
       source: existing.source ?? candidate.source,
       conflictingTitles: Array.from(
         new Set([
@@ -268,8 +419,12 @@ function missingFunctions(people: ResearchedPerson[]): string[] {
   return CORE_FUNCTIONS.filter((name) => !haystack.includes(name));
 }
 
-function normalizeInitiatives(raw: unknown): StrategicInitiative[] {
+function normalizeInitiatives(
+  raw: unknown,
+  nowMs = Date.now()
+): StrategicInitiative[] {
   if (!Array.isArray(raw)) return [];
+  const retrievedAt = new Date(nowMs).toISOString();
   return raw.flatMap((item) => {
     if (!item || typeof item !== 'object') return [];
     const value = item as Record<string, unknown>;
@@ -292,12 +447,14 @@ function normalizeInitiatives(raw: unknown): StrategicInitiative[] {
       value.category === 'market'
         ? value.category
         : 'product';
+    const evidenceDetails = normalizeSources(value.evidence, retrievedAt, 3);
     return [
       {
         name,
         summary,
         category,
-        evidence: list(value.evidence, 3),
+        evidence: evidenceDetails.map((source) => source.url),
+        evidenceDetails,
         relevantPeople: list(value.relevantPeople, 8),
         relevantTeams: list(value.relevantTeams, 8),
         salesAngles: list(value.salesAngles, 4),
@@ -330,6 +487,10 @@ function fixtureOrg(domain: string): ResearchResult {
     confidence: 'low' as const,
     source: 'demo fixture',
     sources: ['demo fixture'],
+    sourceDetails: [],
+    freshness: 'unknown' as const,
+    corroborationCount: 0,
+    lastVerifiedAt: null,
     conflictingTitles: [],
     researchStatus: 'possibly_stale' as const,
     })
@@ -358,7 +519,7 @@ export async function researchOrg(
       : chat([
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: initiativesPrompt(domain) },
-        ]).catch(() => null);
+        ], { webSearch: true }).catch(() => null);
     const focuses = requestedFocus
       ? [
           `targeted enrichment for: ${requestedFocus}. Find the named person or ` +
@@ -375,7 +536,7 @@ export async function researchOrg(
         const result = await chat([
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: researchPrompt(domain, focus) },
-        ]);
+        ], { webSearch: true });
         const parsed = extractJson(result.content) as {
           companyName?: unknown;
           people?: unknown;
@@ -407,7 +568,7 @@ export async function researchOrg(
                 'Return only people you can verify; some functions may not exist.'
             ),
           },
-        ]);
+        ], { webSearch: true });
         const parsedFollowUp = extractJson(followUp.content) as {
           people?: unknown;
         };

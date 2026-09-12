@@ -56,15 +56,15 @@ export default function DeepResearchModal({
     return Array.from(new Set(values)).slice(0, 6);
   }, [people, selected]);
 
-  const run = async () => {
-    if (!focus.trim()) return;
+  const run = async (fullAccount = false) => {
+    if (!fullAccount && !focus.trim()) return;
     setResearching(true);
     setResult(null);
     setMerged('');
     setError('');
     setStage(0);
     try {
-      setResult(await api.research(domain, focus.trim()));
+      setResult(await api.research(domain, fullAccount ? undefined : focus.trim()));
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -131,16 +131,24 @@ export default function DeepResearchModal({
         </div>
 
         {!researching && !result && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {suggestions.map((suggestion) => (
-              <button
-                key={suggestion}
-                onClick={() => setFocus(suggestion)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:border-[#b9b2ff] hover:text-[#5144d7]"
-              >
-                {suggestion}
-              </button>
-            ))}
+          <div className="mt-4">
+            <button
+              onClick={() => void run(true)}
+              className="mb-3 w-full rounded-xl border border-[#b9b2ff] bg-[#eeecff] px-3 py-2 text-xs font-semibold text-[#5144d7] transition hover:bg-[#e4e0ff]"
+            >
+              Refresh the entire account against current public sources
+            </button>
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => setFocus(suggestion)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:border-[#b9b2ff] hover:text-[#5144d7]"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

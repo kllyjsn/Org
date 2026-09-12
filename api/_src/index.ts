@@ -191,6 +191,12 @@ function sanitizeState(input: unknown): MapState {
       researchedAt: meta.researchedAt ?? null,
       tier: meta.tier ?? 'manual',
       provider: meta.provider ?? null,
+      refreshCadence:
+        meta.refreshCadence === 'monthly' || meta.refreshCadence === 'manual'
+          ? meta.refreshCadence
+          : 'weekly',
+      nextRefreshAt:
+        typeof meta.nextRefreshAt === 'string' ? meta.nextRefreshAt : null,
       initiatives: Array.isArray(meta.initiatives)
         ? meta.initiatives.slice(0, 20)
         : [],
