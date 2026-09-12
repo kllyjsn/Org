@@ -77,24 +77,52 @@ function setSessionCookie(c: Context, token: string) {
   });
 }
 
-async function workspacesFor(userId: string) {
+function isSuperAdmin(user: UserRow): boolean {
+  return (process.env.SUPER_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(user.email.toLowerCase());
+}
+
+async function workspaceRoleFor(
+  user: UserRow,
+  workspaceId: string
+): Promise<MemberRow['role'] | null> {
+  return isSuperAdmin(user)
+    ? 'owner'
+    : memberRole(user.id, workspaceId);
+}
+
+async function workspacesFor(user: UserRow) {
+  if (isSuperAdmin(user)) {
+    return query<{
+      id: string;
+      name: string;
+      role: string;
+      plan: 'pro';
+    }>(
+      `SELECT w.id, w.name, 'pro'::text AS plan, 'owner'::text AS role
+       FROM workspaces w ORDER BY w.created_at`
+    );
+  }
   return query<{ id: string; name: string; role: string; plan: 'free' | 'pro' }>(
     `SELECT w.id, w.name, w.plan, m.role FROM workspaces w
      JOIN workspace_members m ON m.workspace_id = w.id
      WHERE m.user_id = $1 ORDER BY w.created_at`,
-    [userId]
+    [user.id]
   );
 }
 
 /** Fetch map if the user belongs to its workspace; returns [map, role]. */
 async function mapForUser(
-  userId: string,
+  user: UserRow,
   mapId: string
 ): Promise<[MapRow | null, MemberRow['role'] | null]> {
   const rows = await query<MapRow>('SELECT * FROM maps WHERE id = $1', [mapId]);
   const map = rows[0];
   if (!map) return [null, null];
-  return [map, await memberRole(userId, map.workspace_id)];
+  return [map, await workspaceRoleFor(user, map.workspace_id)];
 }
 
 function canWrite(role: MemberRow['role'] | null): boolean {
@@ -135,7 +163,7 @@ app.post('/api/billing/checkout', requireAuth, async (c) => {
   const body = await c.req.json().catch(() => null);
   const workspaceId =
     typeof body?.workspaceId === 'string' ? body.workspaceId : '';
-  if ((await memberRole(user.id, workspaceId)) !== 'owner') {
+  if ((await workspaceRoleFor(user, workspaceId)) !== 'owner') {
     return bad(c, 'only workspace owners can manage billing', 403);
   }
   const workspaces = await query<WorkspaceRow>(
@@ -180,7 +208,7 @@ app.post('/api/billing/portal', requireAuth, async (c) => {
   const body = await c.req.json().catch(() => null);
   const workspaceId =
     typeof body?.workspaceId === 'string' ? body.workspaceId : '';
-  if ((await memberRole(user.id, workspaceId)) !== 'owner') {
+  if ((await workspaceRoleFor(user, workspaceId)) !== 'owner') {
     return bad(c, 'only workspace owners can manage billing', 403);
   }
   const rows = await query<WorkspaceRow>(
@@ -285,7 +313,7 @@ app.post('/api/auth/register', async (c) => {
   const users = await query<UserRow>('SELECT * FROM users WHERE id = $1', [userId]);
   return c.json({
     user: publicUser(users[0]),
-    workspaces: await workspacesFor(userId),
+    workspaces: await workspacesFor(users[0]),
   });
 });
 
@@ -305,7 +333,7 @@ app.post('/api/auth/login', async (c) => {
   setSessionCookie(c, token);
   return c.json({
     user: publicUser(user),
-    workspaces: await workspacesFor(user.id),
+    workspaces: await workspacesFor(user),
   });
 });
 
@@ -320,7 +348,7 @@ app.get('/api/me', requireAuth, async (c) => {
   const user = c.get('user');
   return c.json({
     user: publicUser(user),
-    workspaces: await workspacesFor(user.id),
+    workspaces: await workspacesFor(user),
   });
 });
 
@@ -332,13 +360,19 @@ app.post('/api/workspaces', requireAuth, async (c) => {
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
   if (!name) return bad(c, 'name required');
   const ws = await createWorkspaceForUser(user.id, name);
-  return c.json({ workspace: { ...ws, role: 'owner' } });
+  return c.json({
+    workspace: {
+      ...ws,
+      plan: isSuperAdmin(user) ? 'pro' : ws.plan,
+      role: 'owner',
+    },
+  });
 });
 
 app.get('/api/workspaces/:id/members', requireAuth, async (c) => {
   const user = c.get('user');
   const wsId = param(c, 'id');
-  if (!(await memberRole(user.id, wsId))) return bad(c, 'not a member', 403);
+  if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
   const rows = await query(
     `SELECT u.id, u.name, u.email, m.role FROM workspace_members m
      JOIN users u ON u.id = m.user_id WHERE m.workspace_id = $1`,
@@ -350,7 +384,7 @@ app.get('/api/workspaces/:id/members', requireAuth, async (c) => {
 app.post('/api/workspaces/:id/members', requireAuth, async (c) => {
   const user = c.get('user');
   const wsId = param(c, 'id');
-  const role = await memberRole(user.id, wsId);
+  const role = await workspaceRoleFor(user, wsId);
   if (role !== 'owner' && role !== 'member')
     return bad(c, 'insufficient role', 403);
   const body = await c.req.json().catch(() => null);
@@ -403,7 +437,7 @@ app.post('/api/research', requireAuth, async (c) => {
 app.get('/api/maps', requireAuth, async (c) => {
   const user = c.get('user');
   const wsId = c.req.query('workspaceId') || '';
-  if (!(await memberRole(user.id, wsId))) return bad(c, 'not a member', 403);
+  if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
   const rows = await query<MapRow>(
     `SELECT id, name, domain, company_name, state, created_by, created_at, updated_at
      FROM maps WHERE workspace_id = $1 ORDER BY updated_at DESC`,
@@ -421,14 +455,14 @@ app.post('/api/maps', requireAuth, async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => null);
   const wsId = typeof body?.workspaceId === 'string' ? body.workspaceId : '';
-  const role = await memberRole(user.id, wsId);
+  const role = await workspaceRoleFor(user, wsId);
   if (!canWrite(role)) return bad(c, 'insufficient role', 403);
   const workspaces = await query<{ plan: 'free' | 'pro' }>(
     'SELECT plan FROM workspaces WHERE id = $1',
     [wsId]
   );
   if (!workspaces[0]) return bad(c, 'workspace not found', 404);
-  if (workspaces[0].plan === 'free') {
+  if (!isSuperAdmin(user) && workspaces[0].plan === 'free') {
     const counts = await query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM maps WHERE workspace_id = $1',
       [wsId]
@@ -472,14 +506,14 @@ app.post('/api/maps', requireAuth, async (c) => {
 
 app.get('/api/maps/:id', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   return c.json({ map: { ...map, role } });
 });
 
 app.patch('/api/maps/:id', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
   const body = await c.req.json().catch(() => null);
@@ -514,7 +548,7 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
 
 app.delete('/api/maps/:id', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   if (!canWrite(role)) return bad(c, 'viewers cannot delete', 403);
   await query('DELETE FROM maps WHERE id = $1', [map.id]);
@@ -525,7 +559,7 @@ app.delete('/api/maps/:id', requireAuth, async (c) => {
 
 app.get('/api/maps/:id/versions', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   const versions = await query(
     `SELECT v.id, v.name, v.created_at, u.name AS author_name
@@ -538,7 +572,7 @@ app.get('/api/maps/:id/versions', requireAuth, async (c) => {
 
 app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   if (!canWrite(role)) return bad(c, 'viewers cannot restore versions', 403);
   const versions = await query<{ name: string; state: MapState }>(
@@ -560,7 +594,7 @@ app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => 
 
 app.post('/api/maps/:id/presence', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   const body = await c.req.json().catch(() => null);
   const cursorX =
@@ -600,7 +634,7 @@ app.post('/api/maps/:id/presence', requireAuth, async (c) => {
 
 app.get('/api/maps/:id/comments', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   const rows = await query(
     `SELECT c.id, c.person_id, c.body, c.created_at, u.name AS author_name
@@ -613,7 +647,7 @@ app.get('/api/maps/:id/comments', requireAuth, async (c) => {
 
 app.post('/api/maps/:id/comments', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   const body = await c.req.json().catch(() => null);
   const text = typeof body?.body === 'string' ? body.body.trim() : '';
@@ -632,7 +666,7 @@ app.post('/api/maps/:id/comments', requireAuth, async (c) => {
 
 app.post('/api/maps/:id/share', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   if (!canWrite(role)) return bad(c, 'viewers cannot share', 403);
   const body = await c.req.json().catch(() => ({}));
@@ -653,7 +687,7 @@ app.post('/api/maps/:id/share', requireAuth, async (c) => {
 
 app.get('/api/maps/:id/share', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   const links = await query<ShareLinkRow>(
     'SELECT * FROM share_links WHERE map_id = $1 ORDER BY created_at DESC',
@@ -664,7 +698,7 @@ app.get('/api/maps/:id/share', requireAuth, async (c) => {
 
 app.delete('/api/maps/:id/share/:token', requireAuth, async (c) => {
   const user = c.get('user');
-  const [map, role] = await mapForUser(user.id, param(c, 'id'));
+  const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   if (!canWrite(role)) return bad(c, 'viewers cannot revoke links', 403);
   await query('DELETE FROM share_links WHERE token = $1 AND map_id = $2', [
