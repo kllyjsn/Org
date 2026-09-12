@@ -1,0 +1,129 @@
+import type {
+  LoadedMap,
+  MapComment,
+  MapListItem,
+  MapState,
+  ResearchResult,
+  SessionUser,
+  ShareLink,
+  Workspace,
+} from './types';
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    credentials: 'include',
+    ...init,
+    headers: {
+      ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      ...init?.headers,
+    },
+  });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new ApiError(
+      typeof data.error === 'string' ? data.error : `request failed (${res.status})`,
+      res.status
+    );
+  }
+  return data as T;
+}
+
+export const api = {
+  me: () =>
+    req<{ user: SessionUser; workspaces: Workspace[] }>('/api/me'),
+  login: (email: string, password: string) =>
+    req<{ user: SessionUser; workspaces: Workspace[] }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+  register: (
+    email: string,
+    password: string,
+    name: string,
+    workspaceName?: string
+  ) =>
+    req<{ user: SessionUser; workspaces: Workspace[] }>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, name, workspaceName }),
+    }),
+  logout: () => req<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
+
+  createWorkspace: (name: string) =>
+    req<{ workspace: Workspace }>('/api/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  listMembers: (workspaceId: string) =>
+    req<{ members: { id: string; name: string; email: string; role: string }[] }>(
+      `/api/workspaces/${workspaceId}/members`
+    ),
+  addMember: (workspaceId: string, email: string) =>
+    req<{ ok: true }>(`/api/workspaces/${workspaceId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  research: (domain: string) =>
+    req<ResearchResult>('/api/research', {
+      method: 'POST',
+      body: JSON.stringify({ domain }),
+    }),
+
+  listMaps: (workspaceId: string) =>
+    req<{ maps: MapListItem[] }>(`/api/maps?workspaceId=${workspaceId}`),
+  createMap: (
+    workspaceId: string,
+    name: string,
+    domain: string,
+    state: MapState
+  ) =>
+    req<{ id: string }>('/api/maps', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId, name, domain, state }),
+    }),
+  getMap: (id: string) => req<{ map: LoadedMap }>(`/api/maps/${id}`),
+  patchMap: (id: string, patch: { name?: string; state?: MapState }) =>
+    req<{ ok: true }>(`/api/maps/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteMap: (id: string) =>
+    req<{ ok: true }>(`/api/maps/${id}`, { method: 'DELETE' }),
+
+  listComments: (mapId: string) =>
+    req<{ comments: MapComment[] }>(`/api/maps/${mapId}/comments`),
+  addComment: (mapId: string, body: string, personId?: string) =>
+    req<{ id: string }>(`/api/maps/${mapId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ body, personId }),
+    }),
+
+  createShare: (mapId: string, expiresInDays?: number) =>
+    req<{ token: string }>(`/api/maps/${mapId}/share`, {
+      method: 'POST',
+      body: JSON.stringify({ expiresInDays }),
+    }),
+  listShares: (mapId: string) =>
+    req<{ links: ShareLink[] }>(`/api/maps/${mapId}/share`),
+  deleteShare: (mapId: string, token: string) =>
+    req<{ ok: true }>(`/api/maps/${mapId}/share/${token}`, { method: 'DELETE' }),
+
+  shareView: (token: string) =>
+    req<{
+      map: {
+        name: string;
+        domain: string;
+        company_name: string | null;
+        updated_at: string;
+        state: MapState;
+      };
+    }>(`/api/share/${token}`),
+};
