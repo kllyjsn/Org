@@ -34,11 +34,16 @@ function edgeToMap(e: FlowEdge): MapEdge {
 import { toPng } from 'html-to-image';
 import { AnimatePresence } from 'framer-motion';
 import {
+  AlignHorizontalDistributeCenter,
+  AlignStartHorizontal,
   ArrowLeft,
+  Copy,
   Download,
   LayoutGrid,
   Loader2,
+  Redo2,
   Share2,
+  Undo2,
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
@@ -118,6 +123,26 @@ function toState(
 }
 
 type SaveState = 'saved' | 'dirty' | 'saving';
+type CanvasSnapshot = {
+  nodes: Node<PersonNodeData>[];
+  edges: FlowEdge[];
+};
+
+function snapshot(
+  nodes: Node<PersonNodeData>[],
+  edges: FlowEdge[]
+): CanvasSnapshot {
+  return structuredClone({ nodes, edges });
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  return (
+    element?.tagName === 'INPUT' ||
+    element?.tagName === 'TEXTAREA' ||
+    element?.isContentEditable === true
+  );
+}
 
 function MapInner() {
   const { mapId } = useParams<{ mapId: string }>();
@@ -133,7 +158,12 @@ function MapInner() {
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [past, setPast] = useState<CanvasSnapshot[]>([]);
+  const [future, setFuture] = useState<CanvasSnapshot[]>([]);
   const saveTimer = useRef<number | null>(null);
+  const editTimer = useRef<number | null>(null);
+  const dragHistoryRecorded = useRef(false);
+  const clipboard = useRef<CanvasSnapshot | null>(null);
   const metaRef = useRef<MapState['meta'] | null>(null);
 
   const readOnly = role === 'viewer';
@@ -154,6 +184,8 @@ function MapInner() {
         setDomain(map.domain);
         setMeta(map.state.meta);
         setRole(map.role);
+        setPast([]);
+        setFuture([]);
         setLoaded(true);
         window.setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
       })
@@ -181,6 +213,39 @@ function MapInner() {
     },
     [persist, readOnly]
   );
+
+  const recordHistory = useCallback(() => {
+    if (readOnly) return;
+    setPast((items) => [...items.slice(-49), snapshot(nodes, edges)]);
+    setFuture([]);
+  }, [readOnly, nodes, edges]);
+
+  const restore = useCallback(
+    (next: CanvasSnapshot) => {
+      const restored = snapshot(next.nodes, next.edges);
+      setNodes(restored.nodes);
+      setEdges(restored.edges);
+      markDirty(restored.nodes, restored.edges);
+      setSelectedId(null);
+    },
+    [setNodes, setEdges, markDirty]
+  );
+
+  const undo = useCallback(() => {
+    if (readOnly || past.length === 0) return;
+    const previous = past[past.length - 1];
+    setPast((items) => items.slice(0, -1));
+    setFuture((items) => [snapshot(nodes, edges), ...items.slice(0, 49)]);
+    restore(previous);
+  }, [readOnly, past, nodes, edges, restore]);
+
+  const redo = useCallback(() => {
+    if (readOnly || future.length === 0) return;
+    const next = future[0];
+    setFuture((items) => items.slice(1));
+    setPast((items) => [...items.slice(-49), snapshot(nodes, edges)]);
+    restore(next);
+  }, [readOnly, future, nodes, edges, restore]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -222,6 +287,7 @@ function MapInner() {
   const onConnect = useCallback(
     (conn: Connection) => {
       if (!conn.source || !conn.target || conn.source === conn.target) return;
+      recordHistory();
       setEdges((es) => {
         // one formal manager per person
         const without = es.filter(
@@ -235,11 +301,12 @@ function MapInner() {
         return next;
       });
     },
-    [setEdges, markDirty, nodes]
+    [setEdges, markDirty, nodes, recordHistory]
   );
 
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
+      recordHistory();
       const ids = new Set(deleted.map((n) => n.id));
       setEdges((es) => {
         const next = es.filter((e) => !ids.has(e.source) && !ids.has(e.target));
@@ -248,7 +315,7 @@ function MapInner() {
       });
       setSelectedId((sel) => (sel && ids.has(sel) ? null : sel));
     },
-    [setEdges, markDirty, nodes]
+    [setEdges, markDirty, nodes, recordHistory]
   );
 
   const selected = nodes.find((n) => n.id === selectedId)?.data.person ?? null;
@@ -265,6 +332,11 @@ function MapInner() {
 
   const updatePerson = useCallback(
     (updated: Person) => {
+      if (!editTimer.current) recordHistory();
+      if (editTimer.current) window.clearTimeout(editTimer.current);
+      editTimer.current = window.setTimeout(() => {
+        editTimer.current = null;
+      }, 750);
       setNodes((ns) => {
         const next = ns.map((n) =>
           n.id === updated.id ? { ...n, data: { person: updated } } : n
@@ -276,11 +348,12 @@ function MapInner() {
         return next;
       });
     },
-    [setNodes, setEdges, markDirty]
+    [setNodes, setEdges, markDirty, recordHistory]
   );
 
   const setManager = useCallback(
     (personId: string, managerId: string | null) => {
+      recordHistory();
       setEdges((es) => {
         const without = es.filter(
           (e) => !(e.data?.kind === 'reports' && e.target === personId)
@@ -292,11 +365,12 @@ function MapInner() {
         return next;
       });
     },
-    [setEdges, markDirty, nodes]
+    [setEdges, markDirty, nodes, recordHistory]
   );
 
   const addInfluence = useCallback(
     (fromId: string, toId: string, label: string) => {
+      recordHistory();
       setEdges((es) => {
         const next = [
           ...es,
@@ -306,10 +380,11 @@ function MapInner() {
         return next;
       });
     },
-    [setEdges, markDirty, nodes]
+    [setEdges, markDirty, nodes, recordHistory]
   );
 
   const addPerson = useCallback(() => {
+    recordHistory();
     const center = rf.screenToFlowPosition({
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
@@ -345,10 +420,11 @@ function MapInner() {
       return next;
     });
     setSelectedId(person.id);
-  }, [rf, setNodes, setEdges, markDirty]);
+  }, [rf, setNodes, setEdges, markDirty, recordHistory]);
 
   const deletePerson = useCallback(
     (personId: string) => {
+      recordHistory();
       setNodes((ns) => ns.filter((n) => n.id !== personId));
       setEdges((es) => {
         const next = es.filter(
@@ -362,10 +438,11 @@ function MapInner() {
       });
       setSelectedId(null);
     },
-    [setNodes, setEdges, markDirty, nodes]
+    [setNodes, setEdges, markDirty, nodes, recordHistory]
   );
 
   const autoLayout = useCallback(() => {
+    recordHistory();
     const currentPeople = nodes.map((n) => ({ ...n.data.person, x: n.position.x, y: n.position.y }));
     const currentEdges: MapEdge[] = edges.map(edgeToMap);
     const laid = applyLayout(currentPeople, currentEdges);
@@ -379,7 +456,148 @@ function MapInner() {
       return next;
     });
     window.setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
-  }, [nodes, edges, setNodes, markDirty, rf]);
+  }, [nodes, edges, setNodes, markDirty, rf, recordHistory]);
+
+  const selectedNodes = useMemo(
+    () => nodes.filter((node) => node.selected),
+    [nodes]
+  );
+
+  const alignTop = useCallback(() => {
+    if (selectedNodes.length < 2) return;
+    recordHistory();
+    const y = Math.min(...selectedNodes.map((node) => node.position.y));
+    const selectedIds = new Set(selectedNodes.map((node) => node.id));
+    setNodes((items) => {
+      const next = items.map((node) =>
+        selectedIds.has(node.id)
+          ? { ...node, position: { ...node.position, y } }
+          : node
+      );
+      markDirty(next, edges);
+      return next;
+    });
+  }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
+
+  const distributeHorizontally = useCallback(() => {
+    if (selectedNodes.length < 3) return;
+    const ordered = [...selectedNodes].sort(
+      (a, b) => a.position.x - b.position.x
+    );
+    const first = ordered[0].position.x;
+    const last = ordered[ordered.length - 1].position.x;
+    const step = (last - first) / (ordered.length - 1);
+    const xById = new Map(
+      ordered.map((node, index) => [node.id, first + step * index])
+    );
+    recordHistory();
+    setNodes((items) => {
+      const next = items.map((node) => {
+        const x = xById.get(node.id);
+        return x === undefined
+          ? node
+          : { ...node, position: { ...node.position, x } };
+      });
+      markDirty(next, edges);
+      return next;
+    });
+  }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
+
+  const copySelection = useCallback(() => {
+    if (selectedNodes.length === 0) return;
+    const selectedIds = new Set(selectedNodes.map((node) => node.id));
+    clipboard.current = snapshot(
+      selectedNodes,
+      edges.filter(
+        (edge) =>
+          selectedIds.has(edge.source) && selectedIds.has(edge.target)
+      )
+    );
+  }, [selectedNodes, edges]);
+
+  const pasteSelection = useCallback(() => {
+    if (readOnly || !clipboard.current) return;
+    recordHistory();
+    const ids = new Map<string, string>();
+    for (const node of clipboard.current.nodes) {
+      ids.set(node.id, crypto.randomUUID());
+    }
+    const pastedNodes = clipboard.current.nodes.map((node) => {
+      const id = ids.get(node.id)!;
+      return {
+        ...node,
+        id,
+        selected: true,
+        position: { x: node.position.x + 32, y: node.position.y + 32 },
+        data: {
+          person: {
+            ...node.data.person,
+            id,
+            x: node.position.x + 32,
+            y: node.position.y + 32,
+          },
+        },
+      };
+    });
+    const pastedEdges = clipboard.current.edges.map((edge) => ({
+      ...edge,
+      id: crypto.randomUUID(),
+      source: ids.get(edge.source)!,
+      target: ids.get(edge.target)!,
+      selected: false,
+    }));
+    setNodes((items) => {
+      const next = [
+        ...items.map((node) => ({ ...node, selected: false })),
+        ...pastedNodes,
+      ];
+      setEdges((itemsEdges) => {
+        const nextEdges = [
+          ...itemsEdges.map((edge) => ({ ...edge, selected: false })),
+          ...pastedEdges,
+        ];
+        markDirty(next, nextEdges);
+        return nextEdges;
+      });
+      return next;
+    });
+    clipboard.current = snapshot(pastedNodes, pastedEdges);
+  }, [
+    readOnly,
+    recordHistory,
+    setNodes,
+    setEdges,
+    markDirty,
+  ]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      const command = event.metaKey || event.ctrlKey;
+      if (command && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (command && event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (command && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        copySelection();
+        return;
+      }
+      if (command && event.key.toLowerCase() === 'v') {
+        event.preventDefault();
+        pasteSelection();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [undo, redo, copySelection, pasteSelection]);
 
   const exportPng = useCallback(async () => {
     const el = document.querySelector('.react-flow__viewport') as HTMLElement;
@@ -462,6 +680,24 @@ function MapInner() {
         </span>
         {!readOnly && (
           <>
+            <div className="flex overflow-hidden rounded-lg border border-slate-200">
+              <button
+                onClick={undo}
+                disabled={past.length === 0}
+                title="Undo (⌘Z)"
+                className="border-r border-slate-200 p-2 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+              >
+                <Undo2 size={15} />
+              </button>
+              <button
+                onClick={redo}
+                disabled={future.length === 0}
+                title="Redo (⇧⌘Z)"
+                className="p-2 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+              >
+                <Redo2 size={15} />
+              </button>
+            </div>
             <button
               onClick={addPerson}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
@@ -498,12 +734,24 @@ function MapInner() {
           onEdgesChange={handleEdgesChange}
           onConnect={onConnect}
           onNodesDelete={onNodesDelete}
+          onNodeDragStart={() => {
+            if (!dragHistoryRecorded.current) {
+              recordHistory();
+              dragHistoryRecorded.current = true;
+            }
+          }}
+          onNodeDragStop={() => {
+            dragHistoryRecorded.current = false;
+          }}
           onNodeClick={(_, n) => setSelectedId(n.id)}
           onPaneClick={() => setSelectedId(null)}
           nodeTypes={nodeTypes}
           nodesDraggable={!readOnly}
           nodesConnectable={!readOnly}
           elementsSelectable
+          selectionOnDrag={!readOnly}
+          panOnDrag={[1, 2]}
+          multiSelectionKeyCode={['Meta', 'Control']}
           deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
           fitView
           minZoom={0.2}
@@ -513,6 +761,39 @@ function MapInner() {
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable className="!bg-slate-50" />
         </ReactFlow>
+
+        {!readOnly && selectedNodes.length > 1 && (
+          <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+            <span className="px-2 text-xs font-medium text-slate-500">
+              {selectedNodes.length} selected
+            </span>
+            <button
+              onClick={alignTop}
+              title="Align top"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <AlignStartHorizontal size={16} />
+            </button>
+            <button
+              onClick={distributeHorizontally}
+              disabled={selectedNodes.length < 3}
+              title="Distribute horizontally"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:text-slate-300"
+            >
+              <AlignHorizontalDistributeCenter size={16} />
+            </button>
+            <button
+              onClick={() => {
+                copySelection();
+                window.setTimeout(pasteSelection, 0);
+              }}
+              title="Duplicate selection"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <Copy size={16} />
+            </button>
+          </div>
+        )}
 
         {/* buying-committee coverage strip */}
         {people.length > 0 && (
