@@ -93,7 +93,10 @@ export interface ChatResult {
  * Gemini). A failing or quota-exhausted key falls through to the next so a
  * dead credential never breaks research. Throws if every provider fails.
  */
-export async function chat(messages: ChatMessage[]): Promise<ChatResult> {
+export async function chat(
+  messages: ChatMessage[],
+  options?: { maxTokens?: number; json?: boolean }
+): Promise<ChatResult> {
   const providers = availableProviders();
   if (providers.length === 0) throw new Error('No LLM provider key configured');
 
@@ -103,7 +106,14 @@ export async function chat(messages: ChatMessage[]): Promise<ChatResult> {
       const payload = await postJson(
         p.url,
         { authorization: `Bearer ${process.env[p.envKey]}` },
-        { model: p.model, messages, max_tokens: 8_000 }
+        {
+          model: p.model,
+          messages,
+          max_tokens: options?.maxTokens ?? 8_000,
+          ...(options?.json
+            ? { response_format: { type: 'json_object' } }
+            : {}),
+        }
       );
       return {
         content: extractContent(payload),

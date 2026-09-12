@@ -167,6 +167,32 @@ export interface MapChangeAlert {
   sources?: string[];
 }
 
+export interface AccountAgentMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AccountAgentCitation {
+  id: string;
+  label: string;
+  url?: string;
+  personId?: string;
+}
+
+export interface AccountAgentAction {
+  type: 'focus_people' | 'open_strategy' | 'open_initiatives' | 'deep_research';
+  label: string;
+  personIds?: string[];
+  focus?: string;
+}
+
+export interface AccountAgentAnswer {
+  answer: string;
+  citations: AccountAgentCitation[];
+  actions: AccountAgentAction[];
+  provider: string;
+}
+
 export interface MapPresence {
   id: string;
   name: string;

@@ -3,6 +3,7 @@ import type { Context, Next } from 'hono';
 import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { answerAccountQuestion } from './account-agent.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
 import { researchOrg } from './research.js';
@@ -510,6 +511,41 @@ app.get('/api/maps/:id', requireAuth, async (c) => {
   const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   return c.json({ map: { ...map, role } });
+});
+
+app.post('/api/maps/:id/ask', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const body = await c.req.json().catch(() => null);
+  const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
+  const messages = rawMessages.flatMap(
+    (message: unknown): { role: 'user' | 'assistant'; content: string }[] => {
+      if (!message || typeof message !== 'object') return [];
+      const candidate = message as Record<string, unknown>;
+      if (
+        (candidate.role !== 'user' && candidate.role !== 'assistant') ||
+        typeof candidate.content !== 'string' ||
+        !candidate.content.trim()
+      ) {
+        return [];
+      }
+      return [{
+        role: candidate.role,
+        content: candidate.content.trim().slice(0, 2_000),
+      }];
+    }
+  ).slice(-10);
+  if (messages.length === 0 || messages.at(-1)?.role !== 'user') {
+    return bad(c, 'a user question is required');
+  }
+
+  try {
+    return c.json(await answerAccountQuestion(map.state as MapState, messages));
+  } catch (error) {
+    console.error('account analyst failed', error);
+    return bad(c, 'account analyst is temporarily unavailable', 502);
+  }
 });
 
 app.patch('/api/maps/:id', requireAuth, async (c) => {

@@ -71,6 +71,8 @@ import { applyLayout } from '../lib/layout';
 import { ROLE_META } from '../lib/colors';
 import { parseCsv } from '../lib/csv';
 import type {
+  AccountAgentAction,
+  AccountAgentMessage,
   BuyingRole,
   MapEdge,
   MapPresence,
@@ -823,7 +825,7 @@ function MapInner() {
   );
 
   const runAgentCommand = useCallback(
-    (raw: string): string => {
+    (raw: string): string | null => {
       const query = raw.trim();
       const lower = query.toLowerCase();
       if (!query) return 'I couldn’t find a command to run.';
@@ -850,9 +852,10 @@ function MapInner() {
         return 'Opening targeted deep research.';
       }
       if (
-        /\b(account brief|relationship path|deal plan|account strategy|path in)\b/.test(
+        /\b(build|open|show|create|generate|view)\b.*\b(account brief|relationship path|deal plan|account strategy|path in)\b/.test(
           lower
-        )
+        ) ||
+        /^(account brief|relationship path|deal plan|account strategy)$/.test(lower)
       ) {
         setShowStrategy(true);
         return 'Opening the account strategy.';
@@ -865,7 +868,12 @@ function MapInner() {
         setShowChanges(true);
         return 'Opening account change alerts.';
       }
-      if (/\b(initiative|strategic|why now)\b/.test(lower)) {
+      if (
+        /\b(open|show|view|review)\b.*\b(initiative|strategic priorities|why now)\b/.test(
+          lower
+        ) ||
+        lower === 'why now'
+      ) {
         setShowInitiatives(true);
         return 'Opening initiative intelligence.';
       }
@@ -1005,7 +1013,7 @@ function MapInner() {
         return `Found ${matches.length} ${matches.length === 1 ? 'person' : 'people'}.`;
       }
 
-      return 'I couldn’t confidently interpret that yet. Try finding a person or team, adding someone, arranging the map, or assigning a buying role.';
+      return null;
     },
     [
       people,
@@ -1018,6 +1026,24 @@ function MapInner() {
       setManager,
       addInfluence,
     ]
+  );
+
+  const runAccountAgentAction = useCallback(
+    (action: AccountAgentAction) => {
+      if (action.type === 'focus_people') {
+        const matches = people.filter((person) =>
+          action.personIds?.includes(person.id)
+        );
+        if (matches.length > 0) focusPeople(matches);
+      }
+      if (action.type === 'open_strategy') setShowStrategy(true);
+      if (action.type === 'open_initiatives') setShowInitiatives(true);
+      if (action.type === 'deep_research' && !readOnly) {
+        setDeepResearchFocus(action.focus ?? '');
+        setShowDeepResearch(true);
+      }
+    },
+    [focusPeople, people, readOnly]
   );
 
   const exportPng = useCallback(async () => {
@@ -1881,7 +1907,12 @@ function MapInner() {
             onClose={() => setShowCommands(false)}
             onFocusPerson={(person) => focusPeople([person])}
             onRunAction={runPaletteAction}
-            onRunAgent={runAgentCommand}
+            onRunCommand={runAgentCommand}
+            onAskAgent={(messages: AccountAgentMessage[]) => {
+              if (!mapId) throw new Error('Map not loaded');
+              return api.askMap(mapId, messages);
+            }}
+            onRunAgentAction={runAccountAgentAction}
           />
         )}
       </AnimatePresence>

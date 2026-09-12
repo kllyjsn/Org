@@ -1,4 +1,6 @@
 import type {
+  AccountAgentAnswer,
+  AccountAgentMessage,
   LoadedMap,
   MapChangeAlert,
   MapComment,
@@ -119,6 +121,11 @@ export const api = {
     req<{ baselineAt: string | null; changes: MapChangeAlert[] }>(
       `/api/maps/${mapId}/changes`
     ),
+  askMap: (mapId: string, messages: AccountAgentMessage[]) =>
+    req<AccountAgentAnswer>(`/api/maps/${mapId}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    }),
   restoreVersion: (mapId: string, versionId: string) =>
     req<{ name: string; state: MapState }>(
       `/api/maps/${mapId}/versions/${versionId}/restore`,
