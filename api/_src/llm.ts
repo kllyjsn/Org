@@ -16,6 +16,13 @@ interface ProviderSpec {
 
 const PROVIDERS: ProviderSpec[] = [
   {
+    name: 'gemini',
+    envKey: 'GEMINI_API_KEY',
+    url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    model: 'gemini-2.5-flash',
+    webSearch: false,
+  },
+  {
     name: 'openrouter',
     envKey: 'OPENROUTER_API_KEY',
     url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -28,13 +35,6 @@ const PROVIDERS: ProviderSpec[] = [
     url: 'https://api.perplexity.ai/chat/completions',
     model: 'sonar',
     webSearch: true,
-  },
-  {
-    name: 'gemini',
-    envKey: 'GEMINI_API_KEY',
-    url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-    model: 'gemini-2.5-flash',
-    webSearch: false,
   },
 ];
 

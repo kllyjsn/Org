@@ -27,7 +27,7 @@ blockers, and the reporting lines between them.
 |---|---|
 | `web/` | React 18 + TypeScript + Vite + Tailwind + Zustand + React Flow |
 | `api/` | Hono + Postgres — `api/index.ts` is the Vercel serverless entry, `_src/serve.ts` is the local dev server |
-| LLM | OpenRouter → Perplexity → Gemini → demo fixture; override with `LLM_PROVIDER_PRIORITY` |
+| LLM | Gemini → OpenRouter → Perplexity → demo fixture; override with `LLM_PROVIDER_PRIORITY` |
 
 ## Dev
 
