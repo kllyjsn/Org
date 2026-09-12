@@ -97,7 +97,7 @@ export default function PersonPanel({
   };
 
   const field =
-    'w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+    'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10 disabled:bg-slate-50 disabled:text-slate-600';
 
   const set = (patch: Partial<Person>) => onChange({ ...person, ...patch });
 
@@ -107,22 +107,52 @@ export default function PersonPanel({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 340, opacity: 0 }}
       transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-      className="absolute inset-x-0 bottom-0 z-30 flex h-[78%] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl sm:inset-y-0 sm:left-auto sm:h-full sm:w-[340px] sm:rounded-none sm:border-l sm:border-t-0"
+      className="absolute inset-x-0 bottom-0 z-30 flex h-[82%] flex-col rounded-t-3xl border-t border-slate-200 bg-[#f9faf7] shadow-[0_-20px_60px_rgba(15,23,42,.15)] sm:inset-y-0 sm:left-auto sm:h-full sm:w-[360px] sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-[-20px_0_60px_rgba(15,23,42,.12)]"
     >
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-        <h3 className="text-sm font-semibold text-slate-700">
-          {readOnly ? 'Person' : 'Edit person'}
-        </h3>
+      <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300 sm:hidden" />
+      <div className="flex items-start justify-between border-b border-slate-200/80 px-5 py-4">
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            {readOnly ? 'Stakeholder intelligence' : 'Stakeholder profile'}
+          </div>
+          <h3 className="max-w-64 truncate text-lg font-semibold tracking-tight text-slate-950">
+            {person.name}
+          </h3>
+          <p className="max-w-64 truncate text-xs text-slate-500">{person.title}</p>
+        </div>
         <button
           onClick={onClose}
-          className="text-slate-400 hover:text-slate-600"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
         >
           ✕
         </button>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-auto p-4">
-        <div className="space-y-2">
+      <div className="flex-1 space-y-5 overflow-auto p-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Research quality
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
+                person.confidence === 'high'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : person.confidence === 'medium'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-rose-50 text-rose-700'
+              }`}
+            >
+              {person.confidence} confidence
+            </span>
+          </div>
+          <div className="text-xs text-slate-500">
+            {person.sources.length} source{person.sources.length === 1 ? '' : 's'}
+            {person.teamEvidence ? ` · ${person.teamEvidence} team` : ''}
+          </div>
+        </div>
+
+        <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <input
             className={field}
             value={person.name}

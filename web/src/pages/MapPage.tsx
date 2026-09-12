@@ -922,31 +922,31 @@ function MapInner() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 sm:gap-3 sm:px-4">
+    <div className="flex h-full flex-col bg-[#f6f7f2]">
+      <header className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#101828] px-3 py-2.5 text-white shadow-lg sm:gap-3 sm:px-4">
         <Link
           to="/app"
-          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
         >
           <ArrowLeft size={17} />
         </Link>
         <input
-          className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1 text-sm font-semibold outline-none hover:border-slate-200 focus:border-indigo-400 sm:w-56 sm:flex-none"
+          className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-white outline-none hover:border-white/15 focus:border-[#8c82ff] sm:w-56 sm:flex-none"
           value={mapName}
           onChange={(e) => setMapName(e.target.value)}
           onBlur={saveName}
           disabled={readOnly}
         />
-        <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 sm:inline">
+        <span className="hidden rounded-full border border-white/10 bg-white/[.07] px-2.5 py-1 text-[10px] font-medium text-slate-300 sm:inline">
           {domain}
         </span>
         {meta?.provider && (
-          <span className="hidden rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600 md:inline">
+          <span className="hidden rounded-full bg-[#c9f04b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-950 md:inline">
             {meta.tier} · {meta.provider}
           </span>
         )}
         <div className="hidden flex-1 sm:block" />
-        <span className="hidden text-xs text-slate-400 sm:inline">
+        <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-500 sm:inline">
           {saveState === 'saving'
             ? 'Saving…'
             : saveState === 'dirty'
@@ -958,7 +958,7 @@ function MapInner() {
             <span
               key={person.id}
               title={`${person.name} is viewing`}
-              className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-indigo-100 text-[10px] font-semibold text-indigo-700"
+              className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#101828] bg-[#5b4cf0] text-[10px] font-semibold text-white"
             >
               {person.name
                 .split(' ')
@@ -969,15 +969,15 @@ function MapInner() {
             </span>
           ))}
         </div>
-        <div className="order-last flex w-full items-center gap-2 overflow-x-auto border-t border-slate-100 pt-2 sm:order-none sm:w-auto sm:border-0 sm:pt-0">
+        <div className="order-last flex w-full items-center gap-2 overflow-x-auto border-t border-white/10 pt-2 sm:order-none sm:w-auto sm:border-0 sm:pt-0">
           {!readOnly && (
             <>
-            <div className="flex overflow-hidden rounded-lg border border-slate-200">
+            <div className="flex overflow-hidden rounded-lg border border-white/10 bg-white/[.06]">
               <button
                 onClick={undo}
                 disabled={past.length === 0}
                 title="Undo (⌘Z)"
-                className="border-r border-slate-200 p-2 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                className="border-r border-white/10 p-2 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-600"
               >
                 <Undo2 size={15} />
               </button>
@@ -985,26 +985,26 @@ function MapInner() {
                 onClick={redo}
                 disabled={future.length === 0}
                 title="Redo (⇧⌘Z)"
-                className="p-2 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                className="p-2 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-600"
               >
                 <Redo2 size={15} />
               </button>
             </div>
             <button
               onClick={addPerson}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
             >
               <UserPlus size={15} /> Person
             </button>
             <button
               onClick={autoLayout}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
             >
               <LayoutGrid size={15} /> Layout
             </button>
             <button
               onClick={() => crmInput.current?.click()}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
             >
               <FileUp size={15} /> CRM CSV
             </button>
@@ -1017,21 +1017,21 @@ function MapInner() {
             />
             <button
               onClick={openHistory}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
             >
               <History size={15} /> History
             </button>
             {(meta?.initiatives?.length ?? 0) > 0 && (
               <button
                 onClick={() => setShowInitiatives(true)}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-100"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#c9f04b] px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-[#d5f66c]"
               >
                 <Lightbulb size={15} /> Initiatives
               </button>
             )}
             <button
               onClick={() => setShowShare(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+              className="flex items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#6b5cf8]"
             >
               <Share2 size={15} /> Share
             </button>
@@ -1039,14 +1039,14 @@ function MapInner() {
           )}
           <button
             onClick={() => void exportPng()}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
           >
             <Download size={15} /> PNG
           </button>
         </div>
       </header>
 
-      <div className="relative flex-1">
+      <div className="relative flex-1 bg-[#f6f7f2]">
         {importNotice && (
           <div className="absolute right-3 top-3 z-30 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
             {importNotice}
@@ -1099,7 +1099,7 @@ function MapInner() {
           minZoom={0.2}
           proOptions={{ hideAttribution: true }}
         >
-          <Background gap={24} size={1} color="#cbd5e1" />
+          <Background gap={28} size={1} color="#d9ddd4" />
           <Controls
             showInteractive={false}
             className="!bottom-3 !left-3 sm:!bottom-4 sm:!left-4"
@@ -1185,9 +1185,10 @@ function MapInner() {
 
         {/* buying-committee coverage strip */}
         {people.length > 0 && (
-          <div className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm backdrop-blur sm:left-4 sm:top-4">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Coverage · {people.length} people
+          <div className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-2xl border border-white/80 bg-white/85 px-3.5 py-2.5 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:left-4 sm:top-4">
+            <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
+              Buying committee · {people.length} people
             </div>
             <div className="hidden flex-wrap gap-1.5 sm:flex">
               {(['champion', 'economic_buyer', 'decision_maker', 'technical_buyer', 'influencer', 'blocker'] as BuyingRole[]).map(
@@ -1302,15 +1303,20 @@ function MapInner() {
         </div>
       )}
       {showInitiatives && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 sm:items-center sm:p-4">
-          <div className="max-h-[88vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-2xl sm:rounded-2xl">
-            <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-3xl sm:rounded-3xl sm:p-7">
+            <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <h2 className="font-semibold text-slate-900">
-                  Strategic initiatives
+                <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+                  <Lightbulb size={13} />
+                  Why this account changes now
+                </div>
+                <h2 className="text-3xl font-semibold tracking-[-0.045em] text-slate-950">
+                  Initiative intelligence
                 </h2>
-                <p className="text-xs text-slate-500">
-                  Recent signals mapped to teams and evidence-backed sales hypotheses.
+                <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">
+                  Recent company signals, the people accountable for them, and
+                  evidence-backed ways your solution may fit.
                 </p>
               </div>
               <button
@@ -1320,17 +1326,20 @@ function MapInner() {
                 Close
               </button>
             </div>
-            <div className="space-y-3">
-              {meta?.initiatives?.map((initiative) => (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {meta?.initiatives?.map((initiative, index) => (
                 <article
                   key={initiative.name}
-                  className="rounded-xl border border-slate-200 p-4"
+                  className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow"
                 >
+                  <div className="absolute right-3 top-2 text-4xl font-semibold tracking-tighter text-slate-100">
+                    {String(index + 1).padStart(2, '0')}
+                  </div>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold text-slate-800">
+                    <h3 className="relative pr-10 font-semibold tracking-tight text-slate-900">
                       {initiative.name}
                     </h3>
-                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-indigo-700">
+                    <span className="rounded-full bg-[#eeecff] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#5144d7]">
                       {initiative.category}
                     </span>
                   </div>
@@ -1346,11 +1355,11 @@ function MapInner() {
                     </p>
                   )}
                   {initiative.salesAngles.length > 0 && (
-                    <div className="mt-3 rounded-lg bg-amber-50 p-3">
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                        Sales hypotheses
+                    <div className="mt-3 rounded-xl bg-slate-950 p-3 text-white">
+                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[.14em] text-[#c9f04b]">
+                        Conversation opening
                       </div>
-                      <ul className="space-y-1 text-xs text-amber-950">
+                      <ul className="space-y-1.5 text-xs leading-5 text-slate-200">
                         {initiative.salesAngles.map((angle) => (
                           <li key={angle}>• {angle}</li>
                         ))}

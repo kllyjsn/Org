@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSession } from '../store';
 import { ApiError } from '../api';
 import { Wordmark } from '../components/Wordmark';
+import { ArrowRight, Radar, Sparkles } from 'lucide-react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -33,24 +34,74 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-full items-center justify-center bg-gradient-to-br from-slate-100 via-white to-indigo-50">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
-        <div className="mb-6">
-          <Wordmark size="lg" />
-          <p className="mt-1 text-sm text-slate-500">
-            Account maps that build themselves.
-          </p>
+    <div className="grid min-h-full bg-[#f6f7f2] lg:grid-cols-[1.08fr_.92fr]">
+      <section className="td-mesh relative hidden overflow-hidden p-12 text-white lg:flex lg:flex-col">
+        <div className="relative z-10">
+          <Wordmark size="lg" inverse />
         </div>
+        <div className="relative z-10 my-auto max-w-xl">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 backdrop-blur">
+            <Sparkles size={13} className="text-[#c9f04b]" />
+            Account intelligence, mapped
+          </div>
+          <h1 className="text-6xl font-semibold leading-[.98] tracking-[-0.055em]">
+            See the account.
+            <span className="block text-[#c9f04b]">Find your way in.</span>
+          </h1>
+          <p className="mt-6 max-w-lg text-lg leading-8 text-slate-300">
+            TopDown connects the people, teams, evidence, and strategic
+            initiatives behind every complex sale.
+          </p>
+          <div className="mt-10 grid max-w-lg grid-cols-3 gap-3">
+            {[
+              ['29', 'people mapped'],
+              ['20', 'teams resolved'],
+              ['8', 'active initiatives'],
+            ].map(([value, label]) => (
+              <div
+                key={label}
+                className="rounded-2xl border border-white/10 bg-white/[.07] p-4 backdrop-blur"
+              >
+                <div className="text-2xl font-semibold tracking-tight">{value}</div>
+                <div className="mt-1 text-xs text-slate-400">{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="relative z-10 flex items-center gap-2 text-xs text-slate-400">
+          <Radar size={14} className="text-[#c9f04b]" />
+          Public-web research. Evidence attached. No integration required.
+        </div>
+      </section>
 
-        <div className="mb-5 grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm">
+      <section className="flex items-center justify-center p-5 sm:p-10">
+        <div className="w-full max-w-md">
+          <div className="mb-10 lg:hidden">
+            <Wordmark size="lg" />
+          </div>
+          <div className="mb-8">
+            <p className="text-xs font-semibold uppercase tracking-[.18em] text-[#5b4cf0]">
+              Your account workspace
+            </p>
+            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-slate-950">
+              {mode === 'login' ? 'Welcome back.' : 'Map your first account.'}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              {mode === 'login'
+                ? 'Pick up where your team left off.'
+                : 'Two researched account maps are free.'}
+            </p>
+          </div>
+
+          <div className="mb-6 grid grid-cols-2 rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-sm">
           {(['login', 'register'] as const).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setMode(m)}
-              className={`rounded-md px-3 py-1.5 font-medium transition ${
+              className={`rounded-lg px-3 py-2 font-semibold transition ${
                 mode === m
-                  ? 'bg-white text-slate-900 shadow-sm'
+                  ? 'bg-slate-950 text-white shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -59,18 +110,18 @@ export default function LoginPage() {
           ))}
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
+          <form onSubmit={submit} className="space-y-3">
           {mode === 'register' && (
             <>
               <input
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
                 placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
               <input
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
                 placeholder="Workspace name (e.g. Acme sales team)"
                 value={workspaceName}
                 onChange={(e) => setWorkspaceName(e.target.value)}
@@ -78,7 +129,7 @@ export default function LoginPage() {
             </>
           )}
           <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
             placeholder="Email"
             type="email"
             value={email}
@@ -86,7 +137,7 @@ export default function LoginPage() {
             required
           />
           <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
             placeholder={
               mode === 'register' ? 'Password (8+ characters)' : 'Password'
             }
@@ -103,16 +154,18 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-60"
+            className="group flex w-full items-center justify-center gap-2 rounded-xl bg-[#5b4cf0] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(91,76,240,.24)] transition hover:bg-[#4b3ddd] disabled:opacity-60"
           >
             {busy
               ? 'Working…'
               : mode === 'login'
                 ? 'Sign in'
                 : 'Create workspace'}
+            {!busy && <ArrowRight size={16} className="transition group-hover:translate-x-0.5" />}
           </button>
         </form>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

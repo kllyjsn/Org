@@ -8,10 +8,87 @@ body,
   height: 100%;
 }
 
+:root {
+  color-scheme: light;
+  --td-ink: #101828;
+  --td-paper: #f6f7f2;
+  --td-line: #dde1d8;
+  --td-violet: #5b4cf0;
+  --td-lime: #c9f04b;
+}
+
 body {
-  @apply bg-slate-100 text-slate-900 antialiased;
+  @apply text-slate-900 antialiased;
+  background: var(--td-paper);
+  font-feature-settings: 'ss01' 1, 'cv11' 1;
+}
+
+::selection {
+  background: #d9d4ff;
+  color: var(--td-ink);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--td-violet);
+  outline-offset: 2px;
 }
 
 .react-flow__node {
   font-family: inherit;
+}
+
+.react-flow__pane {
+  cursor: grab;
+}
+
+.react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.react-flow__controls {
+  overflow: hidden;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgb(15 23 42 / 10%);
+}
+
+.react-flow__controls-button {
+  border-bottom-color: rgb(226 232 240);
+  background: rgb(255 255 255 / 92%);
+}
+
+.react-flow__controls-button:hover {
+  background: #f8fafc;
+}
+
+.td-grid {
+  background-image:
+    linear-gradient(rgb(15 23 42 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(15 23 42 / 3%) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.td-mesh {
+  background:
+    radial-gradient(circle at 8% 15%, rgb(91 76 240 / 18%), transparent 32%),
+    radial-gradient(circle at 92% 82%, rgb(201 240 75 / 14%), transparent 30%),
+    #101828;
+}
+
+.td-card-shadow {
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 4%),
+    0 16px 40px rgb(15 23 42 / 7%);
 }

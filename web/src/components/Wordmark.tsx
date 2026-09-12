@@ -4,13 +4,20 @@ const SIZES = {
   lg: { badge: 'h-8 w-8 rounded-lg', icon: 18, text: 'text-2xl' },
 } as const;
 
-export function Wordmark({ size = 'md' }: { size?: keyof typeof SIZES }) {
+export function Wordmark({
+  size = 'md',
+  inverse = false,
+}: {
+  size?: keyof typeof SIZES;
+  inverse?: boolean;
+}) {
   const s = SIZES[size];
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-center gap-2.5">
       <span
-        className={`${s.badge} flex items-center justify-center bg-indigo-600`}
+        className={`${s.badge} relative flex items-center justify-center overflow-hidden bg-[#5b4cf0] shadow-[inset_0_0_0_1px_rgba(255,255,255,.16)]`}
       >
+        <span className="absolute inset-x-0 bottom-0 h-[42%] bg-[#c9f04b]" />
         <svg
           width={s.icon}
           height={s.icon}
@@ -19,7 +26,7 @@ export function Wordmark({ size = 'md' }: { size?: keyof typeof SIZES }) {
           aria-hidden="true"
         >
           <path
-            d="M9 18V6m0 0L5.5 9.5M9 6l3.5 3.5"
+            d="M8.5 11V5.5m0 0L5.8 8.2M8.5 5.5l2.7 2.7"
             stroke="currentColor"
             strokeWidth="2.5"
             strokeLinecap="round"
@@ -27,17 +34,21 @@ export function Wordmark({ size = 'md' }: { size?: keyof typeof SIZES }) {
             className="text-white"
           />
           <path
-            d="M15 6v12m0 0l3.5-3.5M15 18l-3.5-3.5"
+            d="M15.5 13v5.5m0 0l2.7-2.7m-2.7 2.7l-2.7-2.7"
             stroke="currentColor"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-white"
+            className="text-slate-950"
           />
         </svg>
       </span>
-      <span className={`${s.text} font-bold tracking-tight text-slate-900`}>
-        Top<span className="text-indigo-600">Down</span>
+      <span
+        className={`${s.text} font-extrabold tracking-[-0.045em] ${
+          inverse ? 'text-white' : 'text-slate-950'
+        }`}
+      >
+        TopDown
       </span>
     </span>
   );

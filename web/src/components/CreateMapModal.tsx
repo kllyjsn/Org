@@ -51,10 +51,10 @@ function templateState(
 }
 
 const STAGES = [
-  'Searching leadership pages and public sources…',
-  'Cross-checking titles and reporting lines…',
-  'Structuring the org chart…',
-  'Laying out the canvas…',
+  'Scanning leadership, product, and team pages…',
+  'Following evidence across the public web…',
+  'Resolving teams, titles, and reporting lines…',
+  'Connecting recent initiatives to the org…',
 ];
 
 export default function CreateMapModal({
@@ -148,26 +148,32 @@ export default function CreateMapModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">New account map</h2>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:rounded-3xl sm:p-7">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <Sparkles size={14} />
+            New intelligence map
+          </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
           >
             ✕
           </button>
         </div>
-        <p className="mb-5 text-sm text-slate-500">
-          Paste a company domain — we research the org from public sources and
-          draft the chart. No integrations needed.
+        <h2 className="text-3xl font-semibold tracking-[-0.045em] text-slate-950">
+          Map the whole account.
+        </h2>
+        <p className="mb-6 mt-2 max-w-md text-sm leading-6 text-slate-500">
+          Start with a domain. TopDown researches people, teams, reporting
+          lines, and the initiatives shaping their priorities.
         </p>
 
-        <div className="flex gap-2">
+        <div className="flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm focus-within:border-[#5b4cf0] focus-within:ring-4 focus-within:ring-[#5b4cf0]/10">
           <input
             autoFocus
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-sm outline-none"
             placeholder="acme.com"
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
@@ -180,7 +186,7 @@ export default function CreateMapModal({
           <button
             onClick={() => void research()}
             disabled={!domain.trim() || researching || creating}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-60"
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-[#5b4cf0] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#4b3ddd] disabled:opacity-60"
           >
             {researching ? (
               <Loader2 size={15} className="animate-spin" />
@@ -192,30 +198,65 @@ export default function CreateMapModal({
         </div>
 
         {researching && (
-          <div className="mt-5 rounded-xl bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
-            <span className="mr-2 inline-block animate-pulse">●</span>
-            {STAGES[stage]}
+          <div className="mt-5 overflow-hidden rounded-2xl bg-slate-950 p-4 text-white">
+            <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
+              <span>Live research</span>
+              <span>{stage + 1} / {STAGES.length}</span>
+            </div>
+            <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-[#c9f04b] transition-all duration-500"
+                style={{ width: `${((stage + 1) / STAGES.length) * 100}%` }}
+              />
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Loader2 size={14} className="animate-spin text-[#c9f04b]" />
+              {STAGES[stage]}
+            </div>
           </div>
         )}
 
         {result && (
-          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <Sparkles size={15} />
               {result.demo
                 ? 'Demo chart loaded — no LLM key configured'
                 : `Found ${result.people.length} people at ${result.companyName || result.domain}`}
             </div>
-            <p className="mt-1 text-xs text-emerald-700">
+            <p className="mt-1 text-xs leading-5 text-slate-500">
               {result.demo
                 ? 'Set OPENROUTER_API_KEY, PERPLEXITY_API_KEY, or GEMINI_API_KEY to research real orgs.'
                 : `${result.provider[0].toUpperCase() + result.provider.slice(1)} · ${result.tier} public-web research. Low-confidence entries render dimmed for review.`}
             </p>
+            {!result.demo && (
+              <div className="mt-4 grid grid-cols-3 overflow-hidden rounded-xl bg-slate-950 text-white">
+                {[
+                  [result.people.length, 'people'],
+                  [
+                    new Set(result.people.map((person) => person.team).filter(Boolean)).size,
+                    'teams',
+                  ],
+                  [result.initiatives.length, 'initiatives'],
+                ].map(([value, label], index) => (
+                  <div
+                    key={label}
+                    className={`px-3 py-3 ${index > 0 ? 'border-l border-white/10' : ''}`}
+                  >
+                    <div className="text-lg font-semibold">{value}</div>
+                    <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                      {label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {result.people.length > 0 && (
-              <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-xs text-slate-600">
+              <ul className="mt-3 max-h-32 space-y-1 overflow-auto text-xs text-slate-600">
                 {result.people.slice(0, 8).map((p) => (
                   <li key={p.name}>
-                    <span className="font-medium">{p.name}</span> — {p.title}
+                    <span className="font-semibold text-slate-800">{p.name}</span>
+                    <span className="text-slate-400"> · </span>{p.title}
                   </li>
                 ))}
                 {result.people.length > 8 && (
@@ -243,18 +284,18 @@ export default function CreateMapModal({
               <button
                 onClick={() => void createFromTemplate('executive')}
                 disabled={!domain.trim() || creating}
-                className="rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
+                className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-[#b9b2ff] disabled:opacity-50"
               >
-                <Building2 size={17} className="mb-2 text-indigo-600" />
+                <Building2 size={17} className="mb-2 text-[#5b4cf0]" />
                 <span className="block text-sm font-medium">Executive map</span>
                 <span className="text-xs text-slate-500">CEO and functional leaders</span>
               </button>
               <button
                 onClick={() => void createFromTemplate('buying-committee')}
                 disabled={!domain.trim() || creating}
-                className="rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
+                className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-[#b9b2ff] disabled:opacity-50"
               >
-                <Users size={17} className="mb-2 text-indigo-600" />
+                <Users size={17} className="mb-2 text-[#5b4cf0]" />
                 <span className="block text-sm font-medium">Buying committee</span>
                 <span className="text-xs text-slate-500">Roles for a live opportunity</span>
               </button>
@@ -274,7 +315,7 @@ export default function CreateMapModal({
             <button
               onClick={() => void create(false)}
               disabled={creating}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+              className="rounded-xl bg-[#5b4cf0] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(91,76,240,.2)] hover:bg-[#4b3ddd] disabled:opacity-60"
             >
               {creating ? 'Creating…' : 'Open chart →'}
             </button>

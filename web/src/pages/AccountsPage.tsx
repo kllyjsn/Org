@@ -2,10 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  ArrowUpRight,
   Building2,
+  Clock3,
   Loader2,
   LogOut,
   Plus,
+  Radar,
+  Sparkles,
   Trash2,
   Users,
   Workflow,
@@ -187,6 +191,8 @@ export default function AccountsPage() {
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const workspace = workspaces.find((item) => item.id === workspaceId);
+  const totalPeople = maps.reduce((sum, map) => sum + map.peopleCount, 0);
+  const researchedMaps = maps.filter((map) => map.peopleCount > 0).length;
 
   const refreshMaps = useCallback(() => {
     if (!workspaceId) return;
@@ -219,12 +225,12 @@ export default function AccountsPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-3 sm:px-6">
+    <div className="flex h-full flex-col bg-[#f6f7f2]">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-3 backdrop-blur-xl sm:px-6">
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
           <Wordmark size="md" />
           <select
-            className="min-w-0 max-w-48 flex-1 truncate rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm sm:flex-none"
+            className="min-w-0 max-w-48 flex-1 truncate rounded-lg border-0 bg-slate-100 px-2.5 py-1.5 text-sm font-medium sm:flex-none"
             value={workspaceId ?? ''}
             onChange={(e) => selectWorkspace(e.target.value)}
           >
@@ -263,7 +269,7 @@ export default function AccountsPage() {
           {workspaceId && (
             <button
               onClick={() => setShowMembers(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
             >
               <Users size={15} /> <span className="hidden sm:inline">Members</span>
             </button>
@@ -271,7 +277,7 @@ export default function AccountsPage() {
           {workspace?.plan === 'free' && (
             <button
               onClick={() => setShowPricing(true)}
-              className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-100"
+              className="rounded-lg bg-[#eeecff] px-3 py-1.5 text-sm font-semibold text-[#5b4cf0] hover:bg-[#e3dfff]"
             >
               Upgrade <span className="hidden sm:inline">· $10/mo</span>
             </button>
@@ -287,9 +293,42 @@ export default function AccountsPage() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-3 sm:p-6">
-        <div className="mb-5 flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-slate-800">Account maps</h1>
+      <main className="flex-1 overflow-auto px-3 py-6 sm:px-6 sm:py-10">
+        <div className="mx-auto max-w-7xl">
+        <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div>
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+              <Radar size={14} />
+              Account intelligence
+            </div>
+            <h1 className="max-w-2xl text-4xl font-semibold tracking-[-0.05em] text-slate-950 sm:text-5xl">
+              See every account
+              <span className="text-slate-400"> from the top down.</span>
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
+              Research the org, connect initiatives to people, and give your
+              team a living map of the path in.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-slate-200 bg-white td-card-shadow">
+            {[
+              [String(maps.length), 'accounts'],
+              [String(totalPeople), 'people'],
+              [String(researchedMaps), 'researched'],
+            ].map(([value, label], index) => (
+              <div
+                key={label}
+                className={`min-w-24 px-4 py-3 ${index > 0 ? 'border-l border-slate-100' : ''}`}
+              >
+                <div className="text-xl font-semibold tracking-tight text-slate-950">
+                  {value}
+                </div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  {label}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {loadingMaps ? (
@@ -297,41 +336,51 @@ export default function AccountsPage() {
             <Loader2 className="animate-spin" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <button
               onClick={() =>
                 workspace?.plan === 'free' && maps.length >= 2
                   ? setShowPricing(true)
                   : setShowCreate(true)
               }
-              className="flex h-40 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 transition hover:border-indigo-400 hover:text-indigo-500"
+              className="group relative flex min-h-52 flex-col items-start justify-between overflow-hidden rounded-2xl bg-slate-950 p-5 text-left text-white shadow-[0_20px_45px_rgba(15,23,42,.16)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_55px_rgba(15,23,42,.22)]"
             >
-              <Plus size={28} />
-              <span className="text-sm font-medium">
+              <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-[#5b4cf0] blur-2xl transition group-hover:scale-125" />
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-[#c9f04b] text-slate-950">
+                <Plus size={20} />
+              </div>
+              <div className="relative">
+              <span className="block text-lg font-semibold tracking-tight">
                 {workspace?.plan === 'free' && maps.length >= 2
                   ? 'Upgrade for more maps'
                   : 'New account map'}
               </span>
               {workspace?.plan === 'free' && (
-                <span className="text-xs">
+                <span className="mt-1 block text-xs text-slate-400">
                   {Math.max(0, 2 - maps.length)} of 2 free maps remaining
                 </span>
               )}
+              </div>
             </button>
 
             {maps.map((m) => (
               <div
                 key={m.id}
                 onClick={() => navigate(`/app/maps/${m.id}`)}
-                className="group flex h-40 cursor-pointer flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+                className="group relative flex min-h-52 cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 td-card-shadow transition hover:-translate-y-0.5 hover:border-[#b9b2ff] hover:shadow-[0_20px_48px_rgba(15,23,42,.12)]"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Building2 size={16} className="text-slate-400" />
-                      <span className="truncate font-semibold">
-                        {m.company_name || m.name}
-                      </span>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eeecff] text-[#5b4cf0]">
+                        <Building2 size={18} />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="block truncate font-semibold tracking-tight text-slate-950">
+                          {m.company_name || m.name}
+                        </span>
+                        <span className="block truncate text-xs text-slate-400">{m.domain}</span>
+                      </div>
                     </div>
                     <button
                       onClick={(e) => {
@@ -343,18 +392,34 @@ export default function AccountsPage() {
                       <Trash2 size={14} />
                     </button>
                   </div>
-                  <div className="mt-1 text-xs text-slate-400">{m.domain}</div>
+                  <div className="mt-5 flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                      <Sparkles size={11} /> Researched
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      T0 public web
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span className="flex items-center gap-1">
-                    <Workflow size={13} /> {m.peopleCount} people
-                  </span>
-                  <span>{new Date(m.updated_at).toLocaleDateString()}</span>
+                <div className="flex items-end justify-between border-t border-slate-100 pt-4 text-xs text-slate-500">
+                  <div className="flex gap-4">
+                    <span className="flex items-center gap-1.5 font-medium text-slate-700">
+                      <Workflow size={13} className="text-[#5b4cf0]" /> {m.peopleCount} people
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Clock3 size={13} /> {new Date(m.updated_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <ArrowUpRight
+                    size={17}
+                    className="text-slate-300 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#5b4cf0]"
+                  />
                 </div>
               </div>
             ))}
           </div>
         )}
+        </div>
       </main>
 
       {showCreate && workspaceId && (
