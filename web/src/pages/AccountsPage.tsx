@@ -14,6 +14,7 @@ import { api, ApiError } from '../api';
 import { useSession } from '../store';
 import type { MapListItem } from '../types';
 import CreateMapModal from '../components/CreateMapModal';
+import { Wordmark } from '../components/Wordmark';
 
 function MembersModal({
   workspaceId,
@@ -149,7 +150,7 @@ export default function AccountsPage() {
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
         <div className="flex items-center gap-4">
-          <span className="text-xl font-bold text-indigo-600">TopDown</span>
+          <Wordmark size="md" />
           <select
             className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm"
             value={workspaceId ?? ''}

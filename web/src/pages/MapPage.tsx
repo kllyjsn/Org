@@ -14,7 +14,11 @@ import ReactFlow, {
 } from 'reactflow';
 import type { Connection, Edge, EdgeChange, Node, NodeChange } from 'reactflow';
 
-type EdgeData = { kind: 'reports' | 'influence'; label?: string | null };
+type EdgeData = {
+  kind: 'reports' | 'influence';
+  label?: string | null;
+  inferred?: boolean;
+};
 type FlowEdge = Edge<EdgeData>;
 
 function edgeToMap(e: FlowEdge): MapEdge {
@@ -24,6 +28,7 @@ function edgeToMap(e: FlowEdge): MapEdge {
     to: e.target,
     kind: e.data?.kind ?? 'reports',
     label: e.data?.label ?? null,
+    inferred: e.data?.inferred || undefined,
   };
 }
 import { toPng } from 'html-to-image';
@@ -47,15 +52,25 @@ import type { BuyingRole, MapEdge, MapState, Person } from '../types';
 
 const nodeTypes = { person: PersonNode };
 
-function reportsEdge(from: string, to: string, id?: string): FlowEdge {
+function reportsEdge(
+  from: string,
+  to: string,
+  id?: string,
+  inferred?: boolean
+): FlowEdge {
+  const stroke = inferred ? '#c7d2fe' : '#94a3b8';
   return {
     id: id ?? crypto.randomUUID(),
     source: from,
     target: to,
     type: 'smoothstep',
-    data: { kind: 'reports' },
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
-    style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+    data: { kind: 'reports', inferred },
+    markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+    style: {
+      stroke,
+      strokeWidth: 1.5,
+      ...(inferred ? { strokeDasharray: '5 4' } : {}),
+    },
   };
 }
 
@@ -80,7 +95,7 @@ function toFlow(state: MapState): { nodes: Node<PersonNodeData>[]; edges: FlowEd
   }));
   const edges: FlowEdge[] = state.edges.map((e) =>
     e.kind === 'reports'
-      ? reportsEdge(e.from, e.to, e.id)
+      ? reportsEdge(e.from, e.to, e.id, e.inferred)
       : influenceEdge(e.from, e.to, e.label, e.id)
   );
   return { nodes, edges };

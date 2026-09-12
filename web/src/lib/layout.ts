@@ -56,6 +56,65 @@ export function applyLayout(people: Person[], edges: MapEdge[]): Person[] {
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: 0, y: 0 }) }));
 }
 
+/**
+ * Title-seniority ladder used when research finds people but no reporting
+ * lines. Lower number = more senior; the CEO/founder anchors the tree and each
+ * person attaches to the most senior person above them — same department when
+ * possible. Guessed edges are flagged `inferred` so the canvas can mark them.
+ */
+const TITLE_RANK: [RegExp, number][] = [
+  [/chief executive|\bceo\b|founder/i, 0],
+  [/\bpresident\b/i, 1],
+  [/\bchief\b|\bc[acefmorst]o\b|\bciso\b|general counsel/i, 2],
+  [/\b(evp|svp)\b|executive vice president|senior vice president/i, 3],
+  [/\bhead\b|\bgm\b|general manager/i, 4],
+  [/\bvp\b|vice president/i, 5],
+  [/\bdirector\b/i, 6],
+];
+
+const DEFAULT_RANK = 7;
+
+function titleRank(title: string): number {
+  for (const [re, rank] of TITLE_RANK) if (re.test(title)) return rank;
+  return DEFAULT_RANK;
+}
+
+/**
+ * Draft a plausible reporting hierarchy for people with no known managers.
+ * Acyclic by construction: parents are always strictly more senior or the root.
+ */
+export function inferEdges(people: Person[]): MapEdge[] {
+  if (people.length < 2) return [];
+  const rankOf = new Map(people.map((p) => [p.id, titleRank(p.title)]));
+  const root = people.reduce((a, b) =>
+    rankOf.get(b.id)! < rankOf.get(a.id)! ? b : a
+  );
+  const edges: MapEdge[] = [];
+  for (const p of people) {
+    if (p.id === root.id) continue;
+    const myRank = rankOf.get(p.id)!;
+    const seniors = people.filter(
+      (c) => c.id !== p.id && rankOf.get(c.id)! < myRank
+    );
+    const sameDept = p.department
+      ? seniors.filter((c) => c.department === p.department)
+      : [];
+    const pool = sameDept.length > 0 ? sameDept : seniors;
+    const parent = pool.length
+      ? pool.reduce((a, b) => (rankOf.get(b.id)! < rankOf.get(a.id)! ? b : a))
+      : root;
+    edges.push({
+      id: crypto.randomUUID(),
+      from: parent.id,
+      to: p.id,
+      kind: 'reports',
+      label: null,
+      inferred: true,
+    });
+  }
+  return edges;
+}
+
 /** Convert a T0 research result into an initial canvas state. */
 export function stateFromResearch(result: ResearchResult): MapState {
   const people: Person[] = result.people.map((p) => ({
@@ -83,6 +142,10 @@ export function stateFromResearch(result: ResearchResult): MapState {
     if (!from || !to || from === to) continue;
     edges.push({ id: crypto.randomUUID(), from, to, kind: 'reports', label: null });
   }
+
+  // Public-web research often comes back as a flat list — draft a hierarchy
+  // from titles rather than landing the user on an unconnected row of cards.
+  if (edges.length === 0 && people.length > 1) edges.push(...inferEdges(people));
 
   return {
     people: applyLayout(people, edges),

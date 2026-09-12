@@ -30,6 +30,7 @@ export interface MapEdge {
   to: string;
   kind: 'reports' | 'influence';
   label: string | null;
+  inferred?: boolean;
 }
 
 export interface MapMeta {

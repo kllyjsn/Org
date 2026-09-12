@@ -4,7 +4,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
-import { sessions, users, workspaces, members, now } from './db.js';
+import { query, now } from './db.js';
 import type { UserRow, MemberRow } from './types.js';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -27,31 +27,27 @@ export function verifyPassword(password: string, stored: string): boolean {
 export async function createSession(userId: string): Promise<string> {
   const token = randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-  await (
-    await sessions()
-  ).insertOne({
-    token,
-    user_id: userId,
-    created_at: now(),
-    expires_at: expires,
-  });
+  await query(
+    'INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES ($1,$2,$3,$4)',
+    [token, userId, now(), expires]
+  );
   return token;
 }
 
 export async function deleteSession(token: string): Promise<void> {
-  await (await sessions()).deleteOne({ token });
+  await query('DELETE FROM sessions WHERE token = $1', [token]);
 }
 
 export async function getSessionUser(
   token: string | undefined
 ): Promise<UserRow | null> {
   if (!token) return null;
-  const s = await (
-    await sessions()
-  ).findOne({ token, expires_at: { $gt: now() } });
-  if (!s) return null;
-  const u = await (await users()).findOne({ id: s.user_id });
-  return u ?? null;
+  const rows = await query<UserRow>(
+    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.token = $1 AND s.expires_at > $2`,
+    [token, now()]
+  );
+  return rows[0] ?? null;
 }
 
 export async function createWorkspaceForUser(
@@ -59,17 +55,14 @@ export async function createWorkspaceForUser(
   name: string
 ): Promise<{ id: string; name: string }> {
   const id = randomUUID();
-  await (
-    await workspaces()
-  ).insertOne({ id, name, created_by: userId, created_at: now() });
-  await (
-    await members()
-  ).insertOne({
-    workspace_id: id,
-    user_id: userId,
-    role: 'owner',
-    created_at: now(),
-  });
+  await query(
+    'INSERT INTO workspaces (id, name, created_by, created_at) VALUES ($1,$2,$3,$4)',
+    [id, name, userId, now()]
+  );
+  await query(
+    'INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES ($1,$2,$3,$4)',
+    [id, userId, 'owner', now()]
+  );
   return { id, name };
 }
 
@@ -77,13 +70,11 @@ export async function memberRole(
   userId: string,
   workspaceId: string
 ): Promise<MemberRow['role'] | null> {
-  const row = await (
-    await members()
-  ).findOne(
-    { workspace_id: workspaceId, user_id: userId },
-    { projection: { role: 1 } }
+  const rows = await query<{ role: MemberRow['role'] }>(
+    'SELECT role FROM workspace_members WHERE workspace_id = $1 AND user_id = $2',
+    [workspaceId, userId]
   );
-  return row?.role ?? null;
+  return rows[0]?.role ?? null;
 }
 
 export function publicUser(u: UserRow) {

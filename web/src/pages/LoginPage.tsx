@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../store';
 import { ApiError } from '../api';
+import { Wordmark } from '../components/Wordmark';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -35,9 +36,7 @@ export default function LoginPage() {
     <div className="flex h-full items-center justify-center bg-gradient-to-br from-slate-100 via-white to-indigo-50">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
         <div className="mb-6">
-          <div className="text-2xl font-bold tracking-tight">
-            <span className="text-indigo-600">TopDown</span>
-          </div>
+          <Wordmark size="lg" />
           <p className="mt-1 text-sm text-slate-500">
             Account maps that build themselves.
           </p>

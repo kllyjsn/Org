@@ -3,15 +3,7 @@ import type { Context, Next } from 'hono';
 import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomBytes, randomUUID } from 'node:crypto';
-import {
-  users,
-  workspaces,
-  members,
-  maps,
-  shareLinks,
-  comments,
-  now,
-} from './db.js';
+import { query, now } from './db.js';
 import { researchOrg } from './research.js';
 import { activeProvider } from './llm.js';
 import {
@@ -30,6 +22,7 @@ import type {
   MapState,
   UserRow,
   MemberRow,
+  ShareLinkRow,
 } from './types.js';
 
 type Vars = { user: UserRow };
@@ -83,14 +76,12 @@ function setSessionCookie(c: Context, token: string) {
 }
 
 async function workspacesFor(userId: string) {
-  const ms = await (await members()).find({ user_id: userId }).toArray();
-  if (!ms.length) return [] as { id: string; name: string; role: string }[];
-  const ids = ms.map((m) => m.workspace_id);
-  const ws = await (await workspaces()).find({ id: { $in: ids } }).toArray();
-  const roleById = new Map(ms.map((m) => [m.workspace_id, m.role]));
-  return ws
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    .map((w) => ({ id: w.id, name: w.name, role: roleById.get(w.id)! }));
+  return query<{ id: string; name: string; role: string }>(
+    `SELECT w.id, w.name, m.role FROM workspaces w
+     JOIN workspace_members m ON m.workspace_id = w.id
+     WHERE m.user_id = $1 ORDER BY w.created_at`,
+    [userId]
+  );
 }
 
 /** Fetch map if the user belongs to its workspace; returns [map, role]. */
@@ -98,7 +89,8 @@ async function mapForUser(
   userId: string,
   mapId: string
 ): Promise<[MapRow | null, MemberRow['role'] | null]> {
-  const map = await (await maps()).findOne({ id: mapId });
+  const rows = await query<MapRow>('SELECT * FROM maps WHERE id = $1', [mapId]);
+  const map = rows[0];
   if (!map) return [null, null];
   return [map, await memberRole(userId, map.workspace_id)];
 }
@@ -145,28 +137,24 @@ app.post('/api/auth/register', async (c) => {
     return bad(c, 'password must be at least 8 characters');
   if (!name) return bad(c, 'name required');
 
-  const exists = await (
-    await users()
-  ).findOne({ email: email.toLowerCase() }, { projection: { id: 1 } });
-  if (exists) return bad(c, 'an account with that email already exists', 409);
+  const exists = await query(
+    'SELECT id FROM users WHERE email = $1',
+    [email.toLowerCase()]
+  );
+  if (exists.length) return bad(c, 'an account with that email already exists', 409);
 
   const userId = randomUUID();
-  await (
-    await users()
-  ).insertOne({
-    id: userId,
-    email: email.toLowerCase(),
-    name,
-    password_hash: hashPassword(password),
-    created_at: now(),
-  });
+  await query(
+    'INSERT INTO users (id, email, name, password_hash, created_at) VALUES ($1,$2,$3,$4,$5)',
+    [userId, email.toLowerCase(), name, hashPassword(password), now()]
+  );
   await createWorkspaceForUser(userId, workspaceName || `${name}'s workspace`);
 
   const token = await createSession(userId);
   setSessionCookie(c, token);
-  const user = await (await users()).findOne({ id: userId });
+  const users = await query<UserRow>('SELECT * FROM users WHERE id = $1', [userId]);
   return c.json({
-    user: publicUser(user as UserRow),
+    user: publicUser(users[0]),
     workspaces: await workspacesFor(userId),
   });
 });
@@ -175,9 +163,11 @@ app.post('/api/auth/login', async (c) => {
   const body = await c.req.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';
-  const user = await (
-    await users()
-  ).findOne({ email: email.toLowerCase() });
+  const users = await query<UserRow>(
+    'SELECT * FROM users WHERE email = $1',
+    [email.toLowerCase()]
+  );
+  const user = users[0];
   if (!user || !verifyPassword(password, user.password_hash)) {
     return bad(c, 'invalid email or password', 401);
   }
@@ -219,23 +209,12 @@ app.get('/api/workspaces/:id/members', requireAuth, async (c) => {
   const user = c.get('user');
   const wsId = param(c, 'id');
   if (!(await memberRole(user.id, wsId))) return bad(c, 'not a member', 403);
-  const ms = await (await members()).find({ workspace_id: wsId }).toArray();
-  const us = await (
-    await users()
-  )
-    .find(
-      { id: { $in: ms.map((m) => m.user_id) } },
-      { projection: { id: 1, name: 1, email: 1 } }
-    )
-    .toArray();
-  const byId = new Map(us.map((u) => [u.id, u]));
-  const out = ms.map((m) => ({
-    id: m.user_id,
-    name: byId.get(m.user_id)?.name ?? '',
-    email: byId.get(m.user_id)?.email ?? '',
-    role: m.role,
-  }));
-  return c.json({ members: out });
+  const rows = await query(
+    `SELECT u.id, u.name, u.email, m.role FROM workspace_members m
+     JOIN users u ON u.id = m.user_id WHERE m.workspace_id = $1`,
+    [wsId]
+  );
+  return c.json({ members: rows });
 });
 
 app.post('/api/workspaces/:id/members', requireAuth, async (c) => {
@@ -246,24 +225,21 @@ app.post('/api/workspaces/:id/members', requireAuth, async (c) => {
     return bad(c, 'insufficient role', 403);
   const body = await c.req.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email.trim() : '';
-  const target = await (
-    await users()
-  ).findOne({ email: email.toLowerCase() }, { projection: { id: 1 } });
-  if (!target)
+  const target = await query(
+    'SELECT id FROM users WHERE email = $1',
+    [email.toLowerCase()]
+  );
+  if (!target[0])
     return bad(
       c,
       'no account with that email — they need to register first',
       404
     );
   try {
-    await (
-      await members()
-    ).insertOne({
-      workspace_id: wsId,
-      user_id: target.id,
-      role: 'member',
-      created_at: now(),
-    });
+    await query(
+      'INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES ($1,$2,$3,$4)',
+      [wsId, target[0].id, 'member', now()]
+    );
   } catch {
     return bad(c, 'already a member', 409);
   }
@@ -296,22 +272,15 @@ app.get('/api/maps', requireAuth, async (c) => {
   const user = c.get('user');
   const wsId = c.req.query('workspaceId') || '';
   if (!(await memberRole(user.id, wsId))) return bad(c, 'not a member', 403);
-  const rows = await (
-    await maps()
-  )
-    .find({ workspace_id: wsId })
-    .sort({ updated_at: -1 })
-    .toArray();
+  const rows = await query<MapRow>(
+    `SELECT id, name, domain, company_name, state, created_by, created_at, updated_at
+     FROM maps WHERE workspace_id = $1 ORDER BY updated_at DESC`,
+    [wsId]
+  );
   return c.json({
-    maps: rows.map((m) => ({
-      id: m.id,
-      name: m.name,
-      domain: m.domain,
-      company_name: m.company_name,
-      created_by: m.created_by,
-      created_at: m.created_at,
-      updated_at: m.updated_at,
-      peopleCount: m.state?.people?.length ?? 0,
+    maps: rows.map(({ state, ...m }) => ({
+      ...m,
+      peopleCount: (state as MapState).people?.length ?? 0,
     })),
   });
 });
@@ -327,19 +296,21 @@ app.post('/api/maps', requireAuth, async (c) => {
   if (!name || !domain) return bad(c, 'name and domain required');
   const state = sanitizeState(body?.state);
   const id = randomUUID();
-  await (
-    await maps()
-  ).insertOne({
-    id,
-    workspace_id: wsId,
-    name,
-    domain,
-    company_name: state.meta.companyName ?? null,
-    state,
-    created_by: user.id,
-    created_at: now(),
-    updated_at: now(),
-  });
+  await query(
+    `INSERT INTO maps (id, workspace_id, name, domain, company_name, state, created_by, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      id,
+      wsId,
+      name,
+      domain,
+      state.meta.companyName ?? null,
+      JSON.stringify(state),
+      user.id,
+      now(),
+      now(),
+    ]
+  );
   return c.json({ id });
 });
 
@@ -347,7 +318,7 @@ app.get('/api/maps/:id', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user.id, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
-  return c.json({ map: { ...map, _id: undefined, role } });
+  return c.json({ map: { ...map, role } });
 });
 
 app.patch('/api/maps/:id', requireAuth, async (c) => {
@@ -358,12 +329,10 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
   const body = await c.req.json().catch(() => null);
   const name = typeof body?.name === 'string' ? body.name.trim() : map.name;
   const state =
-    body?.state !== undefined ? sanitizeState(body.state) : map.state;
-  await (
-    await maps()
-  ).updateOne(
-    { id: map.id },
-    { $set: { name, state, updated_at: now(), company_name: state.meta.companyName ?? map.company_name } }
+    body?.state !== undefined ? sanitizeState(body.state) : (map.state as MapState);
+  await query(
+    'UPDATE maps SET name = $1, state = $2, company_name = $3, updated_at = $4 WHERE id = $5',
+    [name, JSON.stringify(state), state.meta.companyName ?? map.company_name, now(), map.id]
   );
   return c.json({ ok: true });
 });
@@ -373,9 +342,7 @@ app.delete('/api/maps/:id', requireAuth, async (c) => {
   const [map, role] = await mapForUser(user.id, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   if (!canWrite(role)) return bad(c, 'viewers cannot delete', 403);
-  await (await maps()).deleteOne({ id: map.id });
-  await (await comments()).deleteMany({ map_id: map.id });
-  await (await shareLinks()).deleteMany({ map_id: map.id });
+  await query('DELETE FROM maps WHERE id = $1', [map.id]);
   return c.json({ ok: true });
 });
 
@@ -385,28 +352,13 @@ app.get('/api/maps/:id/comments', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user.id, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
-  const rows = await (
-    await comments()
-  )
-    .find({ map_id: map.id })
-    .sort({ created_at: 1 })
-    .toArray();
-  const authorIds = [...new Set(rows.map((r) => r.author_id))];
-  const authors = await (
-    await users()
-  )
-    .find({ id: { $in: authorIds } }, { projection: { id: 1, name: 1 } })
-    .toArray();
-  const nameById = new Map(authors.map((a) => [a.id, a.name]));
-  return c.json({
-    comments: rows.map((r) => ({
-      id: r.id,
-      person_id: r.person_id,
-      body: r.body,
-      created_at: r.created_at,
-      author_name: nameById.get(r.author_id) ?? 'unknown',
-    })),
-  });
+  const rows = await query(
+    `SELECT c.id, c.person_id, c.body, c.created_at, u.name AS author_name
+     FROM comments c JOIN users u ON u.id = c.author_id
+     WHERE c.map_id = $1 ORDER BY c.created_at`,
+    [map.id]
+  );
+  return c.json({ comments: rows });
 });
 
 app.post('/api/maps/:id/comments', requireAuth, async (c) => {
@@ -419,16 +371,10 @@ app.post('/api/maps/:id/comments', requireAuth, async (c) => {
   const personId =
     typeof body?.personId === 'string' && body.personId ? body.personId : null;
   const id = randomUUID();
-  await (
-    await comments()
-  ).insertOne({
-    id,
-    map_id: map.id,
-    person_id: personId,
-    author_id: user.id,
-    body: text,
-    created_at: now(),
-  });
+  await query(
+    'INSERT INTO comments (id, map_id, person_id, author_id, body, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [id, map.id, personId, user.id, text, now()]
+  );
   return c.json({ id });
 });
 
@@ -448,15 +394,10 @@ app.post('/api/maps/:id/share', requireAuth, async (c) => {
   const expiresAt = days
     ? new Date(Date.now() + days * 86400000).toISOString()
     : null;
-  await (
-    await shareLinks()
-  ).insertOne({
-    token,
-    map_id: map.id,
-    created_by: user.id,
-    expires_at: expiresAt,
-    created_at: now(),
-  });
+  await query(
+    'INSERT INTO share_links (token, map_id, created_by, expires_at, created_at) VALUES ($1,$2,$3,$4,$5)',
+    [token, map.id, user.id, expiresAt, now()]
+  );
   return c.json({ token });
 });
 
@@ -464,12 +405,10 @@ app.get('/api/maps/:id/share', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user.id, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
-  const links = await (
-    await shareLinks()
-  )
-    .find({ map_id: map.id })
-    .sort({ created_at: -1 })
-    .toArray();
+  const links = await query<ShareLinkRow>(
+    'SELECT * FROM share_links WHERE map_id = $1 ORDER BY created_at DESC',
+    [map.id]
+  );
   return c.json({ links });
 });
 
@@ -478,26 +417,28 @@ app.delete('/api/maps/:id/share/:token', requireAuth, async (c) => {
   const [map, role] = await mapForUser(user.id, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   if (!canWrite(role)) return bad(c, 'viewers cannot revoke links', 403);
-  await (
-    await shareLinks()
-  ).deleteOne({ token: param(c, 'token'), map_id: map.id });
+  await query('DELETE FROM share_links WHERE token = $1 AND map_id = $2', [
+    param(c, 'token'),
+    map.id,
+  ]);
   return c.json({ ok: true });
 });
 
 // Public, unauthenticated share view
 app.get('/api/share/:token', async (c) => {
-  const link = await (
-    await shareLinks()
-  ).findOne({ token: param(c, 'token') });
+  const links = await query<ShareLinkRow>(
+    'SELECT * FROM share_links WHERE token = $1',
+    [param(c, 'token')]
+  );
+  const link = links[0];
   if (!link) return bad(c, 'link not found', 404);
   if (link.expires_at && link.expires_at <= now())
     return bad(c, 'link expired', 410);
-  const map = await (
-    await maps()
-  ).findOne(
-    { id: link.map_id },
-    { projection: { name: 1, domain: 1, company_name: 1, state: 1, updated_at: 1 } }
+  const rows = await query<MapRow>(
+    'SELECT name, domain, company_name, state, updated_at FROM maps WHERE id = $1',
+    [link.map_id]
   );
+  const map = rows[0];
   if (!map) return bad(c, 'map not found', 404);
   return c.json({
     map: {

@@ -13,6 +13,7 @@ import type { Edge, Node } from 'reactflow';
 import { toPng } from 'html-to-image';
 import { AnimatePresence } from 'framer-motion';
 import { Download, Loader2 } from 'lucide-react';
+import { Wordmark } from '../components/Wordmark';
 import { api, ApiError } from '../api';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
@@ -138,7 +139,7 @@ function ShareInner() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
-        <span className="text-lg font-bold text-indigo-600">TopDown</span>
+        <Wordmark size="sm" />
         <span className="text-sm font-semibold text-slate-800">
           {shared.company_name || shared.name}
         </span>

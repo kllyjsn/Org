@@ -30,6 +30,7 @@ export interface MapEdge {
   to: string; // report person id
   kind: 'reports' | 'influence';
   label: string | null;
+  inferred?: boolean; // title-seniority guess, not sourced reporting data
 }
 
 export interface MapMeta {
