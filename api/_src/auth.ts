@@ -53,7 +53,7 @@ export async function getSessionUser(
 export async function createWorkspaceForUser(
   userId: string,
   name: string
-): Promise<{ id: string; name: string }> {
+): Promise<{ id: string; name: string; plan: 'free' }> {
   const id = randomUUID();
   await query(
     'INSERT INTO workspaces (id, name, created_by, created_at) VALUES ($1,$2,$3,$4)',
@@ -63,7 +63,7 @@ export async function createWorkspaceForUser(
     'INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES ($1,$2,$3,$4)',
     [id, userId, 'owner', now()]
   );
-  return { id, name };
+  return { id, name, plan: 'free' };
 }
 
 export async function memberRole(

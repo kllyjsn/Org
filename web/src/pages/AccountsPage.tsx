@@ -9,6 +9,7 @@ import {
   Trash2,
   Users,
   Workflow,
+  Zap,
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useSession } from '../store';
@@ -99,6 +100,50 @@ function MembersModal({
   );
 }
 
+function PricingModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-start justify-between">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600">
+              <Zap size={13} /> TopDown Pro
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900">
+              Unlimited account maps
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="mb-5 flex items-end gap-1">
+          <span className="text-4xl font-bold text-slate-900">$10</span>
+          <span className="pb-1 text-sm text-slate-500">/ month</span>
+        </div>
+        <ul className="mb-6 space-y-2 text-sm text-slate-600">
+          <li>Unlimited researched org charts</li>
+          <li>Team collaboration and comments</li>
+          <li>Shareable links and polished exports</li>
+          <li>Canvas history and advanced editing</li>
+        </ul>
+        <button
+          disabled
+          className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Billing setup in progress
+        </button>
+        <p className="mt-3 text-center text-xs text-slate-400">
+          Your first two account maps remain free.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function AccountsPage() {
   const navigate = useNavigate();
   const {
@@ -113,8 +158,10 @@ export default function AccountsPage() {
   const [loadingMaps, setLoadingMaps] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const workspace = workspaces.find((item) => item.id === workspaceId);
 
   const refreshMaps = useCallback(() => {
     if (!workspaceId) return;
@@ -196,6 +243,14 @@ export default function AccountsPage() {
               <Users size={15} /> Members
             </button>
           )}
+          {workspace?.plan === 'free' && (
+            <button
+              onClick={() => setShowPricing(true)}
+              className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-100"
+            >
+              Upgrade · $10/mo
+            </button>
+          )}
           <span className="text-sm text-slate-500">{user?.name}</span>
           <button
             onClick={() => void logout()}
@@ -219,11 +274,24 @@ export default function AccountsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <button
-              onClick={() => setShowCreate(true)}
+              onClick={() =>
+                workspace?.plan === 'free' && maps.length >= 2
+                  ? setShowPricing(true)
+                  : setShowCreate(true)
+              }
               className="flex h-40 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 transition hover:border-indigo-400 hover:text-indigo-500"
             >
               <Plus size={28} />
-              <span className="text-sm font-medium">New account map</span>
+              <span className="text-sm font-medium">
+                {workspace?.plan === 'free' && maps.length >= 2
+                  ? 'Upgrade for more maps'
+                  : 'New account map'}
+              </span>
+              {workspace?.plan === 'free' && (
+                <span className="text-xs">
+                  {Math.max(0, 2 - maps.length)} of 2 free maps remaining
+                </span>
+              )}
             </button>
 
             {maps.map((m) => (
@@ -277,6 +345,7 @@ export default function AccountsPage() {
           onClose={() => setShowMembers(false)}
         />
       )}
+      {showPricing && <PricingModal onClose={() => setShowPricing(false)} />}
     </div>
   );
 }

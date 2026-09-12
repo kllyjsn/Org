@@ -57,6 +57,7 @@ export interface Workspace {
   id: string;
   name: string;
   role: 'owner' | 'member' | 'viewer';
+  plan: 'free' | 'pro';
 }
 
 export interface MapListItem {

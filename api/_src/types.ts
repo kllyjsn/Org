@@ -66,6 +66,9 @@ export interface WorkspaceRow {
   id: string;
   name: string;
   created_by: string;
+  plan: 'free' | 'pro';
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
   created_at: string;
 }
 

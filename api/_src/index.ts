@@ -76,8 +76,8 @@ function setSessionCookie(c: Context, token: string) {
 }
 
 async function workspacesFor(userId: string) {
-  return query<{ id: string; name: string; role: string }>(
-    `SELECT w.id, w.name, m.role FROM workspaces w
+  return query<{ id: string; name: string; role: string; plan: 'free' | 'pro' }>(
+    `SELECT w.id, w.name, w.plan, m.role FROM workspaces w
      JOIN workspace_members m ON m.workspace_id = w.id
      WHERE m.user_id = $1 ORDER BY w.created_at`,
     [userId]
@@ -291,6 +291,26 @@ app.post('/api/maps', requireAuth, async (c) => {
   const wsId = typeof body?.workspaceId === 'string' ? body.workspaceId : '';
   const role = await memberRole(user.id, wsId);
   if (!canWrite(role)) return bad(c, 'insufficient role', 403);
+  const workspaces = await query<{ plan: 'free' | 'pro' }>(
+    'SELECT plan FROM workspaces WHERE id = $1',
+    [wsId]
+  );
+  if (!workspaces[0]) return bad(c, 'workspace not found', 404);
+  if (workspaces[0].plan === 'free') {
+    const counts = await query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM maps WHERE workspace_id = $1',
+      [wsId]
+    );
+    if (Number(counts[0]?.count ?? 0) >= 2) {
+      return c.json(
+        {
+          error: 'Free workspaces include two account maps. Upgrade to Pro for unlimited maps.',
+          code: 'plan_limit',
+        },
+        402
+      );
+    }
+  }
   const domain = typeof body?.domain === 'string' ? body.domain.trim() : '';
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
   if (!name || !domain) return bad(c, 'name and domain required');

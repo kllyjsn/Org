@@ -26,8 +26,14 @@ CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   created_by TEXT NOT NULL REFERENCES users(id),
+  plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free','pro')),
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
   created_at TEXT NOT NULL
 );
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 CREATE TABLE IF NOT EXISTS workspace_members (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
