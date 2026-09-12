@@ -39,10 +39,21 @@ const PROVIDERS: ProviderSpec[] = [
 ];
 
 function availableProviders(): ProviderSpec[] {
-  return PROVIDERS.filter((p) => !!process.env[p.envKey]).map((p) =>
+  const configured = PROVIDERS.filter((p) => !!process.env[p.envKey]).map((p) =>
     p.name === 'openrouter'
       ? { ...p, model: process.env.OPENROUTER_MODEL || 'perplexity/sonar' }
       : p
+  );
+  const priority = (process.env.LLM_PROVIDER_PRIORITY ?? '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  if (priority.length === 0) return configured;
+  const rank = new Map(priority.map((name, index) => [name, index]));
+  return configured.sort(
+    (a, b) =>
+      (rank.get(a.name) ?? priority.length) -
+      (rank.get(b.name) ?? priority.length)
   );
 }
 
@@ -89,9 +100,9 @@ export interface ChatResult {
 }
 
 /**
- * Try each configured provider in priority order (OpenRouter → Perplexity →
- * Gemini). A failing or quota-exhausted key falls through to the next so a
- * dead credential never breaks research. Throws if every provider fails.
+ * Try each configured provider in priority order. A failing or quota-exhausted
+ * key falls through to the next so a dead credential never breaks research.
+ * Throws if every provider fails.
  */
 export async function chat(
   messages: ChatMessage[],
