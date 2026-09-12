@@ -19,11 +19,13 @@ const PROVENANCE_LABELS = {
 export default function AccountBriefingModal({
   mapId,
   readOnly,
+  entry = 'direct',
   onClose,
   onRunAction,
 }: {
   mapId: string;
   readOnly: boolean;
+  entry?: 'dashboard' | 'direct' | 'spotlight' | 'toolbar';
   onClose: () => void;
   onRunAction: (action: BriefingAction) => void;
 }) {
@@ -31,11 +33,14 @@ export default function AccountBriefingModal({
   const [error, setError] = useState('');
 
   useEffect(() => {
+    void api
+      .trackEvent(mapId, 'briefing_opened', { entry })
+      .catch(() => undefined);
     api
       .getBriefing(mapId)
       .then(setBriefing)
       .catch(() => setError('TopDown could not build this briefing right now.'));
-  }, [mapId]);
+  }, [mapId, entry]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
@@ -138,6 +143,16 @@ export default function AccountBriefingModal({
                                 !readOnly ||
                                 action.type !== 'deep_research'
                               ) {
+                                void api
+                                  .trackEvent(
+                                    mapId,
+                                    'briefing_action_selected',
+                                    {
+                                      actionType: action.type,
+                                      provenance: action.provenance,
+                                    }
+                                  )
+                                  .catch(() => undefined);
                                 onRunAction(action);
                               }
                             }}
@@ -161,6 +176,13 @@ export default function AccountBriefingModal({
                                 href={source}
                                 target="_blank"
                                 rel="noreferrer"
+                                onClick={() => {
+                                  void api
+                                    .trackEvent(mapId, 'source_opened', {
+                                      surface: 'briefing',
+                                    })
+                                    .catch(() => undefined);
+                                }}
                                 className="flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-2 text-[10px] font-medium text-slate-500 hover:text-[#5b4cf0]"
                               >
                                 Source {sourceIndex + 1}

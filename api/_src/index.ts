@@ -11,6 +11,12 @@ import { researchOrg } from './research.js';
 import { activeProvider } from './llm.js';
 import { stripePost, verifyStripeSignature } from './billing.js';
 import {
+  mapCreationMetrics,
+  recordProductEvent,
+  sanitizeClientEvent,
+  valueSummary,
+} from './analytics.js';
+import {
   SESSION_COOKIE,
   createSession,
   deleteSession,
@@ -130,6 +136,45 @@ async function mapForUser(
 
 function canWrite(role: MemberRow['role'] | null): boolean {
   return role === 'owner' || role === 'member';
+}
+
+async function recordAnalytics(
+  input: Parameters<typeof recordProductEvent>[0]
+): Promise<void> {
+  try {
+    await recordProductEvent(input);
+  } catch (error) {
+    console.error('analytics event failed', error);
+  }
+}
+
+function mapRefinementCounts(previous: MapState, next: MapState) {
+  const nextPeople = new Map(next.people.map((person) => [person.id, person]));
+  let fieldChanges = 0;
+  for (const person of previous.people) {
+    const updated = nextPeople.get(person.id);
+    if (!updated) continue;
+    for (const field of [
+      'title',
+      'department',
+      'team',
+      'productLine',
+      'role',
+      'confidence',
+    ] as const) {
+      if ((person[field] ?? null) !== (updated[field] ?? null)) fieldChanges += 1;
+    }
+  }
+  const edgeKey = (edge: MapState['edges'][number]) =>
+    [edge.from, edge.to, edge.kind, edge.inferred ? 'inferred' : 'sourced'].join(
+      ':'
+    );
+  const previousEdges = new Set(previous.edges.map(edgeKey));
+  const nextEdges = new Set(next.edges.map(edgeKey));
+  const relationshipChanges =
+    [...previousEdges].filter((key) => !nextEdges.has(key)).length +
+    [...nextEdges].filter((key) => !previousEdges.has(key)).length;
+  return { fieldChanges, relationshipChanges };
 }
 
 function sanitizeState(input: unknown): MapState {
@@ -442,7 +487,8 @@ app.get('/api/maps', requireAuth, async (c) => {
   const wsId = c.req.query('workspaceId') || '';
   if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
   const rows = await query<MapRow>(
-    `SELECT id, name, domain, company_name, state, created_by, created_at, updated_at
+    `SELECT id, name, domain, company_name, state, is_live_opportunity,
+            created_by, created_at, updated_at
      FROM maps WHERE workspace_id = $1 ORDER BY updated_at DESC`,
     [wsId]
   );
@@ -506,6 +552,40 @@ app.post('/api/maps', requireAuth, async (c) => {
     'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
     [randomUUID(), id, name, JSON.stringify(state), user.id, now()]
   );
+  const sourceCount =
+    state.people.reduce((sum, person) => sum + person.sources.length, 0) +
+    (state.meta.initiatives ?? []).reduce(
+      (sum, initiative) => sum + initiative.evidence.length,
+      0
+    );
+  const analytics =
+    body?.analytics && typeof body.analytics === 'object'
+      ? (body.analytics as Record<string, unknown>)
+      : {};
+  const creationMode =
+    analytics.creationMode === 'researched' ||
+    analytics.creationMode === 'template' ||
+    analytics.creationMode === 'blank'
+      ? analytics.creationMode
+      : state.meta.researchedAt
+        ? 'researched'
+        : 'blank';
+  await recordAnalytics({
+    eventName: 'map_created',
+    userId: user.id,
+    workspaceId: wsId,
+    mapId: id,
+    properties: mapCreationMetrics({
+      creationMode,
+      provider: state.meta.provider,
+      researchedAt: state.meta.researchedAt,
+      peopleCount: state.people.length,
+      sourceCount,
+      initiativeCount: state.meta.initiatives?.length ?? 0,
+      edgeCount: state.edges.length,
+      researchStartedAt: analytics.researchStartedAt,
+    }),
+  });
   return c.json({ id });
 });
 
@@ -544,7 +624,18 @@ app.post('/api/maps/:id/ask', requireAuth, async (c) => {
   }
 
   try {
-    return c.json(await answerAccountQuestion(map.state as MapState, messages));
+    const answer = await answerAccountQuestion(map.state as MapState, messages);
+    await recordAnalytics({
+      eventName: 'account_agent_used',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: {
+        citation_count: answer.citations.length,
+        action_count: answer.actions.length,
+      },
+    });
+    return c.json(answer);
   } catch (error) {
     console.error('account analyst failed', error);
     return bad(c, 'account analyst is temporarily unavailable', 502);
@@ -560,6 +651,10 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
   const name = typeof body?.name === 'string' ? body.name.trim() : map.name;
   const state =
     body?.state !== undefined ? sanitizeState(body.state) : (map.state as MapState);
+  const refinements =
+    body?.state !== undefined
+      ? mapRefinementCounts(map.state as MapState, state)
+      : { fieldChanges: 0, relationshipChanges: 0 };
   await query(
     'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
     [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
@@ -583,7 +678,40 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
     'SELECT updated_at FROM maps WHERE id = $1',
     [map.id]
   );
+  if (refinements.fieldChanges > 0 || refinements.relationshipChanges > 0) {
+    await recordAnalytics({
+      eventName: 'map_refined',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: {
+        field_changes: refinements.fieldChanges,
+        relationship_changes: refinements.relationshipChanges,
+      },
+    });
+  }
   return c.json({ ok: true, updatedAt: updated[0]?.updated_at ?? now() });
+});
+
+app.post('/api/maps/:id/opportunity', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot update opportunity status', 403);
+  const body = await c.req.json().catch(() => null);
+  if (typeof body?.live !== 'boolean') return bad(c, 'live status required');
+  await query(
+    'UPDATE maps SET is_live_opportunity = $1, updated_at = $2 WHERE id = $3',
+    [body.live, now(), map.id]
+  );
+  await recordAnalytics({
+    eventName: 'live_opportunity_set',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: { live: body.live },
+  });
+  return c.json({ live: body.live });
 });
 
 app.delete('/api/maps/:id', requireAuth, async (c) => {
@@ -732,6 +860,13 @@ app.post('/api/maps/:id/comments', requireAuth, async (c) => {
     'INSERT INTO comments (id, map_id, person_id, author_id, body, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
     [id, map.id, personId, user.id, text, now()]
   );
+  await recordAnalytics({
+    eventName: 'comment_added',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: { scoped_to_person: Boolean(personId) },
+  });
   return c.json({ id });
 });
 
@@ -755,7 +890,49 @@ app.post('/api/maps/:id/share', requireAuth, async (c) => {
     'INSERT INTO share_links (token, map_id, created_by, expires_at, created_at) VALUES ($1,$2,$3,$4,$5)',
     [token, map.id, user.id, expiresAt, now()]
   );
+  await recordAnalytics({
+    eventName: 'share_created',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: { expires: Boolean(expiresAt) },
+  });
   return c.json({ token });
+});
+
+// ---------- privacy-safe product value ----------
+
+app.post('/api/maps/:id/events', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const body = await c.req.json().catch(() => null);
+  const event = sanitizeClientEvent(body?.eventName, body?.properties);
+  if (!event) return bad(c, 'unsupported event');
+  const eventId =
+    typeof body?.eventId === 'string' && /^[a-f0-9-]{36}$/i.test(body.eventId)
+      ? body.eventId
+      : null;
+  await recordAnalytics({
+    eventName: event.eventName,
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: event.properties,
+    dedupeKey: eventId,
+  });
+  return c.json({ accepted: true });
+});
+
+app.get('/api/workspaces/:id/value', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!(await workspaceRoleFor(user, workspaceId))) {
+    return bad(c, 'not a member', 403);
+  }
+  return c.json(
+    await valueSummary(user.id, workspaceId, isSuperAdmin(user))
+  );
 });
 
 app.get('/api/maps/:id/share', requireAuth, async (c) => {

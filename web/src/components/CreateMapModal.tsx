@@ -73,6 +73,7 @@ export default function CreateMapModal({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const timer = useRef<number | null>(null);
+  const researchStartedAt = useRef<string | null>(null);
 
   useEffect(() => {
     if (!researching) return;
@@ -90,6 +91,7 @@ export default function CreateMapModal({
     setResult(null);
     setResearching(true);
     setStage(0);
+    researchStartedAt.current = new Date().toISOString();
     try {
       const r = await api.research(domain.trim());
       setResult(r);
@@ -119,7 +121,12 @@ export default function CreateMapModal({
           }
         : stateFromResearch(result!);
       const name = result?.companyName || d;
-      const { id } = await api.createMap(workspaceId, name, d, state);
+      const { id } = await api.createMap(workspaceId, name, d, state, {
+        creationMode: blank ? 'blank' : 'researched',
+        ...(blank || !researchStartedAt.current
+          ? {}
+          : { researchStartedAt: researchStartedAt.current }),
+      });
       onCreated(id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'failed to create map');
@@ -138,7 +145,8 @@ export default function CreateMapModal({
         workspaceId,
         d,
         d,
-        templateState(d, template)
+        templateState(d, template),
+        { creationMode: 'template' }
       );
       onCreated(id);
     } catch (err) {

@@ -87,6 +87,7 @@ export interface MapListItem {
   created_by: string;
   created_at: string;
   updated_at: string;
+  is_live_opportunity: boolean;
   peopleCount: number;
   initiativeCount: number;
 }
@@ -98,6 +99,7 @@ export interface LoadedMap {
   domain: string;
   company_name: string | null;
   state: MapState;
+  is_live_opportunity: boolean;
   role: 'owner' | 'member' | 'viewer';
   created_by: string;
   created_at: string;
@@ -227,4 +229,47 @@ export interface MapPresence {
   cursor_x: number | null;
   cursor_y: number | null;
   selected_person_id: string | null;
+}
+
+export type ProductEventName =
+  | 'map_viewed'
+  | 'source_opened'
+  | 'briefing_opened'
+  | 'briefing_action_selected'
+  | 'deep_research_completed';
+
+export interface ProductValueSummary {
+  personal: {
+    mapsCreated: number;
+    usefulMaps: number;
+    sourceOpens: number;
+    briefingOpens: number;
+    actionsTaken: number;
+    refinements: number;
+    repeatAccounts: number;
+    collaborationActions: number;
+    liveOpportunityMaps: number;
+    estimatedMinutesSaved: number;
+    firstUsefulMapMinutes: number | null;
+  };
+  workspace: {
+    activeUsers: number;
+    contributors: number;
+    mapsCreated: number;
+    usefulMaps: number;
+    briefingOpens: number;
+    actionsTaken: number;
+    collaborationActions: number;
+    liveOpportunityMaps: number;
+    briefingActionRate: number;
+  };
+  platform?: {
+    registeredUsers: number;
+    activatedUsers: number;
+    activeUsers30d: number;
+    retainedUsers30d: number;
+    mapsCreated: number;
+    liveOpportunityMaps: number;
+    briefingActionRate: number;
+  };
 }

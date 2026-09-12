@@ -102,6 +102,7 @@ export interface MapRow {
   domain: string;
   company_name: string | null;
   state: MapState;
+  is_live_opportunity: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;

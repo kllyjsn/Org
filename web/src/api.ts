@@ -9,6 +9,8 @@ import type {
   MapPresence,
   MapState,
   MapVersion,
+  ProductEventName,
+  ProductValueSummary,
   ResearchResult,
   SessionUser,
   ShareLink,
@@ -102,11 +104,15 @@ export const api = {
     workspaceId: string,
     name: string,
     domain: string,
-    state: MapState
+    state: MapState,
+    analytics?: {
+      creationMode: 'researched' | 'template' | 'blank';
+      researchStartedAt?: string;
+    }
   ) =>
     req<{ id: string }>('/api/maps', {
       method: 'POST',
-      body: JSON.stringify({ workspaceId, name, domain, state }),
+      body: JSON.stringify({ workspaceId, name, domain, state, analytics }),
     }),
   getMap: (id: string) => req<{ map: LoadedMap }>(`/api/maps/${id}`),
   patchMap: (id: string, patch: { name?: string; state?: MapState }) =>
@@ -116,6 +122,11 @@ export const api = {
     }),
   deleteMap: (id: string) =>
     req<{ ok: true }>(`/api/maps/${id}`, { method: 'DELETE' }),
+  setLiveOpportunity: (id: string, live: boolean) =>
+    req<{ live: boolean }>(`/api/maps/${id}/opportunity`, {
+      method: 'POST',
+      body: JSON.stringify({ live }),
+    }),
   listVersions: (mapId: string) =>
     req<{ versions: MapVersion[] }>(`/api/maps/${mapId}/versions`),
   listChanges: (mapId: string) =>
@@ -178,4 +189,20 @@ export const api = {
         state: MapState;
       };
     }>(`/api/share/${token}`),
+
+  trackEvent: (
+    mapId: string,
+    eventName: ProductEventName,
+    properties: Record<string, string | number | boolean> = {}
+  ) =>
+    req<{ accepted: true }>(`/api/maps/${mapId}/events`, {
+      method: 'POST',
+      body: JSON.stringify({
+        eventId: crypto.randomUUID(),
+        eventName,
+        properties,
+      }),
+    }),
+  getValueSummary: (workspaceId: string) =>
+    req<ProductValueSummary>(`/api/workspaces/${workspaceId}/value`),
 };

@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
+  BarChart3,
+  BriefcaseBusiness,
   Building2,
   Clock3,
   Loader2,
@@ -19,6 +21,7 @@ import { api, ApiError } from '../api';
 import { useSession } from '../store';
 import type { MapListItem } from '../types';
 import CreateMapModal from '../components/CreateMapModal';
+import ValueDashboardModal from '../components/ValueDashboardModal';
 import { Wordmark } from '../components/Wordmark';
 
 function MembersModal({
@@ -188,6 +191,7 @@ export default function AccountsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
+  const [showValue, setShowValue] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -225,6 +229,16 @@ export default function AccountsPage() {
       return;
     await api.deleteMap(id);
     refreshMaps();
+  };
+
+  const toggleLiveOpportunity = async (map: MapListItem) => {
+    const next = !map.is_live_opportunity;
+    await api.setLiveOpportunity(map.id, next);
+    setMaps((items) =>
+      items.map((item) =>
+        item.id === map.id ? { ...item, is_live_opportunity: next } : item
+      )
+    );
   };
 
   return (
@@ -269,6 +283,14 @@ export default function AccountsPage() {
           )}
         </div>
         <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-3">
+          {workspaceId && (
+            <button
+              onClick={() => setShowValue(true)}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            >
+              <BarChart3 size={15} /> <span className="hidden sm:inline">Value</span>
+            </button>
+          )}
           {workspaceId && (
             <button
               onClick={() => setShowMembers(true)}
@@ -402,6 +424,11 @@ export default function AccountsPage() {
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       T0 public web
                     </span>
+                    {m.is_live_opportunity && (
+                      <span className="rounded-full bg-[#effbd0] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                        Live deal
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-end justify-between border-t border-slate-100 pt-4 text-xs text-slate-500">
@@ -414,6 +441,22 @@ export default function AccountsPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {workspace?.role !== 'viewer' && (
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void toggleLiveOpportunity(m);
+                        }}
+                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition ${
+                          m.is_live_opportunity
+                            ? 'bg-[#effbd0] text-slate-700 hover:bg-[#e4f7b7]'
+                            : 'bg-slate-100 text-slate-500 opacity-0 group-hover:opacity-100 hover:text-[#5b4cf0]'
+                        }`}
+                      >
+                        <BriefcaseBusiness size={12} />
+                        {m.is_live_opportunity ? 'Live deal' : 'Mark live'}
+                      </button>
+                    )}
                     <button
                       onClick={(event) => {
                         event.stopPropagation();
@@ -453,6 +496,12 @@ export default function AccountsPage() {
         <PricingModal
           workspaceId={workspaceId}
           onClose={() => setShowPricing(false)}
+        />
+      )}
+      {showValue && workspaceId && (
+        <ValueDashboardModal
+          workspaceId={workspaceId}
+          onClose={() => setShowValue(false)}
         />
       )}
     </div>

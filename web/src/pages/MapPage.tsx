@@ -195,6 +195,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
 function MapInner() {
   const { mapId } = useParams<{ mapId: string }>();
   const [searchParams] = useSearchParams();
+  const mapViewEntry = useRef<'dashboard' | 'direct'>(
+    searchParams.get('briefing') === '1' ? 'dashboard' : 'direct'
+  );
   const rf = useReactFlow();
   const viewport = useViewport();
   const [mapName, setMapName] = useState('');
@@ -211,6 +214,9 @@ function MapInner() {
   const [showInitiatives, setShowInitiatives] = useState(false);
   const [showStrategy, setShowStrategy] = useState(false);
   const [showBriefing, setShowBriefing] = useState(false);
+  const [briefingEntry, setBriefingEntry] = useState<
+    'dashboard' | 'direct' | 'spotlight' | 'toolbar'
+  >('direct');
   const [showChanges, setShowChanges] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [showDeepResearch, setShowDeepResearch] = useState(false);
@@ -258,13 +264,21 @@ function MapInner() {
         setPast([]);
         setFuture([]);
         setLoaded(true);
+        void api
+          .trackEvent(mapId, 'map_viewed', {
+            entry: mapViewEntry.current,
+          })
+          .catch(() => undefined);
         window.setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
       })
       .catch(() => setNotFound(true));
   }, [mapId, setNodes, setEdges, rf]);
 
   useEffect(() => {
-    if (searchParams.get('briefing') === '1') setShowBriefing(true);
+    if (searchParams.get('briefing') === '1') {
+      setBriefingEntry('dashboard');
+      setShowBriefing(true);
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -963,7 +977,10 @@ function MapInner() {
   const runPaletteAction = useCallback(
     (action: PaletteAction) => {
       if (action === 'layout') autoLayout();
-      if (action === 'briefing') setShowBriefing(true);
+      if (action === 'briefing') {
+        setBriefingEntry('spotlight');
+        setShowBriefing(true);
+      }
       if (action === 'overview') {
         setSelectedId(null);
         void rf.fitView({ padding: 0.2, duration: 450 });
@@ -1054,6 +1071,7 @@ function MapInner() {
           lower
         )
       ) {
+        setBriefingEntry('spotlight');
         setShowBriefing(true);
         return say('Opening the account briefing.');
       }
@@ -1696,7 +1714,10 @@ function MapInner() {
               <History size={15} /> History
             </button>
             <button
-              onClick={() => setShowBriefing(true)}
+              onClick={() => {
+                setBriefingEntry('toolbar');
+                setShowBriefing(true);
+              }}
               className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20"
             >
               <Radar size={15} /> Briefing
@@ -1965,6 +1986,7 @@ function MapInner() {
       {showDeepResearch && (
         <DeepResearchModal
           domain={domain}
+          mapId={mapId}
           people={people}
           selected={selected}
           initialFocus={deepResearchFocus}
@@ -2096,6 +2118,15 @@ function MapInner() {
                             href={source}
                             target="_blank"
                             rel="noreferrer"
+                            onClick={() => {
+                              if (mapId) {
+                                void api
+                                  .trackEvent(mapId, 'source_opened', {
+                                    surface: 'initiative',
+                                  })
+                                  .catch(() => undefined);
+                              }
+                            }}
                             className="max-w-full truncate text-indigo-600 hover:underline"
                           >
                             Source
@@ -2132,6 +2163,7 @@ function MapInner() {
         <AccountBriefingModal
           mapId={mapId}
           readOnly={readOnly}
+          entry={briefingEntry}
           onClose={() => setShowBriefing(false)}
           onRunAction={(action: BriefingAction) => {
             setShowBriefing(false);

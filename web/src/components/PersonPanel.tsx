@@ -290,6 +290,13 @@ export default function PersonPanel({
                       href={s}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={() => {
+                        void api
+                          .trackEvent(mapId, 'source_opened', {
+                            surface: 'person',
+                          })
+                          .catch(() => undefined);
+                      }}
                     >
                       {s}
                     </a>

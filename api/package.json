@@ -7,6 +7,7 @@
     "dev": "tsx watch _src/serve.ts",
     "build": "tsc -b",
     "start": "node dist/_src/serve.js",
+    "test": "tsx --test _src/*.test.ts",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint _src index.ts"
   },

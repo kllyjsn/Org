@@ -12,6 +12,7 @@ const STAGES = [
 
 export default function DeepResearchModal({
   domain,
+  mapId,
   people,
   selected,
   initialFocus,
@@ -19,6 +20,7 @@ export default function DeepResearchModal({
   onMerge,
 }: {
   domain: string;
+  mapId?: string;
   people: Person[];
   selected: Person | null;
   initialFocus?: string;
@@ -212,6 +214,14 @@ export default function DeepResearchModal({
                 <button
                   onClick={() => {
                     const summary = onMerge(result);
+                    if (mapId) {
+                      void api
+                        .trackEvent(mapId, 'deep_research_completed', {
+                          addedCount: summary.added,
+                          enrichedCount: summary.enriched,
+                        })
+                        .catch(() => undefined);
+                    }
                     setMerged(
                       `Added ${summary.added}; enriched ${summary.enriched}.`
                     );
