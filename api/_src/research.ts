@@ -281,81 +281,195 @@ function isGroundingRedirect(url: string): boolean {
 
 /**
  * Search-grounded answers cite opaque redirect links. Resolve them to the real
- * destination so users can inspect the evidence, dropping any that fail.
+ * destination so users can inspect the evidence, dropping any that fail. Then
+ * drop citations that return a definitive dead response (404/410) — a broken
+ * link is worse than no link.
  */
-async function resolveSourceUrls(
+export async function resolveSourceUrls(
   people: ResearchedPerson[],
   initiatives: StrategicInitiative[]
 ): Promise<void> {
-  const allSources = [
-    ...people.flatMap((person) => person.sourceDetails),
-    ...initiatives.flatMap((initiative) => initiative.evidenceDetails),
-  ];
-  const pending = Array.from(
-    new Set(
-      allSources.filter((s) => isGroundingRedirect(s.url)).map((s) => s.url)
-    )
-  ).slice(0, 40);
-  if (pending.length === 0) return;
-
-  const resolved = new Map<string, string | null>();
-  const batchSize = 10;
-  for (let i = 0; i < pending.length; i += batchSize) {
-    await Promise.all(
-      pending.slice(i, i + batchSize).map(async (url) => {
-        try {
-          const res = await fetch(url, {
-            redirect: 'manual',
-            signal: AbortSignal.timeout(5_000),
-          });
-          const location = res.headers.get('location');
-          resolved.set(
-            url,
-            location && /^https?:\/\//i.test(location) ? location : null
-          );
-        } catch {
-          resolved.set(url, null);
-        }
-      })
-    );
-  }
-
-  const rewrite = (sources: ResearchSource[]): ResearchSource[] => {
-    const next = new Map<string, ResearchSource>();
-    for (const source of sources) {
-      if (!isGroundingRedirect(source.url)) {
-        next.set(source.url, source);
-        continue;
-      }
-      const destination = resolved.get(source.url);
-      if (!destination) continue;
-      next.set(destination, { ...source, url: destination });
-    }
-    return Array.from(next.values());
-  };
-
-  for (const person of people) {
-    person.sourceDetails = rewrite(person.sourceDetails);
+  const applyPersonSources = (
+    person: ResearchedPerson,
+    sources: ResearchSource[]
+  ) => {
+    person.sourceDetails = sources;
     person.sources = person.sourceDetails.map((source) => source.url);
     person.source = person.sources[0] ?? null;
-    person.corroborationCount = new Set(
-      person.sourceDetails.map(sourceDomain).filter(Boolean)
-    ).size;
+    const quality = sourceQuality(person.sourceDetails, Date.now());
+    person.freshness = quality.freshness;
+    person.corroborationCount = quality.corroborationCount;
     if (person.sources.length === 0) {
       person.lastVerifiedAt = null;
       if (person.researchStatus === 'verified')
         person.researchStatus = 'possibly_stale';
+    } else {
+      person.lastVerifiedAt = new Date().toISOString();
+      if (
+        quality.freshness === 'stale' &&
+        person.researchStatus === 'verified'
+      ) {
+        person.researchStatus = 'possibly_stale';
+      }
+    }
+  };
+  const applyInitiativeSources = (
+    initiative: StrategicInitiative,
+    sources: ResearchSource[]
+  ) => {
+    initiative.evidenceDetails = sources;
+    initiative.evidence = initiative.evidenceDetails.map((s) => s.url);
+  };
+
+  const pending = Array.from(
+    new Set(
+      [
+        ...people.flatMap((person) => person.sourceDetails),
+        ...initiatives.flatMap((initiative) => initiative.evidenceDetails),
+      ]
+        .filter((s) => isGroundingRedirect(s.url))
+        .map((s) => s.url)
+    )
+  ).slice(0, 40);
+
+  if (pending.length > 0) {
+    const resolved = new Map<string, string | null>();
+    const batchSize = 10;
+    for (let i = 0; i < pending.length; i += batchSize) {
+      await Promise.all(
+        pending.slice(i, i + batchSize).map(async (url) => {
+          try {
+            const res = await fetch(url, {
+              redirect: 'manual',
+              signal: AbortSignal.timeout(5_000),
+            });
+            const location = res.headers.get('location');
+            resolved.set(
+              url,
+              location && /^https?:\/\//i.test(location) ? location : null
+            );
+          } catch {
+            resolved.set(url, null);
+          }
+        })
+      );
+    }
+
+    const rewrite = (sources: ResearchSource[]): ResearchSource[] => {
+      const next = new Map<string, ResearchSource>();
+      for (const source of sources) {
+        if (!isGroundingRedirect(source.url)) {
+          next.set(source.url, source);
+          continue;
+        }
+        const destination = resolved.get(source.url);
+        if (!destination) continue;
+        next.set(destination, { ...source, url: destination });
+      }
+      return Array.from(next.values());
+    };
+
+    for (const person of people) {
+      applyPersonSources(person, rewrite(person.sourceDetails));
+    }
+    for (const initiative of initiatives) {
+      applyInitiativeSources(initiative, rewrite(initiative.evidenceDetails));
     }
   }
+
+  const remaining = new Set<string>();
+  for (const person of people) {
+    for (const source of person.sourceDetails) remaining.add(source.url);
+  }
   for (const initiative of initiatives) {
-    initiative.evidenceDetails = rewrite(initiative.evidenceDetails);
-    initiative.evidence = initiative.evidenceDetails.map((s) => s.url);
+    for (const source of initiative.evidenceDetails) remaining.add(source.url);
+  }
+  if (remaining.size === 0) return;
+
+  const dead = await deadSourceUrls(remaining);
+  if (dead.size === 0) return;
+  for (const person of people) {
+    applyPersonSources(
+      person,
+      person.sourceDetails.filter((s) => !dead.has(s.url))
+    );
+  }
+  for (const initiative of initiatives) {
+    applyInitiativeSources(
+      initiative,
+      initiative.evidenceDetails.filter((s) => !dead.has(s.url))
+    );
   }
 }
 
+/**
+ * HEAD-check candidate URLs and return the ones that definitively do not
+ * resolve (404/410). Timeouts, 403s, and other ambiguous responses are kept —
+ * only a certain "gone" answer drops a citation.
+ */
+async function deadSourceUrls(urls: Set<string>): Promise<Set<string>> {
+  const dead = new Set<string>();
+  const list = Array.from(urls).slice(0, 48);
+  const batchSize = 12;
+  for (let i = 0; i < list.length; i += batchSize) {
+    await Promise.all(
+      list.slice(i, i + batchSize).map(async (url) => {
+        try {
+          const res = await fetch(url, {
+            method: 'HEAD',
+            redirect: 'follow',
+            signal: AbortSignal.timeout(3_500),
+          });
+          if (res.status === 404 || res.status === 410) dead.add(url);
+        } catch {
+          // Unreachable is not proof the citation is dead — keep it.
+        }
+      })
+    );
+  }
+  return dead;
+}
+
+// Public suffixes where the meaningful publisher boundary sits one level up.
+const MULTI_PART_SUFFIXES = new Set([
+  'ac.uk',
+  'co.uk',
+  'gov.uk',
+  'org.uk',
+  'com.au',
+  'net.au',
+  'org.au',
+  'co.jp',
+  'or.jp',
+  'ne.jp',
+  'ac.jp',
+  'com.br',
+  'com.cn',
+  'com.hk',
+  'com.mx',
+  'com.sg',
+  'com.tw',
+  'co.kr',
+  'co.nz',
+  'co.in',
+]);
+
+/**
+ * Registrable domain of a source — subdomains of one publisher (e.g.
+ * ir.hubspot.com vs hubspot.com) count as a single corroborating source.
+ */
 function sourceDomain(source: ResearchSource): string {
   try {
-    return new URL(source.url).hostname.replace(/^www\./, '').toLowerCase();
+    const hostname = new URL(source.url).hostname
+      .replace(/^www\./, '')
+      .toLowerCase();
+    const labels = hostname.split('.').filter(Boolean);
+    if (labels.length <= 2) return hostname;
+    const lastTwo = labels.slice(-2).join('.');
+    if (MULTI_PART_SUFFIXES.has(lastTwo)) {
+      return labels.slice(-3).join('.');
+    }
+    return lastTwo;
   } catch {
     return '';
   }

@@ -84,6 +84,10 @@ import ShareModal from '../components/ShareModal';
 import { applyLayout } from '../lib/layout';
 import { ROLE_META } from '../lib/colors';
 import { parseCsv } from '../lib/csv';
+import {
+  corroborationCount,
+  evidenceFreshness,
+} from '../lib/researchQuality';
 import type {
   AccountAgentAction,
   AccountAgentMessage,
@@ -1447,6 +1451,15 @@ function MapInner() {
       const nextNodes = [...nodes];
       let added = 0;
       let enriched = 0;
+      const bounds =
+        nextNodes.length > 0
+          ? {
+              minX: Math.min(...nextNodes.map((n) => n.position.x)),
+              maxY: Math.max(...nextNodes.map((n) => n.position.y)),
+            }
+          : null;
+      const gridX = bounds ? bounds.minX : center.x;
+      const gridY = bounds ? bounds.maxY + 240 : center.y;
 
       for (const researched of result.people) {
         const matchIndex = nextNodes.findIndex(
@@ -1457,6 +1470,18 @@ function MapInner() {
         if (matchIndex >= 0) {
           const node = nextNodes[matchIndex];
           const person = node.data.person;
+          const mergedSourceDetails = Array.from(
+            new Map(
+              [
+                ...(person.sourceDetails ?? []),
+                ...researched.sourceDetails,
+              ].map((source) => [source.url, source])
+            ).values()
+          );
+          const mergedFreshness =
+            mergedSourceDetails.length > 0
+              ? evidenceFreshness(mergedSourceDetails)
+              : researched.freshness;
           nextNodes[matchIndex] = {
             ...node,
             data: {
@@ -1480,16 +1505,12 @@ function MapInner() {
                     ...(researched.source ? [researched.source] : []),
                   ])
                 ),
-                sourceDetails: Array.from(
-                  new Map(
-                    [
-                      ...(person.sourceDetails ?? []),
-                      ...researched.sourceDetails,
-                    ].map((source) => [source.url, source])
-                  ).values()
-                ),
-                freshness: researched.freshness,
-                corroborationCount: researched.corroborationCount,
+                sourceDetails: mergedSourceDetails,
+                freshness: mergedFreshness,
+                corroborationCount:
+                  mergedSourceDetails.length > 0
+                    ? corroborationCount(mergedSourceDetails)
+                    : researched.corroborationCount,
                 lastVerifiedAt: researched.lastVerifiedAt,
                 conflictingTitles: Array.from(
                   new Set([
@@ -1497,7 +1518,11 @@ function MapInner() {
                     ...researched.conflictingTitles,
                   ])
                 ),
-                researchStatus: researched.researchStatus,
+                researchStatus:
+                  mergedFreshness === 'stale' &&
+                  researched.researchStatus === 'verified'
+                    ? 'possibly_stale'
+                    : researched.researchStatus,
               },
             },
           };
@@ -1530,8 +1555,8 @@ function MapInner() {
           notes: '',
           email: null,
           linkedin: null,
-          x: center.x + (added % 3) * 280,
-          y: center.y + Math.floor(added / 3) * 180,
+          x: gridX + (added % 3) * 280,
+          y: gridY + Math.floor(added / 3) * 180,
         };
         nextNodes.push({
           id: person.id,
