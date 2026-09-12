@@ -858,7 +858,7 @@ function MapInner() {
         return 'Opening the account strategy.';
       }
       if (
-        /\b(what changed|show changes|change alerts?|account movement)\b/.test(
+        /\b(what changed|show changes|show account changes|change alerts?|account movement)\b/.test(
           lower
         )
       ) {
