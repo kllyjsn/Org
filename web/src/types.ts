@@ -157,6 +157,8 @@ export interface ResearchResult {
   tier: 'T0';
   demo: boolean;
   initiatives: StrategicInitiative[];
+  /** Stored map source URLs the server verified as dead (404/410). */
+  deadSources?: string[];
 }
 
 export interface ShareLink {

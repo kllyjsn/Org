@@ -92,10 +92,14 @@ export const api = {
       body: JSON.stringify({ workspaceId }),
     }),
 
-  research: (domain: string, focus?: string) =>
+  research: (domain: string, focus?: string, knownSources?: string[]) =>
     req<ResearchResult>('/api/research', {
       method: 'POST',
-      body: JSON.stringify({ domain, focus }),
+      body: JSON.stringify({
+        domain,
+        focus,
+        ...(knownSources?.length ? { knownSources } : {}),
+      }),
     }),
 
   listMaps: (workspaceId: string) =>

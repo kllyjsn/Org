@@ -16,6 +16,7 @@ export default function DeepResearchModal({
   people,
   selected,
   initialFocus,
+  knownSources,
   onClose,
   onMerge,
 }: {
@@ -24,6 +25,7 @@ export default function DeepResearchModal({
   people: Person[];
   selected: Person | null;
   initialFocus?: string;
+  knownSources?: string[];
   onClose: () => void;
   onMerge: (result: ResearchResult) => { added: number; enriched: number };
 }) {
@@ -64,7 +66,13 @@ export default function DeepResearchModal({
     setError('');
     setStage(0);
     try {
-      setResult(await api.research(domain, fullAccount ? undefined : focus.trim()));
+      setResult(
+        await api.research(
+          domain,
+          fullAccount ? undefined : focus.trim(),
+          fullAccount ? knownSources : undefined
+        )
+      );
     } catch (err) {
       setError(
         err instanceof ApiError

@@ -111,7 +111,8 @@ interface GeminiGenerateContentResponse {
 async function postGroundedGemini(
   provider: ProviderSpec,
   messages: ChatMessage[],
-  maxTokens: number
+  maxTokens: number,
+  timeoutMs = 40_000
 ): Promise<ChatResult> {
   const system = messages
     .filter((message) => message.role === 'system')
@@ -139,7 +140,7 @@ async function postGroundedGemini(
     },
     // Grounded calls are slower (search + generation); cap them below the
     // serverless function budget so we can fall back to a plain call.
-    40_000
+    Math.max(1_000, timeoutMs)
   )) as GeminiGenerateContentResponse;
   const content = payload.candidates?.[0]?.content?.parts
     ?.map((part) => part.text ?? '')
@@ -161,20 +162,35 @@ async function postGroundedGemini(
  */
 export async function chat(
   messages: ChatMessage[],
-  options?: { maxTokens?: number; json?: boolean; webSearch?: boolean }
+  options?: {
+    maxTokens?: number;
+    json?: boolean;
+    webSearch?: boolean;
+    /** Absolute epoch-ms cutoff; attempts past it abort so callers bound total latency. */
+    deadlineMs?: number;
+  }
 ): Promise<ChatResult> {
   const providers = availableProviders();
   if (providers.length === 0) throw new Error('No LLM provider key configured');
 
   const errors: string[] = [];
+  const remaining = () =>
+    options?.deadlineMs !== undefined
+      ? options.deadlineMs - Date.now()
+      : Number.POSITIVE_INFINITY;
   for (const p of providers) {
+    if (remaining() < 2_000) {
+      errors.push('deadline reached');
+      break;
+    }
     try {
       if (options?.webSearch && p.name === 'gemini') {
         try {
           return await postGroundedGemini(
             p,
             messages,
-            options.maxTokens ?? 8_000
+            options.maxTokens ?? 8_000,
+            Math.min(40_000, remaining())
           );
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -184,6 +200,10 @@ export async function chat(
         }
       }
       if (options?.webSearch && !p.webSearch) continue;
+      if (remaining() < 2_000) {
+        errors.push('deadline reached');
+        break;
+      }
       const payload = await postJson(
         p.url,
         { authorization: `Bearer ${process.env[p.envKey]}` },
@@ -195,7 +215,10 @@ export async function chat(
             ? { response_format: { type: 'json_object' } }
             : {}),
         },
-        options?.webSearch ? 18_000 : TIMEOUT_MS
+        Math.min(
+          options?.webSearch ? 18_000 : TIMEOUT_MS,
+          remaining()
+        )
       );
       return {
         content: extractContent(payload),

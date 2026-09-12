@@ -498,6 +498,19 @@ function MapInner() {
   const selected = nodes.find((n) => n.id === selectedId)?.data.person ?? null;
   const people = useMemo(() => nodes.map((n) => n.data.person), [nodes]);
 
+  const knownSourceUrls = useMemo(() => {
+    const urls = new Set<string>();
+    for (const p of people) {
+      for (const url of p.sources ?? []) if (url) urls.add(url);
+      for (const s of p.sourceDetails ?? []) if (s.url) urls.add(s.url);
+    }
+    for (const initiative of meta?.initiatives ?? []) {
+      for (const url of initiative.evidence ?? []) if (url) urls.add(url);
+      for (const s of initiative.evidenceDetails ?? []) if (s.url) urls.add(s.url);
+    }
+    return Array.from(urls).slice(0, 96);
+  }, [people, meta]);
+
   const coverage = useMemo(() => {
     const counts = new Map<BuyingRole, number>();
     for (const p of people) {
@@ -1442,6 +1455,7 @@ function MapInner() {
     (result: ResearchResult) => {
       if (readOnly) return { added: 0, enriched: 0 };
       recordHistory();
+      const dead = new Set(result.deadSources ?? []);
       const center = rf.screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
@@ -1477,7 +1491,7 @@ function MapInner() {
                 ...researched.sourceDetails,
               ].map((source) => [source.url, source])
             ).values()
-          );
+          ).filter((s) => !dead.has(s.url));
           const mergedFreshness =
             mergedSourceDetails.length > 0
               ? evidenceFreshness(mergedSourceDetails)
@@ -1504,7 +1518,7 @@ function MapInner() {
                     ...researched.sources,
                     ...(researched.source ? [researched.source] : []),
                   ])
-                ),
+                ).filter((url) => !dead.has(url)),
                 sourceDetails: mergedSourceDetails,
                 freshness: mergedFreshness,
                 corroborationCount:
@@ -1602,12 +1616,61 @@ function MapInner() {
               Date.now() +
                 (meta.refreshCadence === 'monthly' ? 30 : 7) * 86_400_000
             ).toISOString(),
-            initiatives:
+            initiatives: (
               result.initiatives.length > 0
                 ? result.initiatives
-                : meta.initiatives,
+                : (meta.initiatives ?? [])
+            ).map((initiative) => ({
+              ...initiative,
+              evidence: (initiative.evidence ?? []).filter(
+                (url) => !dead.has(url)
+              ),
+              evidenceDetails: (initiative.evidenceDetails ?? []).filter(
+                (source) => !dead.has(source.url)
+              ),
+            })),
           }
         : meta;
+      // Drop stored citations the server verified as dead, then recompute the
+      // displayed provenance for every card — including ones this pass did not
+      // return.
+      if (dead.size > 0) {
+        for (let i = 0; i < nextNodes.length; i++) {
+          const person = nextNodes[i].data.person;
+          const sourceDetails = (person.sourceDetails ?? []).filter(
+            (s) => !dead.has(s.url)
+          );
+          const sources = person.sources.filter((url) => !dead.has(url));
+          if (
+            sourceDetails.length === (person.sourceDetails?.length ?? 0) &&
+            sources.length === person.sources.length
+          ) {
+            continue;
+          }
+          const freshness = evidenceFreshness(sourceDetails);
+          nextNodes[i] = {
+            ...nextNodes[i],
+            data: {
+              ...nextNodes[i].data,
+              person: {
+                ...person,
+                sources,
+                sourceDetails,
+                freshness,
+                corroborationCount: corroborationCount(sourceDetails),
+                lastVerifiedAt:
+                  sources.length > 0 ? new Date().toISOString() : null,
+                researchStatus:
+                  person.researchStatus === 'conflicting'
+                    ? 'conflicting'
+                    : sources.length === 0 || freshness === 'stale'
+                      ? 'possibly_stale'
+                      : person.researchStatus,
+              },
+            },
+          };
+        }
+      }
       metaRef.current = nextMeta;
       setMeta(nextMeta);
       setNodes(nextNodes);
@@ -2065,6 +2128,7 @@ function MapInner() {
           people={people}
           selected={selected}
           initialFocus={deepResearchFocus}
+          knownSources={knownSourceUrls}
           onClose={() => {
             setShowDeepResearch(false);
             setDeepResearchFocus('');

@@ -28,6 +28,8 @@ export interface ResearchResult {
   tier: 'T0';
   demo: boolean;
   initiatives: StrategicInitiative[];
+  /** Stored map source URLs the server verified as dead (404/410). */
+  deadSources?: string[];
 }
 
 export interface StrategicInitiative {
@@ -287,7 +289,8 @@ function isGroundingRedirect(url: string): boolean {
  */
 export async function resolveSourceUrls(
   people: ResearchedPerson[],
-  initiatives: StrategicInitiative[]
+  initiatives: StrategicInitiative[],
+  deadlineMs = Number.POSITIVE_INFINITY
 ): Promise<void> {
   const applyPersonSources = (
     person: ResearchedPerson,
@@ -336,12 +339,17 @@ export async function resolveSourceUrls(
     const resolved = new Map<string, string | null>();
     const batchSize = 10;
     for (let i = 0; i < pending.length; i += batchSize) {
+      if (Date.now() >= deadlineMs) break;
+      const requestTimeout = Math.max(
+        800,
+        Math.min(5_000, deadlineMs - Date.now())
+      );
       await Promise.all(
         pending.slice(i, i + batchSize).map(async (url) => {
           try {
             const res = await fetch(url, {
               redirect: 'manual',
-              signal: AbortSignal.timeout(5_000),
+              signal: AbortSignal.timeout(requestTimeout),
             });
             const location = res.headers.get('location');
             resolved.set(
@@ -386,7 +394,7 @@ export async function resolveSourceUrls(
   }
   if (remaining.size === 0) return;
 
-  const dead = await deadSourceUrls(remaining);
+  const dead = await deadSourceUrls(remaining, deadlineMs);
   if (dead.size === 0) return;
   for (const person of people) {
     applyPersonSources(
@@ -407,18 +415,26 @@ export async function resolveSourceUrls(
  * resolve (404/410). Timeouts, 403s, and other ambiguous responses are kept —
  * only a certain "gone" answer drops a citation.
  */
-async function deadSourceUrls(urls: Set<string>): Promise<Set<string>> {
+export async function deadSourceUrls(
+  urls: Iterable<string>,
+  deadlineMs = Number.POSITIVE_INFINITY
+): Promise<Set<string>> {
   const dead = new Set<string>();
   const list = Array.from(urls).slice(0, 48);
   const batchSize = 12;
   for (let i = 0; i < list.length; i += batchSize) {
+    if (Date.now() >= deadlineMs) break;
+    const requestTimeout = Math.max(
+      800,
+      Math.min(3_500, deadlineMs - Date.now())
+    );
     await Promise.all(
       list.slice(i, i + batchSize).map(async (url) => {
         try {
           const res = await fetch(url, {
             method: 'HEAD',
             redirect: 'follow',
-            signal: AbortSignal.timeout(3_500),
+            signal: AbortSignal.timeout(requestTimeout),
           });
           if (res.status === 404 || res.status === 410) dead.add(url);
         } catch {
@@ -767,13 +783,18 @@ export async function researchOrg(
   const provider = activeProvider();
   if (provider === 'fixture') return fixtureOrg(domain);
 
+  // Hard budget for the whole pipeline so the work finishes inside the
+  // serverless function limit; every provider attempt and post-processing
+  // phase honors this cutoff.
+  const deadlineMs = Date.now() + 52_000;
+
   try {
     const initiativesPromise = requestedFocus
       ? Promise.resolve(null)
       : chat([
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: initiativesPrompt(domain) },
-        ], { webSearch: true, maxTokens: 4000 }).catch(() => null);
+        ], { webSearch: true, maxTokens: 4000, deadlineMs }).catch(() => null);
     const focuses = requestedFocus
       ? [
           `targeted enrichment for: ${requestedFocus}. Find the named person or ` +
@@ -790,7 +811,7 @@ export async function researchOrg(
         const result = await chat([
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: researchPrompt(domain, focus) },
-        ], { webSearch: true, maxTokens: 4000 });
+        ], { webSearch: true, maxTokens: 4000, deadlineMs });
         const parsed = extractJson(result.content) as {
           companyName?: unknown;
           people?: unknown;
@@ -817,7 +838,7 @@ export async function researchOrg(
       )
     );
     const missing = requestedFocus ? [] : missingFunctions(people);
-    if (missing.length > 0) {
+    if (missing.length > 0 && deadlineMs - Date.now() > 15_000) {
       try {
         const followUp = await chat([
           { role: 'system', content: SYSTEM_PROMPT },
@@ -826,10 +847,10 @@ export async function researchOrg(
             content: researchPrompt(
               domain,
               `missing or underrepresented functions: ${missing.join(', ')}. ` +
-                'Return only people you can verify; some functions may not exist.'
+              'Return only people you can verify; some functions may not exist.'
             ),
           },
-        ], { webSearch: true, maxTokens: 4000 });
+        ], { webSearch: true, maxTokens: 4000, deadlineMs });
         const parsedFollowUp = extractJson(followUp.content) as {
           people?: unknown;
         };
@@ -856,7 +877,8 @@ export async function researchOrg(
         initiatives = [];
       }
     }
-    await resolveSourceUrls(people, initiatives);
+    // Reserve a few seconds so the JSON response can still be sent.
+    await resolveSourceUrls(people, initiatives, deadlineMs - 2_500);
     return {
       companyName:
         typeof companyName === 'string'

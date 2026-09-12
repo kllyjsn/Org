@@ -7,7 +7,7 @@ import { answerAccountQuestion } from './account-agent.js';
 import { buildAccountBriefing } from './briefing.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
-import { researchOrg } from './research.js';
+import { deadSourceUrls, researchOrg } from './research.js';
 import { activeProvider } from './llm.js';
 import { stripePost, verifyStripeSignature } from './billing.js';
 import {
@@ -478,8 +478,23 @@ app.post('/api/research', requireAuth, async (c) => {
     typeof body?.focus === 'string' ? body.focus.trim().slice(0, 300) : '';
   if (!DOMAIN_RE.test(domain)) return bad(c, 'enter a valid domain like acme.com');
   try {
+    // On refresh, the client sends the map's stored source URLs so citations
+    // that have gone dead can be dropped. Runs in parallel with research.
+    const knownUrls = Array.isArray(body?.knownSources)
+      ? body.knownSources
+          .filter(
+            (s: unknown): s is string =>
+              typeof s === 'string' && /^https?:\/\//i.test(s)
+          )
+          .slice(0, 96)
+      : [];
+    const deadPromise =
+      knownUrls.length > 0
+        ? deadSourceUrls(new Set(knownUrls)).catch(() => new Set<string>())
+        : Promise.resolve(new Set<string>());
     const result = await researchOrg(domain, focus || undefined);
-    return c.json(result);
+    const deadSources = Array.from(await deadPromise);
+    return c.json({ ...result, deadSources });
   } catch (err) {
     console.error('research failed', err);
     return bad(c, 'research failed — try again or check LLM provider keys', 502);
