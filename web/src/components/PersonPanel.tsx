@@ -4,7 +4,13 @@ import { motion } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { ROLE_META } from '../lib/colors';
-import type { BuyingRole, MapComment, MapEdge, Person } from '../types';
+import type {
+  BuyingRole,
+  MapComment,
+  MapEdge,
+  Person,
+  StrategicInitiative,
+} from '../types';
 
 const ROLES: BuyingRole[] = [
   'none',
@@ -22,6 +28,7 @@ interface Props {
   people: Person[];
   edges: MapEdge[];
   readOnly?: boolean;
+  initiatives?: StrategicInitiative[];
   onChange: (person: Person) => void;
   onSetManager: (personId: string, managerId: string | null) => void;
   onAddInfluence: (fromId: string, toId: string, label: string) => void;
@@ -35,6 +42,7 @@ export default function PersonPanel({
   people,
   edges,
   readOnly,
+  initiatives = [],
   onChange,
   onSetManager,
   onAddInfluence,
@@ -50,6 +58,20 @@ export default function PersonPanel({
     edges.find((e) => e.kind === 'reports' && e.to === person.id)?.from ?? '';
   const influenceEdges = edges.filter(
     (e) => e.kind === 'influence' && (e.from === person.id || e.to === person.id)
+  );
+  const relevantInitiatives = initiatives.filter(
+    (initiative) =>
+      initiative.relevantPeople.some(
+        (name) => name.toLowerCase() === person.name.toLowerCase()
+      ) ||
+      initiative.relevantTeams.some((team) =>
+        [person.team, person.department].some(
+          (value) =>
+            !!value &&
+            (team.toLowerCase().includes(value.toLowerCase()) ||
+              value.toLowerCase().includes(team.toLowerCase()))
+        )
+      )
   );
 
   useEffect(() => {
@@ -85,7 +107,7 @@ export default function PersonPanel({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 340, opacity: 0 }}
       transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-      className="absolute right-0 top-0 z-20 flex h-full w-[340px] flex-col border-l border-slate-200 bg-white shadow-2xl"
+      className="absolute inset-x-0 bottom-0 z-30 flex h-[78%] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl sm:inset-y-0 sm:left-auto sm:h-full sm:w-[340px] sm:rounded-none sm:border-l sm:border-t-0"
     >
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <h3 className="text-sm font-semibold text-slate-700">
@@ -122,6 +144,22 @@ export default function PersonPanel({
             placeholder="Department"
             disabled={readOnly}
           />
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              className={field}
+              value={person.team ?? ''}
+              onChange={(e) => set({ team: e.target.value || null })}
+              placeholder="Team"
+              disabled={readOnly}
+            />
+            <input
+              className={field}
+              value={person.productLine ?? ''}
+              onChange={(e) => set({ productLine: e.target.value || null })}
+              placeholder="Product line"
+              disabled={readOnly}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -231,6 +269,39 @@ export default function PersonPanel({
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {person.researchStatus && person.researchStatus !== 'verified' && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            {person.researchStatus === 'conflicting'
+              ? `Conflicting current titles: ${
+                  person.conflictingTitles?.join(', ') || 'review the sources'
+                }`
+              : 'The available public evidence may be stale. Verify before outreach.'}
+          </div>
+        )}
+
+        {relevantInitiatives.length > 0 && (
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Why now
+            </label>
+            <div className="space-y-2">
+              {relevantInitiatives.slice(0, 3).map((initiative) => (
+                <div
+                  key={initiative.name}
+                  className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3"
+                >
+                  <p className="text-xs font-semibold text-indigo-900">
+                    {initiative.name}
+                  </p>
+                  <p className="mt-1 text-xs text-indigo-800">
+                    {initiative.salesAngles[0] || initiative.summary}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

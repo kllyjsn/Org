@@ -115,6 +115,9 @@ function sanitizeState(input: unknown): MapState {
       researchedAt: meta.researchedAt ?? null,
       tier: meta.tier ?? 'manual',
       provider: meta.provider ?? null,
+      initiatives: Array.isArray(meta.initiatives)
+        ? meta.initiatives.slice(0, 20)
+        : [],
     },
   };
 }
@@ -487,14 +490,24 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
   );
   await query(
     'UPDATE maps SET name = $1, state = $2, company_name = $3, updated_at = $4 WHERE id = $5',
-    [name, JSON.stringify(state), state.meta.companyName ?? map.company_name, now(), map.id]
+    [
+      name,
+      JSON.stringify(state),
+      state.meta.companyName ?? map.company_name,
+      now(),
+      map.id,
+    ]
   );
   await query(
     `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
      (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
     [map.id]
   );
-  return c.json({ ok: true });
+  const updated = await query<{ updated_at: string }>(
+    'SELECT updated_at FROM maps WHERE id = $1',
+    [map.id]
+  );
+  return c.json({ ok: true, updatedAt: updated[0]?.updated_at ?? now() });
 });
 
 app.delete('/api/maps/:id', requireAuth, async (c) => {
@@ -547,20 +560,38 @@ app.post('/api/maps/:id/presence', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user.id, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
+  const body = await c.req.json().catch(() => null);
+  const cursorX =
+    typeof body?.cursorX === 'number' && Number.isFinite(body.cursorX)
+      ? body.cursorX
+      : null;
+  const cursorY =
+    typeof body?.cursorY === 'number' && Number.isFinite(body.cursorY)
+      ? body.cursorY
+      : null;
+  const selectedPersonId =
+    typeof body?.selectedPersonId === 'string' ? body.selectedPersonId : null;
   await query(
-    `INSERT INTO map_presence (map_id, user_id, last_seen) VALUES ($1,$2,$3)
-     ON CONFLICT (map_id, user_id) DO UPDATE SET last_seen = EXCLUDED.last_seen`,
-    [map.id, user.id, now()]
+    `INSERT INTO map_presence
+     (map_id, user_id, last_seen, cursor_x, cursor_y, selected_person_id)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (map_id, user_id) DO UPDATE SET
+       last_seen = EXCLUDED.last_seen,
+       cursor_x = EXCLUDED.cursor_x,
+       cursor_y = EXCLUDED.cursor_y,
+       selected_person_id = EXCLUDED.selected_person_id`,
+    [map.id, user.id, now(), cursorX, cursorY, selectedPersonId]
   );
   const cutoff = new Date(Date.now() - 45_000).toISOString();
   await query('DELETE FROM map_presence WHERE last_seen < $1', [cutoff]);
   const people = await query(
-    `SELECT u.id, u.name, u.email, p.last_seen
+    `SELECT u.id, u.name, u.email, p.last_seen, p.cursor_x, p.cursor_y,
+            p.selected_person_id
      FROM map_presence p JOIN users u ON u.id = p.user_id
      WHERE p.map_id = $1 AND p.last_seen >= $2 ORDER BY p.last_seen DESC`,
     [map.id, cutoff]
   );
-  return c.json({ people });
+  return c.json({ people, selfId: user.id });
 });
 
 // ---------- comments ----------

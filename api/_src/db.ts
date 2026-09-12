@@ -79,8 +79,14 @@ CREATE TABLE IF NOT EXISTS map_presence (
   map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   last_seen TEXT NOT NULL,
+  cursor_x DOUBLE PRECISION,
+  cursor_y DOUBLE PRECISION,
+  selected_person_id TEXT,
   PRIMARY KEY (map_id, user_id)
 );
+ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS cursor_x DOUBLE PRECISION;
+ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS cursor_y DOUBLE PRECISION;
+ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS selected_person_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_maps_workspace ON maps(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_comments_map ON comments(map_id);
 CREATE INDEX IF NOT EXISTS idx_map_versions_map ON map_versions(map_id, created_at DESC);

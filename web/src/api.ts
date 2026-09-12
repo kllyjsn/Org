@@ -106,7 +106,7 @@ export const api = {
     }),
   getMap: (id: string) => req<{ map: LoadedMap }>(`/api/maps/${id}`),
   patchMap: (id: string, patch: { name?: string; state?: MapState }) =>
-    req<{ ok: true }>(`/api/maps/${id}`, {
+    req<{ ok: true; updatedAt: string }>(`/api/maps/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
     }),
@@ -119,10 +119,21 @@ export const api = {
       `/api/maps/${mapId}/versions/${versionId}/restore`,
       { method: 'POST' }
     ),
-  updatePresence: (mapId: string) =>
-    req<{ people: MapPresence[] }>(`/api/maps/${mapId}/presence`, {
+  updatePresence: (
+    mapId: string,
+    presence?: {
+      cursorX?: number;
+      cursorY?: number;
+      selectedPersonId?: string | null;
+    }
+  ) =>
+    req<{ people: MapPresence[]; selfId: string }>(
+      `/api/maps/${mapId}/presence`,
+      {
       method: 'POST',
-    }),
+        body: JSON.stringify(presence ?? {}),
+      }
+    ),
 
   listComments: (mapId: string) =>
     req<{ comments: MapComment[] }>(`/api/maps/${mapId}/comments`),

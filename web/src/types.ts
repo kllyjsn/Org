@@ -14,9 +14,14 @@ export interface Person {
   name: string;
   title: string;
   department: string | null;
+  team?: string | null;
+  productLine?: string | null;
+  teamEvidence?: 'sourced' | 'inferred' | null;
   role: BuyingRole;
   confidence: Confidence;
   sources: string[];
+  conflictingTitles?: string[];
+  researchStatus?: 'verified' | 'possibly_stale' | 'conflicting';
   notes: string;
   email: string | null;
   linkedin: string | null;
@@ -42,6 +47,17 @@ export interface MapMeta {
   researchedAt: string | null;
   tier: string;
   provider: string | null;
+  initiatives?: StrategicInitiative[];
+}
+
+export interface StrategicInitiative {
+  name: string;
+  summary: string;
+  category: 'product' | 'growth' | 'operations' | 'technology' | 'market';
+  evidence: string[];
+  relevantPeople: string[];
+  relevantTeams: string[];
+  salesAngles: string[];
 }
 
 export interface MapState {
@@ -91,9 +107,15 @@ export interface ResearchedPerson {
   name: string;
   title: string;
   department: string | null;
+  team: string | null;
+  productLine: string | null;
+  teamEvidence: 'sourced' | 'inferred' | null;
   reportsToName: string | null;
   confidence: Confidence;
   source: string | null;
+  sources: string[];
+  conflictingTitles: string[];
+  researchStatus: 'verified' | 'possibly_stale' | 'conflicting';
 }
 
 export interface ResearchResult {
@@ -103,6 +125,7 @@ export interface ResearchResult {
   provider: 'openrouter' | 'perplexity' | 'gemini' | 'fixture';
   tier: 'T0';
   demo: boolean;
+  initiatives: StrategicInitiative[];
 }
 
 export interface ShareLink {
@@ -133,4 +156,7 @@ export interface MapPresence {
   name: string;
   email: string;
   last_seen: string;
+  cursor_x: number | null;
+  cursor_y: number | null;
+  selected_person_id: string | null;
 }

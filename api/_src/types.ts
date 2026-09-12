@@ -14,9 +14,14 @@ export interface Person {
   name: string;
   title: string;
   department: string | null;
+  team?: string | null;
+  productLine?: string | null;
+  teamEvidence?: 'sourced' | 'inferred' | null;
   role: BuyingRole;
   confidence: Confidence;
   sources: string[];
+  conflictingTitles?: string[];
+  researchStatus?: 'verified' | 'possibly_stale' | 'conflicting';
   notes: string;
   email: string | null;
   linkedin: string | null;
@@ -39,6 +44,17 @@ export interface MapMeta {
   researchedAt: string | null;
   tier: string; // e.g. "T0"
   provider: string | null; // llm provider used for research
+  initiatives?: StrategicInitiative[];
+}
+
+export interface StrategicInitiative {
+  name: string;
+  summary: string;
+  category: 'product' | 'growth' | 'operations' | 'technology' | 'market';
+  evidence: string[];
+  relevantPeople: string[];
+  relevantTeams: string[];
+  salesAngles: string[];
 }
 
 export interface MapState {

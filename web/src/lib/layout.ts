@@ -122,9 +122,14 @@ export function stateFromResearch(result: ResearchResult): MapState {
     name: p.name,
     title: p.title,
     department: p.department,
+    team: p.team,
+    productLine: p.productLine,
+    teamEvidence: p.teamEvidence,
     role: 'none',
     confidence: p.confidence,
-    sources: p.source ? [p.source] : [],
+    sources: p.sources.length > 0 ? p.sources : p.source ? [p.source] : [],
+    conflictingTitles: p.conflictingTitles,
+    researchStatus: p.researchStatus,
     notes: '',
     email: null,
     linkedin: null,
@@ -156,6 +161,7 @@ export function stateFromResearch(result: ResearchResult): MapState {
       researchedAt: new Date().toISOString(),
       tier: result.tier,
       provider: result.provider,
+      initiatives: result.initiatives,
     },
   };
 }

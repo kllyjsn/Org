@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import ReactFlow, {
   Background,
@@ -11,6 +12,7 @@ import ReactFlow, {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useViewport,
 } from 'reactflow';
 import type { Connection, Edge, EdgeChange, Node, NodeChange } from 'reactflow';
 
@@ -39,8 +41,10 @@ import {
   ArrowLeft,
   Copy,
   Download,
+  FileUp,
   History,
   LayoutGrid,
+  Lightbulb,
   Loader2,
   Redo2,
   Share2,
@@ -56,6 +60,7 @@ import PersonPanel from '../components/PersonPanel';
 import ShareModal from '../components/ShareModal';
 import { applyLayout } from '../lib/layout';
 import { ROLE_META } from '../lib/colors';
+import { parseCsv } from '../lib/csv';
 import type {
   BuyingRole,
   MapEdge,
@@ -163,6 +168,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 function MapInner() {
   const { mapId } = useParams<{ mapId: string }>();
   const rf = useReactFlow();
+  const viewport = useViewport();
   const [mapName, setMapName] = useState('');
   const [domain, setDomain] = useState('');
   const [meta, setMeta] = useState<MapState['meta'] | null>(null);
@@ -174,8 +180,12 @@ function MapInner() {
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showInitiatives, setShowInitiatives] = useState(false);
   const [versions, setVersions] = useState<MapVersion[]>([]);
   const [presence, setPresence] = useState<MapPresence[]>([]);
+  const [selfId, setSelfId] = useState<string | null>(null);
+  const [isCompact, setIsCompact] = useState(false);
+  const [importNotice, setImportNotice] = useState('');
   const [notFound, setNotFound] = useState(false);
   const [past, setPast] = useState<CanvasSnapshot[]>([]);
   const [future, setFuture] = useState<CanvasSnapshot[]>([]);
@@ -183,13 +193,29 @@ function MapInner() {
   const editTimer = useRef<number | null>(null);
   const dragHistoryRecorded = useRef(false);
   const clipboard = useRef<CanvasSnapshot | null>(null);
+  const crmInput = useRef<HTMLInputElement | null>(null);
   const metaRef = useRef<MapState['meta'] | null>(null);
+  const cursorRef = useRef<{ x: number; y: number } | null>(null);
+  const remoteUpdatedAt = useRef('');
+  const saveStateRef = useRef<SaveState>('saved');
 
   const readOnly = role === 'viewer';
 
   useEffect(() => {
     metaRef.current = meta;
   }, [meta]);
+
+  useEffect(() => {
+    saveStateRef.current = saveState;
+  }, [saveState]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 639px)');
+    const update = () => setIsCompact(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!mapId) return;
@@ -203,6 +229,7 @@ function MapInner() {
         setDomain(map.domain);
         setMeta(map.state.meta);
         setRole(map.role);
+        remoteUpdatedAt.current = map.updated_at;
         setPast([]);
         setFuture([]);
         setLoaded(true);
@@ -214,15 +241,48 @@ function MapInner() {
   useEffect(() => {
     if (!mapId) return;
     const update = () => {
+      const cursor = cursorRef.current;
       void api
-        .updatePresence(mapId)
-        .then(({ people: activePeople }) => setPresence(activePeople))
+        .updatePresence(mapId, {
+          cursorX: cursor?.x,
+          cursorY: cursor?.y,
+          selectedPersonId: selectedId,
+        })
+        .then(({ people: activePeople, selfId: currentUserId }) => {
+          setPresence(activePeople);
+          setSelfId(currentUserId);
+        })
         .catch(() => undefined);
     };
     update();
-    const interval = window.setInterval(update, 15_000);
+    const interval = window.setInterval(update, 1_500);
     return () => window.clearInterval(interval);
-  }, [mapId]);
+  }, [mapId, selectedId]);
+
+  useEffect(() => {
+    if (!mapId) return;
+    const sync = () => {
+      if (saveStateRef.current !== 'saved') return;
+      void api
+        .getMap(mapId)
+        .then(({ map }) => {
+          if (!remoteUpdatedAt.current) {
+            remoteUpdatedAt.current = map.updated_at;
+            return;
+          }
+          if (map.updated_at <= remoteUpdatedAt.current) return;
+          remoteUpdatedAt.current = map.updated_at;
+          const flow = toFlow(map.state, map.role === 'viewer');
+          setMapName(map.name);
+          setMeta(map.state.meta);
+          setNodes(flow.nodes);
+          setEdges(flow.edges);
+        })
+        .catch(() => undefined);
+    };
+    const interval = window.setInterval(sync, 3_000);
+    return () => window.clearInterval(interval);
+  }, [mapId, setNodes, setEdges]);
 
   const openHistory = useCallback(() => {
     if (!mapId) return;
@@ -252,11 +312,19 @@ function MapInner() {
   const persist = useCallback(
     (ns: Node<PersonNodeData>[], es: FlowEdge[]) => {
       if (!mapId || !metaRef.current || readOnly) return;
+      saveStateRef.current = 'saving';
       setSaveState('saving');
       api
         .patchMap(mapId, { state: toState(ns, es, metaRef.current) })
-        .then(() => setSaveState('saved'))
-        .catch(() => setSaveState('dirty'));
+        .then(({ updatedAt }) => {
+          remoteUpdatedAt.current = updatedAt;
+          saveStateRef.current = 'saved';
+          setSaveState('saved');
+        })
+        .catch(() => {
+          saveStateRef.current = 'dirty';
+          setSaveState('dirty');
+        });
     },
     [mapId, readOnly]
   );
@@ -264,6 +332,7 @@ function MapInner() {
   const markDirty = useCallback(
     (ns: Node<PersonNodeData>[], es: FlowEdge[]) => {
       if (readOnly) return;
+      saveStateRef.current = 'dirty';
       setSaveState('dirty');
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
       saveTimer.current = window.setTimeout(() => persist(ns, es), 900);
@@ -730,6 +799,109 @@ function MapInner() {
     void api.patchMap(mapId, { name: mapName });
   }, [mapId, mapName, readOnly]);
 
+  const importCrmCsv = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file || readOnly) return;
+      const rows = parseCsv(await file.text());
+      if (rows.length === 0) {
+        setImportNotice('No CRM contacts found in that CSV.');
+        return;
+      }
+      recordHistory();
+      let updated = 0;
+      let added = 0;
+      const center = rf.screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      setNodes((items) => {
+        const next = [...items];
+        for (const row of rows) {
+          const name =
+            row.name ||
+            row.fullname ||
+            [row.firstname, row.lastname].filter(Boolean).join(' ');
+          const email = row.email || row.emailaddress;
+          if (!name && !email) continue;
+          const matchIndex = next.findIndex((node) => {
+            const person = node.data.person;
+            return (
+              (!!email &&
+                !!person.email &&
+                person.email.toLowerCase() === email.toLowerCase()) ||
+              (!!name && person.name.toLowerCase() === name.toLowerCase())
+            );
+          });
+          const enrichment = {
+            ...(row.title || row.jobtitle
+              ? { title: row.title || row.jobtitle }
+              : {}),
+            ...(row.department ? { department: row.department } : {}),
+            ...(row.team ? { team: row.team, teamEvidence: 'sourced' as const } : {}),
+            ...(row.productline || row.product
+              ? { productLine: row.productline || row.product }
+              : {}),
+            ...(email ? { email } : {}),
+            ...(row.linkedin || row.linkedinurl
+              ? { linkedin: row.linkedin || row.linkedinurl }
+              : {}),
+          };
+          if (matchIndex >= 0) {
+            const node = next[matchIndex];
+            const person = node.data.person;
+            next[matchIndex] = {
+              ...node,
+              data: {
+                ...node.data,
+                person: {
+                  ...person,
+                  ...enrichment,
+                  notes: [person.notes, row.notes].filter(Boolean).join('\n'),
+                  sources: Array.from(new Set([...person.sources, 'CRM CSV'])),
+                },
+              },
+            };
+            updated += 1;
+            continue;
+          }
+          const person: Person = {
+            id: crypto.randomUUID(),
+            name: name || email,
+            title: row.title || row.jobtitle || 'CRM contact',
+            department: row.department || null,
+            team: row.team || null,
+            productLine: row.productline || row.product || null,
+            teamEvidence: row.team ? 'sourced' : null,
+            role: 'none',
+            confidence: 'high',
+            sources: ['CRM CSV'],
+            researchStatus: 'verified',
+            notes: row.notes || '',
+            email: email || null,
+            linkedin: row.linkedin || row.linkedinurl || null,
+            x: center.x + (added % 4) * 280,
+            y: center.y + Math.floor(added / 4) * 130,
+          };
+          next.push({
+            id: person.id,
+            type: 'person',
+            position: { x: person.x, y: person.y },
+            data: { person, readOnly: false },
+            style: { width: 250 },
+          });
+          added += 1;
+        }
+        markDirty(next, edges);
+        return next;
+      });
+      setImportNotice(`CRM import: ${updated} enriched, ${added} added.`);
+      window.setTimeout(() => setImportNotice(''), 5_000);
+    },
+    [readOnly, recordHistory, rf, setNodes, markDirty, edges]
+  );
+
   if (notFound) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-500">
@@ -831,11 +1003,32 @@ function MapInner() {
               <LayoutGrid size={15} /> Layout
             </button>
             <button
+              onClick={() => crmInput.current?.click()}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              <FileUp size={15} /> CRM CSV
+            </button>
+            <input
+              ref={crmInput}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => void importCrmCsv(event)}
+            />
+            <button
               onClick={openHistory}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
             >
               <History size={15} /> History
             </button>
+            {(meta?.initiatives?.length ?? 0) > 0 && (
+              <button
+                onClick={() => setShowInitiatives(true)}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-100"
+              >
+                <Lightbulb size={15} /> Initiatives
+              </button>
+            )}
             <button
               onClick={() => setShowShare(true)}
               className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
@@ -854,6 +1047,11 @@ function MapInner() {
       </header>
 
       <div className="relative flex-1">
+        {importNotice && (
+          <div className="absolute right-3 top-3 z-30 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
+            {importNotice}
+          </div>
+        )}
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -883,12 +1081,18 @@ function MapInner() {
             }
           }}
           onPaneClick={() => setSelectedId(null)}
+          onPointerMove={(event) => {
+            cursorRef.current = rf.screenToFlowPosition({
+              x: event.clientX,
+              y: event.clientY,
+            });
+          }}
           nodeTypes={nodeTypes}
           nodesDraggable={!readOnly}
           nodesConnectable={!readOnly}
           elementsSelectable
-          selectionOnDrag={!readOnly}
-          panOnDrag={[1, 2]}
+          selectionOnDrag={!readOnly && !isCompact}
+          panOnDrag={isCompact ? true : [1, 2]}
           multiSelectionKeyCode={['Meta', 'Control']}
           deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
           fitView
@@ -896,12 +1100,44 @@ function MapInner() {
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={24} size={1} color="#cbd5e1" />
-          <Controls showInteractive={false} />
-          <MiniMap pannable zoomable className="!bg-slate-50" />
+          <Controls
+            showInteractive={false}
+            className="!bottom-3 !left-3 sm:!bottom-4 sm:!left-4"
+          />
+          <MiniMap
+            pannable
+            zoomable
+            className="!hidden !bg-slate-50 sm:!block"
+          />
         </ReactFlow>
 
+        <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
+          {presence
+            .filter(
+              (person) =>
+                person.id !== selfId &&
+                person.cursor_x !== null &&
+                person.cursor_y !== null
+            )
+            .map((person) => (
+              <div
+                key={person.id}
+                className="absolute transition-all duration-300"
+                style={{
+                  left: person.cursor_x! * viewport.zoom + viewport.x,
+                  top: person.cursor_y! * viewport.zoom + viewport.y,
+                }}
+              >
+                <div className="h-0 w-0 border-b-[10px] border-l-[6px] border-r-[6px] border-b-indigo-600 border-l-transparent border-r-transparent [transform:rotate(-35deg)]" />
+                <span className="ml-2 rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-medium text-white shadow">
+                  {person.name}
+                </span>
+              </div>
+            ))}
+        </div>
+
         {!readOnly && selectedNodes.length > 1 && (
-          <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+          <div className="absolute bottom-3 left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg sm:bottom-5">
             <span className="px-2 text-xs font-medium text-slate-500">
               {selectedNodes.length} selected
             </span>
@@ -949,11 +1185,11 @@ function MapInner() {
 
         {/* buying-committee coverage strip */}
         {people.length > 0 && (
-          <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
+          <div className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm backdrop-blur sm:left-4 sm:top-4">
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               Coverage · {people.length} people
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="hidden flex-wrap gap-1.5 sm:flex">
               {(['champion', 'economic_buyer', 'decision_maker', 'technical_buyer', 'influencer', 'blocker'] as BuyingRole[]).map(
                 (r) => {
                   const count = coverage.get(r) ?? 0;
@@ -1002,6 +1238,7 @@ function MapInner() {
               person={selected}
               people={people}
               edges={edges.map(edgeToMap)}
+              initiatives={meta?.initiatives}
               readOnly={readOnly}
               onChange={updatePerson}
               onSetManager={setManager}
@@ -1059,6 +1296,89 @@ function MapInner() {
                     Restore
                   </button>
                 </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {showInitiatives && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 sm:items-center sm:p-4">
+          <div className="max-h-[88vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-2xl sm:rounded-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-semibold text-slate-900">
+                  Strategic initiatives
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Recent signals mapped to teams and evidence-backed sales hypotheses.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInitiatives(false)}
+                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-3">
+              {meta?.initiatives?.map((initiative) => (
+                <article
+                  key={initiative.name}
+                  className="rounded-xl border border-slate-200 p-4"
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold text-slate-800">
+                      {initiative.name}
+                    </h3>
+                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-indigo-700">
+                      {initiative.category}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600">{initiative.summary}</p>
+                  {(initiative.relevantTeams.length > 0 ||
+                    initiative.relevantPeople.length > 0) && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      <b>Relevant:</b>{' '}
+                      {[
+                        ...initiative.relevantTeams,
+                        ...initiative.relevantPeople,
+                      ].join(' · ')}
+                    </p>
+                  )}
+                  {initiative.salesAngles.length > 0 && (
+                    <div className="mt-3 rounded-lg bg-amber-50 p-3">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                        Sales hypotheses
+                      </div>
+                      <ul className="space-y-1 text-xs text-amber-950">
+                        {initiative.salesAngles.map((angle) => (
+                          <li key={angle}>• {angle}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {initiative.evidence.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                      {initiative.evidence.map((source) =>
+                        source.startsWith('http') ? (
+                          <a
+                            key={source}
+                            href={source}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="max-w-full truncate text-indigo-600 hover:underline"
+                          >
+                            Source
+                          </a>
+                        ) : (
+                          <span key={source} className="text-slate-400">
+                            {source}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  )}
+                </article>
               ))}
             </div>
           </div>
