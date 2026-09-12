@@ -54,10 +54,10 @@ pages, employee announcements, conference bios, and reputable profiles.
 
 This pass focuses on: ${focus}.
 
-Identify up to 25 current employees in this focus area. Include executives,
+Identify up to 10 current employees in this focus area. Include executives,
 VPs, heads, directors, and named managers when publicly verifiable. Aim for at
-least 10 people when the public evidence exists; do not stop after the first
-leadership page.
+least 8 people when the public evidence exists; do not stop after the first
+leadership page. Be concise: short titles, short summaries, no filler.
 
 Return ONLY this JSON object:
 {
@@ -74,8 +74,6 @@ Return ONLY this JSON object:
       "confidence": "high | medium | low",
       "sources": [{
         "url": "direct source URL",
-        "title": "page or document title",
-        "publisher": "publisher or company name",
         "publishedAt": "YYYY-MM-DD or null",
         "sourceType": "official | filing | press | news | profile | job | conference | other"
       }],
@@ -115,8 +113,6 @@ Return ONLY this JSON:
     "category": "product | growth | operations | technology | market",
     "evidence": [{
       "url": "direct source URL",
-      "title": "page or document title",
-      "publisher": "publisher or company name",
       "publishedAt": "YYYY-MM-DD or null",
       "sourceType": "official | filing | press | news | profile | job | conference | other"
     }],
@@ -138,7 +134,60 @@ function stripFootnotes(value: string): string {
   return value.replace(/\[\d+\]/g, '').trim();
 }
 
-function extractJson(text: string): unknown {
+/** Salvage the last complete item of { key: [ {...}, ... ] } when the model
+ *  output was truncated at the token cap mid-element. */
+function salvageTruncatedJson(raw: string): unknown | null {
+  const stack: string[] = [];
+  let inStr = false;
+  let esc = false;
+  let lastGood = -1;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+      continue;
+    }
+    if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') {
+      if (stack.pop() === undefined) return null;
+      // A closed object at depth 2 is a complete top-level array item.
+      if (ch === '}' && stack.length === 2 && stack[1] === '[') lastGood = i;
+    }
+  }
+  if (lastGood === -1) return null;
+  const cut = raw.slice(0, lastGood + 1);
+  const remaining: string[] = [];
+  inStr = false;
+  esc = false;
+  for (const ch of cut) {
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') remaining.push(ch);
+    else if (ch === '}' || ch === ']') remaining.pop();
+  }
+  const closers = remaining
+    .reverse()
+    .map((c) => (c === '{' ? '}' : ']'))
+    .join('');
+  try {
+    return JSON.parse(cut + closers);
+  } catch {
+    return null;
+  }
+}
+
+export function extractJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const candidate = fenced ? fenced[1] : text;
   const start = candidate.indexOf('{');
@@ -146,7 +195,14 @@ function extractJson(text: string): unknown {
   if (start === -1 || end === -1 || end <= start) {
     throw new Error('No JSON object in LLM response');
   }
-  return JSON.parse(candidate.slice(start, end + 1));
+  const raw = candidate.slice(start, end + 1);
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    const salvaged = salvageTruncatedJson(raw);
+    if (salvaged !== null) return salvaged;
+    throw error;
+  }
 }
 
 const CONFIDENCES: Confidence[] = ['high', 'medium', 'low'];
@@ -219,6 +275,84 @@ function normalizeSources(
   return Array.from(sources.values());
 }
 
+function isGroundingRedirect(url: string): boolean {
+  return url.includes('grounding-api-redirect') || url.includes('vertexaisearch');
+}
+
+/**
+ * Search-grounded answers cite opaque redirect links. Resolve them to the real
+ * destination so users can inspect the evidence, dropping any that fail.
+ */
+async function resolveSourceUrls(
+  people: ResearchedPerson[],
+  initiatives: StrategicInitiative[]
+): Promise<void> {
+  const allSources = [
+    ...people.flatMap((person) => person.sourceDetails),
+    ...initiatives.flatMap((initiative) => initiative.evidenceDetails),
+  ];
+  const pending = Array.from(
+    new Set(
+      allSources.filter((s) => isGroundingRedirect(s.url)).map((s) => s.url)
+    )
+  ).slice(0, 40);
+  if (pending.length === 0) return;
+
+  const resolved = new Map<string, string | null>();
+  const batchSize = 10;
+  for (let i = 0; i < pending.length; i += batchSize) {
+    await Promise.all(
+      pending.slice(i, i + batchSize).map(async (url) => {
+        try {
+          const res = await fetch(url, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(5_000),
+          });
+          const location = res.headers.get('location');
+          resolved.set(
+            url,
+            location && /^https?:\/\//i.test(location) ? location : null
+          );
+        } catch {
+          resolved.set(url, null);
+        }
+      })
+    );
+  }
+
+  const rewrite = (sources: ResearchSource[]): ResearchSource[] => {
+    const next = new Map<string, ResearchSource>();
+    for (const source of sources) {
+      if (!isGroundingRedirect(source.url)) {
+        next.set(source.url, source);
+        continue;
+      }
+      const destination = resolved.get(source.url);
+      if (!destination) continue;
+      next.set(destination, { ...source, url: destination });
+    }
+    return Array.from(next.values());
+  };
+
+  for (const person of people) {
+    person.sourceDetails = rewrite(person.sourceDetails);
+    person.sources = person.sourceDetails.map((source) => source.url);
+    person.source = person.sources[0] ?? null;
+    person.corroborationCount = new Set(
+      person.sourceDetails.map(sourceDomain).filter(Boolean)
+    ).size;
+    if (person.sources.length === 0) {
+      person.lastVerifiedAt = null;
+      if (person.researchStatus === 'verified')
+        person.researchStatus = 'possibly_stale';
+    }
+  }
+  for (const initiative of initiatives) {
+    initiative.evidenceDetails = rewrite(initiative.evidenceDetails);
+    initiative.evidence = initiative.evidenceDetails.map((s) => s.url);
+  }
+}
+
 function sourceDomain(source: ResearchSource): string {
   try {
     return new URL(source.url).hostname.replace(/^www\./, '').toLowerCase();
@@ -256,7 +390,7 @@ function sourceQuality(
   return { freshness, corroborationCount };
 }
 
-function normalizePeople(
+export function normalizePeople(
   raw: unknown,
   limit = 60,
   nowMs = Date.now()
@@ -273,7 +407,13 @@ function normalizePeople(
     const key = name.toLowerCase();
     const conf = CONFIDENCES.includes(p.confidence as Confidence)
       ? (p.confidence as Confidence)
-      : 'low';
+      : typeof p.confidence === 'number'
+        ? p.confidence >= 0.8
+          ? 'high'
+          : p.confidence >= 0.5
+            ? 'medium'
+            : 'low'
+        : 'low';
     const sourceDetails = normalizeSources(
       Array.isArray(p.sources)
         ? p.sources
@@ -519,7 +659,7 @@ export async function researchOrg(
       : chat([
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: initiativesPrompt(domain) },
-        ], { webSearch: true }).catch(() => null);
+        ], { webSearch: true, maxTokens: 4000 }).catch(() => null);
     const focuses = requestedFocus
       ? [
           `targeted enrichment for: ${requestedFocus}. Find the named person or ` +
@@ -536,7 +676,7 @@ export async function researchOrg(
         const result = await chat([
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: researchPrompt(domain, focus) },
-        ], { webSearch: true });
+        ], { webSearch: true, maxTokens: 4000 });
         const parsed = extractJson(result.content) as {
           companyName?: unknown;
           people?: unknown;
@@ -544,6 +684,13 @@ export async function researchOrg(
         return { parsed, provider: result.provider };
       })
     );
+    for (const pass of passes) {
+      if (pass.status === 'rejected') {
+        console.warn(
+          `[research] pass failed: ${String(pass.reason).slice(0, 200)}`
+        );
+      }
+    }
     const successful = passes.flatMap((pass) =>
       pass.status === 'fulfilled' ? [pass.value] : []
     );
@@ -568,7 +715,7 @@ export async function researchOrg(
                 'Return only people you can verify; some functions may not exist.'
             ),
           },
-        ], { webSearch: true });
+        ], { webSearch: true, maxTokens: 4000 });
         const parsedFollowUp = extractJson(followUp.content) as {
           people?: unknown;
         };
@@ -595,6 +742,7 @@ export async function researchOrg(
         initiatives = [];
       }
     }
+    await resolveSourceUrls(people, initiatives);
     return {
       companyName:
         typeof companyName === 'string'

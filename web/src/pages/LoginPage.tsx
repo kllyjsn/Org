@@ -350,8 +350,8 @@ export default function LoginPage() {
                   </div>
                 </div>
                 <div className="grid gap-4 p-4 sm:p-6 md:grid-cols-[1.25fr_.75fr]">
-                  <div className="td-grid relative min-h-[360px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="absolute left-1/2 top-7 z-10 w-44 -translate-x-1/2 rounded-xl border border-[#5b4cf0]/30 bg-white p-3 shadow-lg">
+                  <div className="td-grid relative min-h-[440px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 sm:min-h-[360px]">
+                    <div className="absolute left-1/2 top-7 z-10 w-40 -translate-x-1/2 rounded-xl border border-[#5b4cf0]/30 bg-white p-3 shadow-lg sm:w-44">
                       <div className="text-[9px] font-semibold uppercase tracking-wide text-[#5b4cf0]">
                         Decision area
                       </div>
@@ -367,7 +367,7 @@ export default function LoginPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="absolute left-[10%] top-[47%] z-10 w-36 rounded-xl border border-slate-200 bg-white p-3 shadow-md sm:left-[18%]">
+                    <div className="absolute left-3 top-[29%] z-10 w-32 rounded-xl border border-slate-200 bg-white p-3 shadow-md sm:left-[18%] sm:top-[47%] sm:w-36">
                       <div className="text-[9px] font-semibold uppercase text-slate-400">
                         Champion path
                       </div>
@@ -378,7 +378,7 @@ export default function LoginPage() {
                         Inferred assignment
                       </span>
                     </div>
-                    <div className="absolute right-[8%] top-[52%] z-10 w-36 rounded-xl border border-slate-200 bg-white p-3 shadow-md sm:right-[13%]">
+                    <div className="absolute right-3 top-[47%] z-10 w-32 rounded-xl border border-slate-200 bg-white p-3 shadow-md sm:right-[13%] sm:top-[52%] sm:w-36">
                       <div className="text-[9px] font-semibold uppercase text-slate-400">
                         Validation
                       </div>
@@ -389,7 +389,7 @@ export default function LoginPage() {
                         Sourced
                       </span>
                     </div>
-                    <div className="absolute bottom-6 left-1/2 z-10 w-40 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-3 shadow-md">
+                    <div className="absolute bottom-4 left-1/2 z-10 w-36 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-3 shadow-md sm:bottom-6 sm:w-40">
                       <div className="text-[9px] font-semibold uppercase text-slate-400">
                         Technical influence
                       </div>

@@ -321,7 +321,9 @@ export default function PersonPanel({
                           .catch(() => undefined);
                       }}
                     >
-                      {source.title || source.publisher || source.url}
+                      {source.title ||
+                        source.publisher ||
+                        source.url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
                     </a>
                   ) : (
                     source.title || source.url

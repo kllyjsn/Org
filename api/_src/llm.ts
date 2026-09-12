@@ -66,13 +66,14 @@ const TIMEOUT_MS = 90_000;
 async function postJson(
   url: string,
   headers: Record<string, string>,
-  body: unknown
+  body: unknown,
+  timeoutMs = TIMEOUT_MS
 ): Promise<unknown> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -135,7 +136,10 @@ async function postGroundedGemini(
         maxOutputTokens: maxTokens,
         temperature: 0.1,
       },
-    }
+    },
+    // Grounded calls are slower (search + generation); cap them below the
+    // serverless function budget so we can fall back to a plain call.
+    40_000
   )) as GeminiGenerateContentResponse;
   const content = payload.candidates?.[0]?.content?.parts
     ?.map((part) => part.text ?? '')
@@ -166,11 +170,18 @@ export async function chat(
   for (const p of providers) {
     try {
       if (options?.webSearch && p.name === 'gemini') {
-        return await postGroundedGemini(
-          p,
-          messages,
-          options.maxTokens ?? 8_000
-        );
+        try {
+          return await postGroundedGemini(
+            p,
+            messages,
+            options.maxTokens ?? 8_000
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[llm] gemini grounded search failed, retrying ungrounded: ${msg.slice(0, 200)}`
+          );
+        }
       }
       if (options?.webSearch && !p.webSearch) continue;
       const payload = await postJson(
@@ -183,7 +194,8 @@ export async function chat(
           ...(options?.json
             ? { response_format: { type: 'json_object' } }
             : {}),
-        }
+        },
+        options?.webSearch ? 18_000 : TIMEOUT_MS
       );
       return {
         content: extractContent(payload),
