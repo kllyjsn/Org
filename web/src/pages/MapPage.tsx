@@ -751,7 +751,7 @@ function MapInner() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
+      <header className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 sm:gap-3 sm:px-4">
         <Link
           to="/app"
           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
@@ -759,22 +759,22 @@ function MapInner() {
           <ArrowLeft size={17} />
         </Link>
         <input
-          className="w-56 rounded-lg border border-transparent px-2 py-1 text-sm font-semibold outline-none hover:border-slate-200 focus:border-indigo-400"
+          className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1 text-sm font-semibold outline-none hover:border-slate-200 focus:border-indigo-400 sm:w-56 sm:flex-none"
           value={mapName}
           onChange={(e) => setMapName(e.target.value)}
           onBlur={saveName}
           disabled={readOnly}
         />
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+        <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 sm:inline">
           {domain}
         </span>
         {meta?.provider && (
-          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600">
+          <span className="hidden rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600 md:inline">
             {meta.tier} · {meta.provider}
           </span>
         )}
-        <div className="flex-1" />
-        <span className="text-xs text-slate-400">
+        <div className="hidden flex-1 sm:block" />
+        <span className="hidden text-xs text-slate-400 sm:inline">
           {saveState === 'saving'
             ? 'Saving…'
             : saveState === 'dirty'
@@ -797,8 +797,9 @@ function MapInner() {
             </span>
           ))}
         </div>
-        {!readOnly && (
-          <>
+        <div className="order-last flex w-full items-center gap-2 overflow-x-auto border-t border-slate-100 pt-2 sm:order-none sm:w-auto sm:border-0 sm:pt-0">
+          {!readOnly && (
+            <>
             <div className="flex overflow-hidden rounded-lg border border-slate-200">
               <button
                 onClick={undo}
@@ -841,14 +842,15 @@ function MapInner() {
             >
               <Share2 size={15} /> Share
             </button>
-          </>
-        )}
-        <button
-          onClick={() => void exportPng()}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          <Download size={15} /> PNG
-        </button>
+            </>
+          )}
+          <button
+            onClick={() => void exportPng()}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            <Download size={15} /> PNG
+          </button>
+        </div>
       </header>
 
       <div className="relative flex-1">

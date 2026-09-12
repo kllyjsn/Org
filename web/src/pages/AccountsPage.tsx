@@ -220,11 +220,11 @@ export default function AccountsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
-        <div className="flex items-center gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-3 sm:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
           <Wordmark size="md" />
           <select
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm"
+            className="min-w-0 max-w-48 flex-1 truncate rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm sm:flex-none"
             value={workspaceId ?? ''}
             onChange={(e) => selectWorkspace(e.target.value)}
           >
@@ -253,19 +253,19 @@ export default function AccountsPage() {
           ) : (
             <button
               onClick={() => setCreatingWorkspace(true)}
-              className="text-sm text-slate-500 hover:text-slate-700"
+              className="hidden text-sm text-slate-500 hover:text-slate-700 sm:block"
             >
               + Workspace
             </button>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-3">
           {workspaceId && (
             <button
               onClick={() => setShowMembers(true)}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
             >
-              <Users size={15} /> Members
+              <Users size={15} /> <span className="hidden sm:inline">Members</span>
             </button>
           )}
           {workspace?.plan === 'free' && (
@@ -273,10 +273,10 @@ export default function AccountsPage() {
               onClick={() => setShowPricing(true)}
               className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-100"
             >
-              Upgrade · $10/mo
+              Upgrade <span className="hidden sm:inline">· $10/mo</span>
             </button>
           )}
-          <span className="text-sm text-slate-500">{user?.name}</span>
+          <span className="hidden text-sm text-slate-500 lg:inline">{user?.name}</span>
           <button
             onClick={() => void logout()}
             className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
@@ -287,7 +287,7 @@ export default function AccountsPage() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-6">
+      <main className="flex-1 overflow-auto p-3 sm:p-6">
         <div className="mb-5 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-slate-800">Account maps</h1>
         </div>

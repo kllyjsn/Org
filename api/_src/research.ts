@@ -22,16 +22,20 @@ export interface ResearchResult {
 const SYSTEM_PROMPT = `You are an analyst mapping the organizational structure of companies.
 You answer only with strict JSON. No markdown, no prose, no footnotes.`;
 
-function researchPrompt(domain: string): string {
-  return `Map the leadership org chart of the company at domain "${domain}".
+function researchPrompt(domain: string, focus: string): string {
+  return `Map the organizational structure of the company at domain "${domain}".
 
 Use public sources: the company's leadership/team/about pages, press releases,
 news coverage, SEC filings (10-K, DEF 14A) for public companies, and public
-job postings.
+job postings. Search beyond the main leadership page, including department
+pages, employee announcements, conference bios, and reputable profiles.
 
-Identify up to 25 current employees — executives first, then functional and
-department heads (sales, engineering, product, finance, marketing, people,
-legal, security, operations).
+This pass focuses on: ${focus}.
+
+Identify up to 25 current employees in this focus area. Include executives,
+VPs, heads, directors, and named managers when publicly verifiable. Aim for at
+least 10 people when the public evidence exists; do not stop after the first
+leadership page.
 
 Return ONLY this JSON object:
 {
@@ -74,7 +78,7 @@ function extractJson(text: string): unknown {
 
 const CONFIDENCES: Confidence[] = ['high', 'medium', 'low'];
 
-function normalizePeople(raw: unknown): ResearchedPerson[] {
+function normalizePeople(raw: unknown, limit = 60): ResearchedPerson[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const people: ResearchedPerson[] = [];
@@ -102,7 +106,7 @@ function normalizePeople(raw: unknown): ResearchedPerson[] {
       confidence: conf,
       source: typeof p.source === 'string' ? stripFootnotes(p.source) : null,
     });
-    if (people.length >= 25) break;
+    if (people.length >= limit) break;
   }
   return people;
 }
@@ -134,23 +138,46 @@ export async function researchOrg(domain: string): Promise<ResearchResult> {
   if (provider === 'fixture') return fixtureOrg(domain);
 
   try {
-    const { content } = await chat([
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: researchPrompt(domain) },
-    ]);
-    const parsed = extractJson(content) as {
-      companyName?: unknown;
-      people?: unknown;
-    };
-    const people = normalizePeople(parsed.people);
+    const focuses = [
+      'executive leadership and company-wide reporting structure',
+      'engineering, product, design, data, security, and technology leadership',
+      'sales, marketing, customer success, finance, operations, legal, and people leadership',
+    ];
+    const passes = await Promise.allSettled(
+      focuses.map(async (focus) => {
+        const result = await chat([
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: researchPrompt(domain, focus) },
+        ]);
+        const parsed = extractJson(result.content) as {
+          companyName?: unknown;
+          people?: unknown;
+        };
+        return { parsed, provider: result.provider };
+      })
+    );
+    const successful = passes.flatMap((pass) =>
+      pass.status === 'fulfilled' ? [pass.value] : []
+    );
+    if (successful.length === 0) {
+      throw new Error('All company research passes failed');
+    }
+    const people = normalizePeople(
+      successful.flatMap((pass) =>
+        Array.isArray(pass.parsed.people) ? pass.parsed.people : []
+      )
+    );
+    const companyName = successful.find(
+      (pass) => typeof pass.parsed.companyName === 'string'
+    )?.parsed.companyName;
     return {
       companyName:
-        typeof parsed.companyName === 'string'
-          ? stripFootnotes(parsed.companyName)
+        typeof companyName === 'string'
+          ? stripFootnotes(companyName)
           : null,
       domain,
       people,
-      provider,
+      provider: successful[0].provider,
       tier: 'T0',
       demo: false,
     };
