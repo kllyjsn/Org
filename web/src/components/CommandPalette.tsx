@@ -11,6 +11,8 @@ import {
   Lightbulb,
   Loader2,
   Search,
+  Send,
+  X,
   Share2,
   Sparkles,
   UserRound,
@@ -21,6 +23,7 @@ import type {
   AccountAgentMessage,
   Person,
 } from '../types';
+import type { AgentCommandResult } from '../lib/agentCanvas';
 
 export type PaletteAction =
   | 'layout'
@@ -44,6 +47,7 @@ type Choice =
 interface ConversationMessage extends AccountAgentMessage {
   citations?: AccountAgentAnswer['citations'];
   actions?: AccountAgentAction[];
+  canvasAction?: AgentCommandResult['command'];
 }
 
 const ACTIONS: Extract<Choice, { kind: 'action' }>[] = [
@@ -131,7 +135,7 @@ export default function CommandPalette({
   onClose: () => void;
   onFocusPerson: (person: Person) => void;
   onRunAction: (action: PaletteAction) => void;
-  onRunCommand: (query: string) => string | null;
+  onRunCommand: (query: string) => AgentCommandResult | null;
   onAskAgent: (messages: AccountAgentMessage[]) => Promise<AccountAgentAnswer>;
   onRunAgentAction: (action: AccountAgentAction) => void;
 }) {
@@ -190,7 +194,11 @@ export default function CommandPalette({
       setConversation((messages) => [
         ...messages,
         { role: 'user', content: question },
-        { role: 'assistant', content: localResult },
+        {
+          role: 'assistant',
+          content: localResult.message,
+          canvasAction: localResult.command,
+        },
       ]);
       setQuery('');
       return;
@@ -237,6 +245,35 @@ export default function CommandPalette({
       return;
     }
     void ask(choice.query);
+  };
+
+  const runCanvasCommand = (
+    command: AgentCommandResult['command'],
+    index: number
+  ) => {
+    if (!command) return;
+    const result = command.run();
+    setConversation((messages) =>
+      messages.map((message, messageIndex) =>
+        messageIndex === index
+          ? { ...message, content: result, canvasAction: undefined }
+          : message
+      )
+    );
+  };
+
+  const cancelCanvasCommand = (index: number) => {
+    setConversation((messages) =>
+      messages.map((message, messageIndex) =>
+        messageIndex === index
+          ? {
+              ...message,
+              content: `${message.content} Cancelled — no canvas changes were applied.`,
+              canvasAction: undefined,
+            }
+          : message
+      )
+    );
   };
 
   const submit = () => {
@@ -291,8 +328,8 @@ export default function CommandPalette({
             }}
             placeholder={
               conversation.length > 0
-                ? 'Ask a follow-up about this account…'
-                : 'Find anyone, give a command, or ask about the account…'
+                ? 'Ask a follow-up or preview another change…'
+                : 'Find anyone, preview a change, or ask about the account…'
             }
             className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none placeholder:font-normal placeholder:text-slate-400 focus-visible:!outline-none sm:text-lg"
           />
@@ -341,6 +378,102 @@ export default function CommandPalette({
                               </span>
                             )
                           )}
+                        </div>
+                      )}
+                      {message.canvasAction && (
+                        <div className="mt-3 rounded-2xl border border-[#ddd9ff] bg-[#f5f4ff] p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#5b4cf0]">
+                                Canvas preview
+                              </div>
+                              <div className="mt-1 text-sm font-semibold text-slate-950">
+                                {message.canvasAction.preview.title}
+                              </div>
+                            </div>
+                            <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 shadow-sm">
+                              {message.canvasAction.preview.source === 'sourced'
+                                ? 'sourced'
+                                : message.canvasAction.preview.inferredCount > 0
+                                  ? `${message.canvasAction.preview.inferredCount} inferred`
+                                  : 'safe'}
+                            </span>
+                          </div>
+                          {message.canvasAction.preview.kind === 'group' && (
+                            <div className="mt-3 grid gap-1.5">
+                              {message.canvasAction.preview.groups.map((group) => (
+                                <div
+                                  key={group.name}
+                                  className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-xs"
+                                >
+                                  <span className="truncate font-medium text-slate-700">
+                                    {group.name}
+                                  </span>
+                                  <span className="shrink-0 text-[10px] font-semibold text-slate-400">
+                                    {group.count} people
+                                    {group.inferred > 0 ? ` · ${group.inferred} inferred` : ''}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {message.canvasAction.preview.kind === 'edit' && (
+                            <div className="mt-3 space-y-1.5">
+                              {message.canvasAction.preview.people.map((person) => (
+                                <div
+                                  key={person.name}
+                                  className="rounded-xl bg-white px-3 py-2 text-xs"
+                                >
+                                  <div className="font-semibold text-slate-700">{person.name}</div>
+                                  <div className="mt-1 space-y-0.5 text-slate-500">
+                                    {person.changes.map((change) => (
+                                      <div key={change}>{change}</div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {message.canvasAction.preview.kind === 'relationship' && (
+                            <div className="mt-3 space-y-1.5">
+                              {message.canvasAction.preview.edges.map((edge, edgeIndex) => (
+                                <div
+                                  key={`${edge.from}-${edge.to}-${edgeIndex}`}
+                                  className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600"
+                                >
+                                  {edge.from} {edge.kind === 'reports' ? 'manages' : 'influences'} {edge.to}
+                                  {edge.inferred ? ' · inferred' : ''}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {message.canvasAction.preview.kind === 'relationship_view' && (
+                            <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs text-slate-500">
+                              Switch visible relationships to{' '}
+                              {message.canvasAction.preview.view === 'all'
+                                ? 'all reporting and influence links'
+                                : `${message.canvasAction.preview.view} links only`}.
+                            </div>
+                          )}
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button
+                              onClick={() =>
+                                runCanvasCommand(message.canvasAction, index)
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6b5cf8]"
+                            >
+                              <Send size={12} /> Apply
+                            </button>
+                            <button
+                              onClick={() => cancelCanvasCommand(index)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300"
+                            >
+                              <X size={12} /> Cancel
+                            </button>
+                            <span className="text-[10px] text-slate-400">
+                              Undo remains available after applying
+                            </span>
+                          </div>
                         </div>
                       )}
                       {(message.actions?.length ?? 0) > 0 && (
@@ -508,7 +641,7 @@ export default function CommandPalette({
           <span>
             {conversation.length > 0
               ? 'Answers stay grounded in this map and its saved evidence'
-              : 'Try “who should I contact and why?”'}
+              : 'Try “split this group by product” or “who should I contact and why?”'}
           </span>
           {!readOnly && (
             <span className="hidden items-center gap-1 sm:flex">

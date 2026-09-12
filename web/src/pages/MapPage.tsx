@@ -20,6 +20,7 @@ type EdgeData = {
   kind: 'reports' | 'influence';
   label?: string | null;
   inferred?: boolean;
+  hidden?: boolean;
 };
 type FlowEdge = Edge<EdgeData>;
 
@@ -62,6 +63,17 @@ import AccountStrategyModal from '../components/AccountStrategyModal';
 import ChangeAlertsModal from '../components/ChangeAlertsModal';
 import CommandPalette from '../components/CommandPalette';
 import type { PaletteAction } from '../components/CommandPalette';
+import {
+  describeGrouping,
+  describePersonEdit,
+  describeRelationship,
+  describeRelationshipView,
+} from '../lib/agentCanvas';
+import type {
+  AgentCommandResult,
+  AgentGroupingField,
+  AgentRelationshipView,
+} from '../lib/agentCanvas';
 import DeepResearchModal from '../components/DeepResearchModal';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
@@ -708,6 +720,136 @@ function MapInner() {
     });
   }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
 
+  const semanticGroup = useCallback(
+    (
+      field: AgentGroupingField,
+      scope: 'map' | 'selection',
+      explicitIds?: Set<string>
+    ) => {
+      const ids =
+        explicitIds && explicitIds.size > 0
+          ? explicitIds
+          : new Set(
+              scope === 'selection'
+                ? selectedNodes.map((node) => node.id)
+                : nodes.map((node) => node.id)
+            );
+      if (ids.size === 0) return 'There are no people to group yet.';
+      recordHistory();
+      const sorted = nodes
+        .filter((node) => ids.has(node.id))
+        .sort(
+          (a, b) =>
+            a.position.y - b.position.y || a.position.x - b.position.x
+        );
+      const clusters = new Map<string, Node<PersonNodeData>[]>();
+      for (const node of sorted) {
+        const person = node.data.person;
+        const value =
+          field === 'businessUnit'
+            ? person.department
+            : (person[field] ?? person.department);
+        const key = value ?? 'Unassigned';
+        clusters.set(key, [...(clusters.get(key) ?? []), node]);
+      }
+      const groupIds = new Map<string, string>();
+      const positions = new Map<string, { x: number; y: number }>();
+      let column = 0;
+      for (const [name, members] of clusters) {
+        const groupId = crypto.randomUUID();
+        groupIds.set(name, groupId);
+        const positionsByGroup = members.map((member) => ({
+          ...member.data.person,
+          x: 0,
+          y: 0,
+        }));
+        const scopedEdges = edges
+          .map(edgeToMap)
+          .filter(
+            (edge) =>
+              ids.has(edge.from) &&
+              ids.has(edge.to) &&
+              members.some((member) => member.id === edge.from) &&
+              members.some((member) => member.id === edge.to)
+          );
+        const laid = applyLayout(positionsByGroup, scopedEdges);
+        const baseX = column * 1_380;
+        laid.forEach((person) =>
+          positions.set(person.id, { x: baseX + person.x, y: person.y })
+        );
+        column += 1;
+      }
+      setNodes((items) => {
+        const next = items.map((node) => {
+          if (!ids.has(node.id)) return node;
+          const person = node.data.person;
+          const key =
+            (field === 'businessUnit'
+              ? person.department
+              : (person[field] ?? person.department)) ?? 'Unassigned';
+          return {
+            ...node,
+            selected: true,
+            position: positions.get(node.id) ?? node.position,
+            data: {
+              ...node.data,
+              person: { ...person, groupId: groupIds.get(key) },
+            },
+          };
+        });
+        markDirty(next, edges);
+        return next;
+      });
+      setSelectedId(null);
+      window.setTimeout(
+        () => void rf.fitView({ padding: 0.22, duration: 450 }),
+        50
+      );
+      return `Grouped ${ids.size} people into ${clusters.size} ${clusters.size === 1 ? 'lane' : 'lanes'}.`;
+    },
+    [nodes, selectedNodes, edges, recordHistory, setNodes, markDirty, rf]
+  );
+
+  const setRelationshipView = useCallback(
+    (view: AgentRelationshipView) => {
+      recordHistory();
+      setEdges((items) => {
+        const next = items.map((edge) => ({
+          ...edge,
+          hidden:
+            view === 'all' ? false : (edge.data?.kind ?? 'reports') !== view,
+        }));
+        markDirty(nodes, next);
+        return next;
+      });
+      return view === 'all'
+        ? 'Showing all relationships.'
+        : view === 'reports'
+          ? 'Showing reporting relationships only.'
+          : 'Showing influence relationships only.';
+    },
+    [nodes, recordHistory, setEdges, markDirty]
+  );
+
+  const previewGroup = useCallback(
+    (
+      field: AgentGroupingField,
+      scope: 'map' | 'selection',
+      explicitIds?: Set<string>
+    ) => {
+      const scopedPeople =
+        explicitIds && explicitIds.size > 0
+          ? people.filter((person) => explicitIds.has(person.id))
+          : scope === 'selection'
+            ? selectedNodes.map((node) => node.data.person)
+            : people;
+      return describeGrouping(scopedPeople, field, scope, () =>
+        semanticGroup(field, scope, explicitIds)
+      );
+    },
+    [people, selectedNodes, semanticGroup]
+  );
+
   const copySelection = useCallback(() => {
     if (selectedNodes.length === 0) return;
     const selectedIds = new Set(selectedNodes.map((node) => node.id));
@@ -825,23 +967,69 @@ function MapInner() {
   );
 
   const runAgentCommand = useCallback(
-    (raw: string): string | null => {
+    (raw: string): AgentCommandResult | null => {
+      const say = (message: string): AgentCommandResult => ({ message });
       const query = raw.trim();
       const lower = query.toLowerCase();
-      if (!query) return 'I couldn’t find a command to run.';
+      if (!query) return say('I couldn’t find a command to run.');
 
+      const groupField: AgentGroupingField = /\bproduct/.test(lower)
+        ? 'productLine'
+        : /\b(team|sub-?team)s?\b/.test(lower)
+          ? 'team'
+          : 'businessUnit';
+      if (
+        /\b(split|group|cluster|reorganize|reorganise|break|divide|organize|organise)\b/.test(
+          lower
+        ) &&
+        (/\b(by|into|using)\b/.test(lower) ||
+          /\b(group|teams?|products?|business units?|departments?)\b/.test(lower))
+      ) {
+        if (readOnly) return say('I couldn’t edit this read-only map.');
+        const selectionIds = new Set(
+          /\b(this|these|selected|selection|current group)\b/.test(lower)
+            ? selectedNodes.map((node) => node.id)
+            : []
+        );
+        const selectedGroup = selectedId
+          ? nodes.find(
+              (node) =>
+                node.id === selectedId && Boolean(node.data.person.groupId)
+            )?.data.person.groupId
+          : undefined;
+        if (selectedGroup && /\b(this|these|selected|selection|current group)\b/.test(lower)) {
+          nodes.forEach((node) => {
+            if (node.data.person.groupId === selectedGroup) {
+              selectionIds.add(node.id);
+            }
+          });
+        }
+        const scope = selectionIds.size > 0 ? 'selection' : 'map';
+        return previewGroup(groupField, scope, selectionIds);
+      }
+      if (
+        /\b(show|display|filter|view|use|switch to)\b/.test(lower) &&
+        /\b(influence|influences|reporting|reports|hierarchy|managerial|all relationships)\b/.test(lower)
+      ) {
+        const view: AgentRelationshipView = /influence/.test(lower)
+          ? 'influence'
+          : /all/.test(lower)
+            ? 'all'
+            : 'reports';
+        return describeRelationshipView(view, () => setRelationshipView(view));
+      }
       if (/\b(arrange|organize|layout|tidy)\b/.test(lower)) {
-        if (readOnly) return 'I couldn’t edit this read-only map.';
+        if (readOnly) return say('I couldn’t edit this read-only map.');
         autoLayout();
-        return 'I arranged the org chart.';
+        return say('I arranged the org chart.');
       }
       if (/\b(overview|show all|whole account|fit all)\b/.test(lower)) {
         setSelectedId(null);
         void rf.fitView({ padding: 0.2, duration: 450 });
-        return 'Showing the whole account.';
+        return say('Showing the whole account.');
       }
       if (/\b(research|enrich|find more people)\b/.test(lower)) {
-        if (readOnly) return 'I couldn’t edit this read-only map.';
+        if (readOnly) return say('I couldn’t edit this read-only map.');
         setDeepResearchFocus(
           query
             .replace(/\b(deep research|research|enrich|find more people)\b/gi, '')
@@ -849,7 +1037,7 @@ function MapInner() {
             .trim()
         );
         setShowDeepResearch(true);
-        return 'Opening targeted deep research.';
+        return say('Opening targeted deep research.');
       }
       if (
         /\b(build|open|show|create|generate|view)\b.*\b(account brief|relationship path|deal plan|account strategy|path in)\b/.test(
@@ -858,7 +1046,7 @@ function MapInner() {
         /^(account brief|relationship path|deal plan|account strategy)$/.test(lower)
       ) {
         setShowStrategy(true);
-        return 'Opening the account strategy.';
+        return say('Opening the account strategy.');
       }
       if (
         /\b(what changed|show changes|show account changes|change alerts?|account movement)\b/.test(
@@ -866,7 +1054,7 @@ function MapInner() {
         )
       ) {
         setShowChanges(true);
-        return 'Opening account change alerts.';
+        return say('Opening account change alerts.');
       }
       if (
         /\b(open|show|view|review)\b.*\b(initiative|strategic priorities|why now)\b/.test(
@@ -875,11 +1063,11 @@ function MapInner() {
         lower === 'why now'
       ) {
         setShowInitiatives(true);
-        return 'Opening initiative intelligence.';
+        return say('Opening initiative intelligence.');
       }
       if (/\bshare\b/.test(lower)) {
         setShowShare(true);
-        return 'Opening sharing controls.';
+        return say('Opening sharing controls.');
       }
 
       const matchedPeople = [...people]
@@ -888,7 +1076,7 @@ function MapInner() {
       const matchedPerson = matchedPeople[0];
 
       if (lower.includes('reports to') && matchedPeople.length >= 2) {
-        if (readOnly) return 'I couldn’t edit this read-only map.';
+        if (readOnly) return say('I couldn’t edit this read-only map.');
         const divider = lower.indexOf('reports to');
         const subordinate = matchedPeople.find(
           (person) => lower.indexOf(person.name.toLowerCase()) < divider
@@ -897,14 +1085,16 @@ function MapInner() {
           (person) => lower.indexOf(person.name.toLowerCase()) > divider
         );
         if (subordinate && manager) {
-          setManager(subordinate.id, manager.id);
-          focusPeople([subordinate, manager]);
-          return `${subordinate.name} now reports to ${manager.name}.`;
+          return describeRelationship(manager, subordinate, 'reports', false, () => {
+            setManager(subordinate.id, manager.id);
+            focusPeople([subordinate, manager]);
+            return `${subordinate.name} now reports to ${manager.name}.`;
+          });
         }
       }
 
       if (matchedPeople.length >= 2 && /\binfluences?\b/.test(lower)) {
-        if (readOnly) return 'I couldn’t edit this read-only map.';
+        if (readOnly) return say('I couldn’t edit this read-only map.');
         const divider = lower.search(/\binfluences?\b/);
         const from = matchedPeople.find(
           (person) => lower.indexOf(person.name.toLowerCase()) < divider
@@ -913,9 +1103,11 @@ function MapInner() {
           (person) => lower.indexOf(person.name.toLowerCase()) > divider
         );
         if (from && to) {
-          addInfluence(from.id, to.id, 'influences');
-          focusPeople([from, to]);
-          return `Added an influence link from ${from.name} to ${to.name}.`;
+          return describeRelationship(from, to, 'influence', false, () => {
+            addInfluence(from.id, to.id, 'influences');
+            focusPeople([from, to]);
+            return `Added an influence link from ${from.name} to ${to.name}.`;
+          });
         }
       }
 
@@ -935,10 +1127,16 @@ function MapInner() {
         matchedRole &&
         /\b(make|mark|set|assign)\b/.test(lower)
       ) {
-        if (readOnly) return 'I couldn’t edit this read-only map.';
-        updatePerson({ ...matchedPerson, role: matchedRole.role });
-        focusPeople([matchedPerson]);
-        return `${matchedPerson.name} is now marked as ${matchedRole.label}.`;
+        if (readOnly) return say('I couldn’t edit this read-only map.');
+        return describePersonEdit(
+          matchedPerson,
+          [{ label: 'buying role', value: matchedRole.label }],
+          () => {
+            updatePerson({ ...matchedPerson, role: matchedRole.role });
+            focusPeople([matchedPerson]);
+            return `${matchedPerson.name} is now marked as ${matchedRole.label}.`;
+          }
+        );
       }
 
       const titleMatch = query.match(/\btitle\s+to\s+(.+)$/i);
@@ -947,44 +1145,56 @@ function MapInner() {
         titleMatch &&
         /\b(set|change|update)\b/.test(lower)
       ) {
-        if (readOnly) return 'I couldn’t edit this read-only map.';
+        if (readOnly) return say('I couldn’t edit this read-only map.');
         const title = titleMatch[1].trim();
-        updatePerson({ ...matchedPerson, title });
-        focusPeople([matchedPerson]);
-        return `Updated ${matchedPerson.name}’s title to ${title}.`;
+        return describePersonEdit(
+          matchedPerson,
+          [{ label: 'title', value: title }],
+          () => {
+            updatePerson({ ...matchedPerson, title });
+            focusPeople([matchedPerson]);
+            return `Updated ${matchedPerson.name}’s title to ${title}.`;
+          }
+        );
       }
 
       const teamMove = lower.match(
         /^(?:move|put) .+? (?:to|on|in) (?:the )?(.+?)(?: team)?$/
       );
       if (matchedPerson && teamMove) {
-        if (readOnly) return 'I couldn’t edit this read-only map.';
-        const team = query.slice(
-          query.toLowerCase().lastIndexOf(teamMove[1])
-        ).replace(/\s+team$/i, '');
-        updatePerson({
-          ...matchedPerson,
-          team,
-          teamEvidence: 'inferred',
-        });
-        focusPeople([matchedPerson]);
-        return `Moved ${matchedPerson.name} to the ${team} team as an inferred assignment.`;
+        if (readOnly) return say('I couldn’t edit this read-only map.');
+        const team = query
+          .slice(query.toLowerCase().lastIndexOf(teamMove[1]))
+          .replace(/\s+team$/i, '');
+        return describePersonEdit(
+          matchedPerson,
+          [{ label: 'team', value: team, inferred: true }],
+          () => {
+            updatePerson({
+              ...matchedPerson,
+              team,
+              teamEvidence: 'inferred',
+            });
+            focusPeople([matchedPerson]);
+            return `Moved ${matchedPerson.name} to the ${team} team as an inferred assignment.`;
+          }
+        );
       }
 
       const addMatch = query.match(
         /^(?:add|create)\s+(.+?)(?:\s+(?:as|,)\s+(.+))?$/i
       );
       if (addMatch) {
-        if (readOnly) return 'I couldn’t edit this read-only map.';
+        if (readOnly) return say('I couldn’t edit this read-only map.');
         const name = addMatch[1].trim();
         const title = addMatch[2]?.trim() ?? '';
         addPerson({ name, title });
-        return `Added ${name}${title ? ` as ${title}` : ''}.`;
+        return say(`Added ${name}${title ? ` as ${title}` : ''}.`);
       }
 
       if (matchedPerson) {
         focusPeople([matchedPerson]);
-        return `Found ${matchedPerson.name}.`;
+        return say(`Found ${matchedPerson.name}.`);
       }
 
       const searchTerms = lower
@@ -1010,7 +1220,9 @@ function MapInner() {
       });
       if (matches.length > 0) {
         focusPeople(matches);
-        return `Found ${matches.length} ${matches.length === 1 ? 'person' : 'people'}.`;
+        return say(
+          `Found ${matches.length} ${matches.length === 1 ? 'person' : 'people'}.`
+        );
       }
 
       return null;
@@ -1025,6 +1237,11 @@ function MapInner() {
       addPerson,
       setManager,
       addInfluence,
+      selectedId,
+      selectedNodes,
+      nodes,
+      previewGroup,
+      setRelationshipView,
     ]
   );
 
