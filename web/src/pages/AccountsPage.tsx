@@ -100,7 +100,28 @@ function MembersModal({
   );
 }
 
-function PricingModal({ onClose }: { onClose: () => void }) {
+function PricingModal({
+  workspaceId,
+  onClose,
+}: {
+  workspaceId: string;
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const upgrade = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { url } = await api.createCheckout(workspaceId);
+      window.location.assign(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'billing unavailable');
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
@@ -131,11 +152,15 @@ function PricingModal({ onClose }: { onClose: () => void }) {
           <li>Canvas history and advanced editing</li>
         </ul>
         <button
-          disabled
-          className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => void upgrade()}
+          disabled={loading}
+          className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Billing setup in progress
+          {loading ? 'Opening secure checkout…' : 'Upgrade to Pro'}
         </button>
+        {error && (
+          <p className="mt-3 text-center text-xs text-rose-600">{error}</p>
+        )}
         <p className="mt-3 text-center text-xs text-slate-400">
           Your first two account maps remain free.
         </p>
@@ -345,7 +370,12 @@ export default function AccountsPage() {
           onClose={() => setShowMembers(false)}
         />
       )}
-      {showPricing && <PricingModal onClose={() => setShowPricing(false)} />}
+      {showPricing && workspaceId && (
+        <PricingModal
+          workspaceId={workspaceId}
+          onClose={() => setShowPricing(false)}
+        />
+      )}
     </div>
   );
 }

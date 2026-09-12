@@ -73,6 +73,17 @@ export const api = {
       body: JSON.stringify({ email }),
     }),
 
+  createCheckout: (workspaceId: string) =>
+    req<{ url: string }>('/api/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId }),
+    }),
+  createBillingPortal: (workspaceId: string) =>
+    req<{ url: string }>('/api/billing/portal', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId }),
+    }),
+
   research: (domain: string) =>
     req<ResearchResult>('/api/research', {
       method: 'POST',
