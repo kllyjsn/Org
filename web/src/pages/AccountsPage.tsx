@@ -7,8 +7,10 @@ import {
   BriefcaseBusiness,
   Building2,
   Clock3,
+  Inbox,
   Loader2,
   LogOut,
+  MessageSquare,
   Plus,
   Radar,
   Sparkles,
@@ -21,6 +23,8 @@ import { api, ApiError } from '../api';
 import { useSession } from '../store';
 import type { MapListItem } from '../types';
 import CreateMapModal from '../components/CreateMapModal';
+import FeedbackInboxModal from '../components/FeedbackInboxModal';
+import FeedbackModal from '../components/FeedbackModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
 import SellerProfileModal from '../components/SellerProfileModal';
 import { Wordmark } from '../components/Wordmark';
@@ -194,6 +198,8 @@ export default function AccountsPage() {
   const [showPricing, setShowPricing] = useState(false);
   const [showValue, setShowValue] = useState(false);
   const [showSellerProfile, setShowSellerProfile] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [showFeedbackInbox, setShowFeedbackInbox] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -321,6 +327,20 @@ export default function AccountsPage() {
               className="min-h-11 rounded-lg bg-[#eeecff] px-3 text-sm font-semibold text-[#5b4cf0] hover:bg-[#e3dfff] sm:min-h-0 sm:py-1.5"
             >
               Upgrade <span className="hidden sm:inline">· $10/mo</span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowFeedback(true)}
+            className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
+          >
+            <MessageSquare size={15} /> Feedback
+          </button>
+          {user?.isAdmin && (
+            <button
+              onClick={() => setShowFeedbackInbox(true)}
+              className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
+            >
+              <Inbox size={15} /> Inbox
             </button>
           )}
           <span className="hidden text-sm text-slate-500 lg:inline">{user?.name}</span>
@@ -521,6 +541,15 @@ export default function AccountsPage() {
           workspaceId={workspaceId}
           onClose={() => setShowValue(false)}
         />
+      )}
+      {showFeedback && (
+        <FeedbackModal
+          workspaceId={workspaceId}
+          onClose={() => setShowFeedback(false)}
+        />
+      )}
+      {showFeedbackInbox && (
+        <FeedbackInboxModal onClose={() => setShowFeedbackInbox(false)} />
       )}
       {showSellerProfile && workspaceId && (
         <SellerProfileModal

@@ -94,6 +94,22 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
+  isAdmin?: boolean;
+}
+
+export type FeedbackCategory = 'bug' | 'idea' | 'research_quality' | 'other';
+export type FeedbackStatus = 'new' | 'reviewing' | 'resolved';
+
+export interface FeedbackItem {
+  id: string;
+  category: FeedbackCategory;
+  message: string;
+  page_path: string | null;
+  status: FeedbackStatus;
+  created_at: string;
+  author_name: string;
+  author_email: string;
+  workspace_name: string | null;
 }
 
 export interface Workspace {

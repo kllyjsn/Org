@@ -57,6 +57,7 @@ import {
   Ungroup,
   Undo2,
   Group,
+  MessageSquare,
   MoreHorizontal,
   UserPlus,
 } from 'lucide-react';
@@ -78,6 +79,7 @@ import type {
   AgentRelationshipView,
 } from '../lib/agentCanvas';
 import DeepResearchModal from '../components/DeepResearchModal';
+import FeedbackModal from '../components/FeedbackModal';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
 import PersonPanel from '../components/PersonPanel';
@@ -235,6 +237,7 @@ function MapInner() {
   const [selfId, setSelfId] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState('');
   const [showAllTools, setShowAllTools] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [past, setPast] = useState<CanvasSnapshot[]>([]);
   const [future, setFuture] = useState<CanvasSnapshot[]>([]);
@@ -1934,6 +1937,12 @@ function MapInner() {
             >
               <Download size={15} /> PNG
             </button>
+            <button
+              onClick={() => setShowFeedback(true)}
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+            >
+              <MessageSquare size={15} /> Feedback
+            </button>
           </div>
         </div>
       </header>
@@ -2363,6 +2372,12 @@ function MapInner() {
               setShowDeepResearch(true);
             }
           }}
+        />
+      )}
+      {showFeedback && (
+        <FeedbackModal
+          workspaceId={workspaceId || null}
+          onClose={() => setShowFeedback(false)}
         />
       )}
       {showChanges && mapId && (

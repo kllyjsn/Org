@@ -97,6 +97,17 @@ CREATE TABLE IF NOT EXISTS analytics_events (
   dedupe_key TEXT,
   occurred_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS feedback (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  category TEXT NOT NULL CHECK (category IN ('bug','idea','research_quality','other')),
+  message TEXT NOT NULL,
+  page_path TEXT,
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','reviewing','resolved')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
 ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS cursor_x DOUBLE PRECISION;
 ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS cursor_y DOUBLE PRECISION;
 ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS selected_person_id TEXT;

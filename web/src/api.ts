@@ -2,6 +2,9 @@ import type {
   AccountBriefing,
   AccountAgentAnswer,
   AccountAgentMessage,
+  FeedbackCategory,
+  FeedbackItem,
+  FeedbackStatus,
   LoadedMap,
   MapChangeAlert,
   MapComment,
@@ -97,6 +100,23 @@ export const api = {
         body: JSON.stringify({ profile }),
       }
     ),
+
+  sendFeedback: (input: {
+    category: FeedbackCategory;
+    message: string;
+    pagePath?: string;
+    workspaceId?: string | null;
+  }) =>
+    req<{ received: true }>('/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  listFeedback: () => req<{ items: FeedbackItem[] }>('/api/admin/feedback'),
+  setFeedbackStatus: (id: string, status: FeedbackStatus) =>
+    req<{ status: FeedbackStatus }>(`/api/admin/feedback/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
 
   createCheckout: (workspaceId: string) =>
     req<{ url: string }>('/api/billing/checkout', {
