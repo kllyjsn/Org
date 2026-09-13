@@ -57,6 +57,7 @@ import {
   Ungroup,
   Undo2,
   Group,
+  MoreHorizontal,
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
@@ -82,6 +83,7 @@ import type { PersonNodeData } from '../components/PersonNode';
 import PersonPanel from '../components/PersonPanel';
 import ShareModal from '../components/ShareModal';
 import { applyLayout } from '../lib/layout';
+import { useIsMobile } from '../lib/useIsMobile';
 import { ROLE_META } from '../lib/colors';
 import { parseCsv } from '../lib/csv';
 import {
@@ -205,6 +207,7 @@ function MapInner() {
   );
   const rf = useReactFlow();
   const viewport = useViewport();
+  const isMobile = useIsMobile();
   const [mapName, setMapName] = useState('');
   const [domain, setDomain] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
@@ -231,6 +234,7 @@ function MapInner() {
   const [presence, setPresence] = useState<MapPresence[]>([]);
   const [selfId, setSelfId] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState('');
+  const [showAllTools, setShowAllTools] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [past, setPast] = useState<CanvasSnapshot[]>([]);
   const [future, setFuture] = useState<CanvasSnapshot[]>([]);
@@ -245,6 +249,15 @@ function MapInner() {
   const saveStateRef = useRef<SaveState>('saved');
 
   const readOnly = role === 'viewer';
+  // Phone viewports fit an entire org to ~20% zoom, which renders cards
+  // unreadable, so open on the top of the hierarchy at a legible scale.
+  const openingFitOptions = useMemo(
+    () =>
+      isMobile
+        ? { padding: 0.1, minZoom: 0.62, maxZoom: 0.9 }
+        : { padding: 0.2 },
+    [isMobile]
+  );
   const researchDue = Boolean(
     meta?.researchedAt &&
       (!meta.nextRefreshAt || Date.parse(meta.nextRefreshAt) <= Date.now())
@@ -280,10 +293,10 @@ function MapInner() {
             entry: mapViewEntry.current,
           })
           .catch(() => undefined);
-        window.setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
+        window.setTimeout(() => rf.fitView(openingFitOptions), 50);
       })
       .catch(() => setNotFound(true));
-  }, [mapId, setNodes, setEdges, rf]);
+  }, [mapId, setNodes, setEdges, rf, openingFitOptions]);
 
   useEffect(() => {
     if (searchParams.get('briefing') === '1') {
@@ -1801,110 +1814,127 @@ function MapInner() {
             </span>
           ))}
         </div>
-        <div className="order-last flex w-full items-center gap-2 overflow-x-auto border-t border-white/10 pt-2 sm:order-none sm:w-auto sm:border-0 sm:pt-0">
+        <div className="order-last flex w-full flex-wrap items-center gap-2 border-t border-white/10 pt-2 sm:order-none sm:w-auto sm:flex-nowrap sm:overflow-x-auto sm:border-0 sm:pt-0">
           {!readOnly && (
             <>
-            <div className="flex overflow-hidden rounded-lg border border-white/10 bg-white/[.06]">
-              <button
-                onClick={undo}
-                disabled={past.length === 0}
-                title="Undo (⌘Z)"
-                className="border-r border-white/10 p-2 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-600"
-              >
-                <Undo2 size={15} />
-              </button>
-              <button
-                onClick={redo}
-                disabled={future.length === 0}
-                title="Redo (⇧⌘Z)"
-                className="p-2 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-600"
-              >
-                <Redo2 size={15} />
-              </button>
-            </div>
-            <button
-              onClick={() => addPerson()}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
-            >
-              <UserPlus size={15} /> Person
-            </button>
             <button
               onClick={() => {
                 setDeepResearchFocus('');
                 setShowDeepResearch(true);
               }}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20"
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20 sm:min-h-0"
             >
               <Sparkles size={15} /> Deep research
-            </button>
-            <button
-              onClick={autoLayout}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
-            >
-              <LayoutGrid size={15} /> Layout
-            </button>
-            <button
-              onClick={() => crmInput.current?.click()}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
-            >
-              <FileUp size={15} /> CRM CSV
-            </button>
-            <input
-              ref={crmInput}
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={(event) => void importCrmCsv(event)}
-            />
-            <button
-              onClick={openHistory}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
-            >
-              <History size={15} /> History
             </button>
             <button
               onClick={() => {
                 setBriefingEntry('toolbar');
                 setShowBriefing(true);
               }}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20"
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20 sm:min-h-0"
             >
               <Radar size={15} /> Briefing
             </button>
             <button
-              onClick={() => setShowChanges(true)}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
-            >
-              <BellRing size={15} /> Changes
-            </button>
-            <button
               onClick={() => setShowStrategy(true)}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-slate-100 sm:min-h-0"
             >
               <Compass size={15} /> Strategy
             </button>
-            {(meta?.initiatives?.length ?? 0) > 0 && (
-              <button
-                onClick={() => setShowInitiatives(true)}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#c9f04b] px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-[#d5f66c]"
-              >
-                <Lightbulb size={15} /> Initiatives
-              </button>
-            )}
             <button
               onClick={() => setShowShare(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#6b5cf8]"
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#6b5cf8] sm:min-h-0"
             >
               <Share2 size={15} /> Share
             </button>
             </>
           )}
           <button
-            onClick={() => void exportPng()}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10"
+            onClick={() => setShowAllTools((open) => !open)}
+            aria-expanded={showAllTools}
+            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:hidden"
           >
-            <Download size={15} /> PNG
+            <MoreHorizontal size={15} /> {showAllTools ? 'Fewer tools' : 'More tools'}
           </button>
+          <div
+            className={`${showAllTools ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2 sm:flex sm:w-auto sm:flex-nowrap`}
+          >
+            {!readOnly && (
+              <>
+              <div className="flex overflow-hidden rounded-lg border border-white/10 bg-white/[.06]">
+                <button
+                  onClick={undo}
+                  disabled={past.length === 0}
+                  title="Undo (⌘Z)"
+                  aria-label="Undo"
+                  className="min-h-11 border-r border-white/10 px-3 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-600 sm:min-h-0 sm:p-2"
+                >
+                  <Undo2 size={15} />
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={future.length === 0}
+                  title="Redo (⇧⌘Z)"
+                  aria-label="Redo"
+                  className="min-h-11 px-3 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-600 sm:min-h-0 sm:p-2"
+                >
+                  <Redo2 size={15} />
+                </button>
+              </div>
+              <button
+                onClick={() => addPerson()}
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+              >
+                <UserPlus size={15} /> Person
+              </button>
+              <button
+                onClick={autoLayout}
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+              >
+                <LayoutGrid size={15} /> Layout
+              </button>
+              <button
+                onClick={() => crmInput.current?.click()}
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+              >
+                <FileUp size={15} /> CRM CSV
+              </button>
+              <input
+                ref={crmInput}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => void importCrmCsv(event)}
+              />
+              <button
+                onClick={openHistory}
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+              >
+                <History size={15} /> History
+              </button>
+              <button
+                onClick={() => setShowChanges(true)}
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+              >
+                <BellRing size={15} /> Changes
+              </button>
+              {(meta?.initiatives?.length ?? 0) > 0 && (
+                <button
+                  onClick={() => setShowInitiatives(true)}
+                  className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-[#c9f04b] px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-[#d5f66c] sm:min-h-0"
+                >
+                  <Lightbulb size={15} /> Initiatives
+                </button>
+              )}
+              </>
+            )}
+            <button
+              onClick={() => void exportPng()}
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+            >
+              <Download size={15} /> PNG
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1974,12 +2004,14 @@ function MapInner() {
           multiSelectionKeyCode={['Meta', 'Control']}
           deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
           fitView
+          fitViewOptions={openingFitOptions}
           minZoom={0.2}
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={28} size={1} color="#d9ddd4" />
           <Controls
             showInteractive={false}
+            fitViewOptions={openingFitOptions}
             className="!bottom-3 !left-3 sm:!bottom-4 sm:!left-4"
           />
           <MiniMap

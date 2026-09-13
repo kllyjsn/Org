@@ -345,6 +345,13 @@ export default function CommandPalette({
           <kbd className="hidden rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-400 shadow-sm sm:block">
             ESC
           </kbd>
+          <button
+            onClick={onClose}
+            aria-label="Close search"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm transition hover:text-slate-700 sm:hidden"
+          >
+            <X size={16} />
+          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2 sm:p-3">

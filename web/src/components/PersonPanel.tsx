@@ -126,14 +126,17 @@ export default function PersonPanel({
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
             {readOnly ? 'Stakeholder intelligence' : 'Stakeholder profile'}
           </div>
-          <h3 className="max-w-64 truncate text-lg font-semibold tracking-tight text-slate-950">
+          <h3 className="text-lg font-semibold tracking-tight text-slate-950">
             {person.name}
           </h3>
-          <p className="max-w-64 truncate text-xs text-slate-500">{person.title}</p>
+          <p className="line-clamp-2 text-xs leading-5 text-slate-500">
+            {person.title}
+          </p>
         </div>
         <button
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
+          aria-label="Close stakeholder panel"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-8 sm:w-8"
         >
           ✕
         </button>
@@ -163,7 +166,114 @@ export default function PersonPanel({
           </div>
         </div>
 
+        {sourceDetails.length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Evidence
+              </label>
+              <span className="text-[10px] font-medium text-slate-400">
+                {person.corroborationCount ?? sourceDetails.length} independent
+                source
+                {(person.corroborationCount ?? sourceDetails.length) === 1
+                  ? ''
+                  : 's'}
+              </span>
+            </div>
+            <ul className="space-y-2">
+              {sourceDetails.map((source, i) => (
+                <li
+                  key={`${source.url}-${i}`}
+                  className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-500"
+                >
+                  {source.url.startsWith('http') ? (
+                    <a
+                      className="font-medium text-indigo-600 hover:underline"
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => {
+                        void api
+                          .trackEvent(mapId, 'source_opened', {
+                            surface: 'person',
+                          })
+                          .catch(() => undefined);
+                      }}
+                    >
+                      {source.title ||
+                        source.publisher ||
+                        source.url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
+                    </a>
+                  ) : (
+                    source.title || source.url
+                  )}
+                  <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">
+                    {[
+                      source.sourceType,
+                      source.publisher,
+                      source.publishedAt
+                        ? new Date(source.publishedAt).toLocaleDateString()
+                        : 'date unavailable',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[10px] text-slate-400">
+              {person.lastVerifiedAt
+                ? `Checked ${new Date(person.lastVerifiedAt).toLocaleDateString()}`
+                : 'Verification date unavailable'}
+              {' · '}
+              {person.freshness === 'fresh'
+                ? 'recent evidence'
+                : person.freshness === 'aging'
+                  ? 'evidence is aging'
+                  : person.freshness === 'stale'
+                    ? 'refresh required'
+                    : 'source date unavailable'}
+            </p>
+          </div>
+        )}
+
+        {person.researchStatus && person.researchStatus !== 'verified' && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            {person.researchStatus === 'conflicting'
+              ? `Conflicting current titles: ${
+                  person.conflictingTitles?.join(', ') || 'review the sources'
+                }`
+              : 'The available public evidence may be stale. Verify before outreach.'}
+          </div>
+        )}
+
+        {relevantInitiatives.length > 0 && (
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Why now
+            </label>
+            <div className="space-y-2">
+              {relevantInitiatives.slice(0, 3).map((initiative) => (
+                <div
+                  key={initiative.name}
+                  className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3"
+                >
+                  <p className="text-xs font-semibold text-indigo-900">
+                    {initiative.name}
+                  </p>
+                  <p className="mt-1 text-xs text-indigo-800">
+                    {initiative.salesAngles[0] || initiative.summary}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            {readOnly ? 'Details' : 'Edit details'}
+          </span>
           <input
             className={field}
             value={person.name}
@@ -287,110 +397,6 @@ export default function PersonPanel({
           </div>
         )}
 
-        {sourceDetails.length > 0 && (
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Evidence
-              </label>
-              <span className="text-[10px] font-medium text-slate-400">
-                {person.corroborationCount ?? sourceDetails.length} independent
-                source
-                {(person.corroborationCount ?? sourceDetails.length) === 1
-                  ? ''
-                  : 's'}
-              </span>
-            </div>
-            <ul className="space-y-2">
-              {sourceDetails.map((source, i) => (
-                <li
-                  key={`${source.url}-${i}`}
-                  className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-500"
-                >
-                  {source.url.startsWith('http') ? (
-                    <a
-                      className="font-medium text-indigo-600 hover:underline"
-                      href={source.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => {
-                        void api
-                          .trackEvent(mapId, 'source_opened', {
-                            surface: 'person',
-                          })
-                          .catch(() => undefined);
-                      }}
-                    >
-                      {source.title ||
-                        source.publisher ||
-                        source.url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
-                    </a>
-                  ) : (
-                    source.title || source.url
-                  )}
-                  <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">
-                    {[
-                      source.sourceType,
-                      source.publisher,
-                      source.publishedAt
-                        ? new Date(source.publishedAt).toLocaleDateString()
-                        : 'date unavailable',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </p>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-[10px] text-slate-400">
-              {person.lastVerifiedAt
-                ? `Checked ${new Date(person.lastVerifiedAt).toLocaleDateString()}`
-                : 'Verification date unavailable'}
-              {' · '}
-              {person.freshness === 'fresh'
-                ? 'recent evidence'
-                : person.freshness === 'aging'
-                  ? 'evidence is aging'
-                  : person.freshness === 'stale'
-                    ? 'refresh required'
-                    : 'source date unavailable'}
-            </p>
-          </div>
-        )}
-
-        {person.researchStatus && person.researchStatus !== 'verified' && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            {person.researchStatus === 'conflicting'
-              ? `Conflicting current titles: ${
-                  person.conflictingTitles?.join(', ') || 'review the sources'
-                }`
-              : 'The available public evidence may be stale. Verify before outreach.'}
-          </div>
-        )}
-
-        {relevantInitiatives.length > 0 && (
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Why now
-            </label>
-            <div className="space-y-2">
-              {relevantInitiatives.slice(0, 3).map((initiative) => (
-                <div
-                  key={initiative.name}
-                  className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3"
-                >
-                  <p className="text-xs font-semibold text-indigo-900">
-                    {initiative.name}
-                  </p>
-                  <p className="mt-1 text-xs text-indigo-800">
-                    {initiative.salesAngles[0] || initiative.summary}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
             Notes
@@ -499,12 +505,12 @@ export default function PersonPanel({
       </div>
 
       {!readOnly && (
-        <div className="border-t border-slate-100 p-3">
+        <div className="flex justify-end border-t border-slate-100 px-3 py-2">
           <button
             onClick={() => onDelete(person.id)}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"
+            className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 sm:min-h-0 sm:py-2"
           >
-            <Trash2 size={14} /> Remove from map
+            <Trash2 size={13} /> Remove from map
           </button>
         </div>
       )}

@@ -18,6 +18,7 @@ import { api, ApiError } from '../api';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
 import PersonPanel from '../components/PersonPanel';
+import { useIsMobile } from '../lib/useIsMobile';
 import type { MapState } from '../types';
 
 const nodeTypes = { person: PersonNode };
@@ -37,6 +38,10 @@ function ShareInner() {
   const [nodes, setNodes] = useState<Node<PersonNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
+  const openingFitOptions = isMobile
+    ? { padding: 0.1, minZoom: 0.62, maxZoom: 0.9 }
+    : { padding: 0.2 };
 
   useEffect(() => {
     if (!token) return;
@@ -176,11 +181,15 @@ function ShareInner() {
           nodesConnectable={false}
           edgesFocusable={false}
           fitView
+          fitViewOptions={openingFitOptions}
           minZoom={0.2}
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={28} size={1} color="#d9ddd4" />
-          <Controls showInteractive={false} />
+          <Controls
+            showInteractive={false}
+            fitViewOptions={openingFitOptions}
+          />
           <MiniMap pannable zoomable className="!bg-slate-50" />
         </ReactFlow>
 

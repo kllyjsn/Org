@@ -290,36 +290,35 @@ export default function AccountsPage() {
             </button>
           )}
         </div>
-        <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-3">
+        <div className="flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto sm:flex-nowrap sm:gap-3">
           {workspaceId && (
             <button
               onClick={() => setShowSellerProfile(true)}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
             >
-              <Sparkles size={15} />{' '}
-              <span className="hidden sm:inline">Your company</span>
+              <Sparkles size={15} /> Your company
             </button>
           )}
           {workspaceId && (
             <button
               onClick={() => setShowValue(true)}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
             >
-              <BarChart3 size={15} /> <span className="hidden sm:inline">Value</span>
+              <BarChart3 size={15} /> Value
             </button>
           )}
           {workspaceId && (
             <button
               onClick={() => setShowMembers(true)}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
             >
-              <Users size={15} /> <span className="hidden sm:inline">Members</span>
+              <Users size={15} /> Members
             </button>
           )}
           {workspace?.plan === 'free' && (
             <button
               onClick={() => setShowPricing(true)}
-              className="rounded-lg bg-[#eeecff] px-3 py-1.5 text-sm font-semibold text-[#5b4cf0] hover:bg-[#e3dfff]"
+              className="min-h-11 rounded-lg bg-[#eeecff] px-3 text-sm font-semibold text-[#5b4cf0] hover:bg-[#e3dfff] sm:min-h-0 sm:py-1.5"
             >
               Upgrade <span className="hidden sm:inline">· $10/mo</span>
             </button>
@@ -327,8 +326,9 @@ export default function AccountsPage() {
           <span className="hidden text-sm text-slate-500 lg:inline">{user?.name}</span>
           <button
             onClick={() => void logout()}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 sm:min-h-0 sm:min-w-0 sm:p-2"
             title="Sign out"
+            aria-label="Sign out"
           >
             <LogOut size={16} />
           </button>
@@ -429,7 +429,8 @@ export default function AccountsPage() {
                         e.stopPropagation();
                         void deleteMap(m.id);
                       }}
-                      className="rounded p-1 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-500"
+                      className="rounded p-2 text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 sm:p-1 sm:opacity-0 sm:group-hover:opacity-100"
+                      aria-label="Delete account map"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -467,7 +468,7 @@ export default function AccountsPage() {
                         className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition ${
                           m.is_live_opportunity
                             ? 'bg-[#effbd0] text-slate-700 hover:bg-[#e4f7b7]'
-                            : 'bg-slate-100 text-slate-500 opacity-0 group-hover:opacity-100 hover:text-[#5b4cf0]'
+                            : 'bg-slate-100 text-slate-500 hover:text-[#5b4cf0] sm:opacity-0 sm:group-hover:opacity-100'
                         }`}
                       >
                         <BriefcaseBusiness size={12} />
@@ -479,7 +480,7 @@ export default function AccountsPage() {
                         event.stopPropagation();
                         navigate(`/app/maps/${m.id}?briefing=1`);
                       }}
-                      className="flex items-center gap-1.5 rounded-lg bg-[#eeecff] px-2.5 py-1.5 text-[10px] font-semibold text-[#5b4cf0] opacity-0 transition group-hover:opacity-100 hover:bg-[#e3dfff]"
+                      className="flex items-center gap-1.5 rounded-lg bg-[#eeecff] px-2.5 py-1.5 text-[10px] font-semibold text-[#5b4cf0] transition hover:bg-[#e3dfff] sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <Radar size={12} /> Next moves
                     </button>

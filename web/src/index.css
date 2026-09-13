@@ -73,6 +73,19 @@ textarea:focus-visible {
   background: #f8fafc;
 }
 
+@media (pointer: coarse) {
+  .react-flow__controls-button {
+    width: 30px;
+    height: 30px;
+    padding: 7px;
+  }
+
+  .react-flow__controls-button svg {
+    max-width: 16px;
+    max-height: 16px;
+  }
+}
+
 .td-grid {
   background-image:
     linear-gradient(rgb(15 23 42 / 3%) 1px, transparent 1px),
