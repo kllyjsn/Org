@@ -1016,12 +1016,41 @@ export async function researchOrg(
     const discoveryPromise = exaPeopleContext(domain, requestedFocus).catch(
       () => ''
     );
-    const initiativesPromise = requestedFocus
-      ? Promise.resolve(null)
-      : chat([
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: initiativesPrompt(domain, sellerProfile) },
-        ], { webSearch: true, maxTokens: 4000, deadlineMs }).catch(() => null);
+    const initiativesPromise: Promise<StrategicInitiative[]> = requestedFocus
+      ? Promise.resolve([])
+      : (async () => {
+          const messages = [
+            { role: 'system' as const, content: SYSTEM_PROMPT },
+            {
+              role: 'user' as const,
+              content: initiativesPrompt(domain, sellerProfile),
+            },
+          ];
+          try {
+            const result = await chat(messages, {
+              webSearch: true,
+              maxTokens: 4000,
+              deadlineMs: Math.min(deadlineMs, Date.now() + 32_000),
+            });
+            const parsed = extractJson(result.content) as {
+              initiatives?: unknown;
+            };
+            const initiatives = normalizeInitiatives(parsed.initiatives);
+            if (initiatives.length > 0) return initiatives;
+          } catch {
+            // Retry below without grounding while the people passes continue.
+          }
+          if (deadlineMs - Date.now() < 4_000) return [];
+          const fallback = await chat(messages, {
+            json: true,
+            maxTokens: 4000,
+            deadlineMs,
+          });
+          const parsed = extractJson(fallback.content) as {
+            initiatives?: unknown;
+          };
+          return normalizeInitiatives(parsed.initiatives);
+        })().catch(() => []);
     const focuses = requestedFocus
       ? [
           `targeted enrichment for: ${requestedFocus}. Find the named person or ` +
@@ -1097,18 +1126,7 @@ export async function researchOrg(
     const companyName = successful.find(
       (pass) => typeof pass.parsed.companyName === 'string'
     )?.parsed.companyName;
-    const initiativeResult = await initiativesPromise;
-    let initiatives: StrategicInitiative[] = [];
-    if (initiativeResult) {
-      try {
-        const initiativeJson = extractJson(initiativeResult.content) as {
-          initiatives?: unknown;
-        };
-        initiatives = normalizeInitiatives(initiativeJson.initiatives);
-      } catch {
-        initiatives = [];
-      }
-    }
+    const initiatives = await initiativesPromise;
     // Resolve redirects/dead links first, then reserve a bounded pass to verify
     // that each surviving citation actually supports the claimed title.
     await resolveSourceUrls(people, initiatives, deadlineMs - 7_000);
