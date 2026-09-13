@@ -1051,13 +1051,17 @@ function MapInner() {
         : /\b(team|sub-?team)s?\b/.test(lower)
           ? 'team'
           : 'businessUnit';
-      if (
-        /\b(split|group|cluster|reorganize|reorganise|break|divide|organize|organise)\b/.test(
+      const wantsGrouping =
+        /\b(split|group|cluster|reorganize|reorganise|break|divide|organize|organise|arrange|sort|bucket)\b/.test(
           lower
         ) &&
-        (/\b(by|into|using)\b/.test(lower) ||
-          /\b(group|teams?|products?|business units?|departments?)\b/.test(lower))
-      ) {
+        (/\b(by|into|using)\s+(department|departments|function|functions|business units?|teams?|sub-?teams?|products?|product lines?|orgs?|org chart)\b/.test(
+          lower
+        ) ||
+          /\b(group|teams?|products?|business units?|departments?|functions?|lanes?)\b/.test(
+            lower
+          ));
+      if (wantsGrouping) {
         if (readOnly) return say('I couldn’t edit this read-only map.');
         const selectionIds = new Set(
           /\b(this|these|selected|selection|current group)\b/.test(lower)
@@ -1091,7 +1095,7 @@ function MapInner() {
             : 'reports';
         return describeRelationshipView(view, () => setRelationshipView(view));
       }
-      if (/\b(arrange|organize|layout|tidy)\b/.test(lower)) {
+      if (/(arrange|organize|layout|tidy)/.test(lower)) {
         if (readOnly) return say('I couldn’t edit this read-only map.');
         autoLayout();
         return say('I arranged the org chart.');
