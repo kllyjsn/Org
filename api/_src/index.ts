@@ -5,6 +5,7 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { answerAccountQuestion } from './account-agent.js';
 import { buildAccountBriefing } from './briefing.js';
+import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
 import { deadSourceUrls, researchOrg } from './research.js';
@@ -209,6 +210,20 @@ function sanitizeState(input: unknown): MapState {
 app.get('/api/health', (c) =>
   c.json({ ok: true, provider: activeProvider() })
 );
+
+app.get('/api/cron/refresh', async (c) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return bad(c, 'background refresh is not configured', 503);
+  if (c.req.header('authorization') !== `Bearer ${secret}`) {
+    return bad(c, 'unauthorized', 401);
+  }
+  try {
+    return c.json(await refreshNextDueMap());
+  } catch (error) {
+    console.error('background refresh failed', error);
+    return bad(c, 'background refresh failed', 500);
+  }
+});
 
 // ---------- billing ----------
 

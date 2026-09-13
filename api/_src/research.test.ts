@@ -4,6 +4,7 @@ import {
   extractJson,
   normalizePeople,
   resolveSourceUrls,
+  verifyTitleClaims,
 } from './research.js';
 
 test('truncated research JSON keeps the complete people it did return', () => {
@@ -223,4 +224,52 @@ test('does not merge distinct people sharing a last name', () => {
     { name: 'Michael Feldman', title: 'COO' },
   ]);
   assert.equal(people.length, 2);
+});
+
+test('keeps verified status when a cited page directly supports the title', async () => {
+  const [person] = normalizePeople([
+    {
+      name: 'Ada Lovelace',
+      title: 'Chief Technology Officer',
+      confidence: 'high',
+      sources: [{ url: 'https://example.com/about', sourceType: 'official' }],
+    },
+  ]);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      '<main><h2>Ada Lovelace</h2><p>Chief Technology Officer</p></main>',
+      { status: 200 }
+    );
+  try {
+    await verifyTitleClaims([person]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(person.researchStatus, 'verified');
+  assert.equal(person.confidence, 'high');
+});
+
+test('downgrades a title when its cited page does not support the claim', async () => {
+  const [person] = normalizePeople([
+    {
+      name: 'Ada Lovelace',
+      title: 'Chief Financial Officer',
+      confidence: 'high',
+      sources: [{ url: 'https://example.com/about', sourceType: 'official' }],
+    },
+  ]);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      '<main><h2>Ada Lovelace</h2><p>Chief Technology Officer</p></main>',
+      { status: 200 }
+    );
+  try {
+    await verifyTitleClaims([person]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(person.researchStatus, 'possibly_stale');
+  assert.equal(person.confidence, 'medium');
 });

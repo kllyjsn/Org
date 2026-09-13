@@ -469,6 +469,117 @@ export async function deadSourceUrls(
   return dead;
 }
 
+const TITLE_EXPANSIONS: Record<string, string> = {
+  ceo: 'chief executive officer',
+  cfo: 'chief financial officer',
+  coo: 'chief operating officer',
+  cto: 'chief technology officer',
+  cio: 'chief information officer',
+  ciso: 'chief information security officer',
+  cpo: 'chief product officer',
+  cmo: 'chief marketing officer',
+  cro: 'chief revenue officer',
+  chro: 'chief human resources officer',
+  evp: 'executive vice president',
+  svp: 'senior vice president',
+  vp: 'vice president',
+};
+
+const TITLE_STOP_WORDS = new Set([
+  'of', 'the', 'and', 'at', 'for', 'global', 'group', 'senior', 'executive',
+  'chief', 'officer', 'vice', 'president', 'director', 'head', 'lead',
+]);
+
+function expandedTitle(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b[a-z]{2,5}\b/g, (word) => TITLE_EXPANSIONS[word] ?? word)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function claimTokens(value: string): string[] {
+  return expandedTitle(value)
+    .split(' ')
+    .filter((word) => word.length > 2 && !TITLE_STOP_WORDS.has(word));
+}
+
+function pageSupportsTitle(
+  html: string,
+  person: Pick<ResearchedPerson, 'name' | 'title'>
+): boolean {
+  const text = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z#0-9]+;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+  const nameParts = canonicalPersonName(person.name).split(' ');
+  const surname = nameParts.at(-1);
+  const firstName = nameParts[0];
+  if (!surname || !firstName || !text.includes(surname)) return false;
+  const nearName =
+    text.includes(`${firstName} ${surname}`) ||
+    text.includes(person.name.toLowerCase());
+  if (!nearName) return false;
+  if (text.includes(expandedTitle(person.title))) return true;
+  const tokens = claimTokens(person.title);
+  if (tokens.length === 0) return false;
+  const matched = tokens.filter((token) => text.includes(token)).length;
+  return matched >= Math.max(1, Math.ceil(tokens.length * 0.6));
+}
+
+/**
+ * Trust a "verified" title only when at least one cited page is fetchable and
+ * directly contains both the person's name and most meaningful title terms.
+ */
+export async function verifyTitleClaims(
+  people: ResearchedPerson[],
+  deadlineMs = Number.POSITIVE_INFINITY
+): Promise<void> {
+  const candidates = people.filter((person) => person.sourceDetails.length > 0);
+  const batchSize = 12;
+  for (let i = 0; i < candidates.length; i += batchSize) {
+    if (Date.now() >= deadlineMs) break;
+    await Promise.all(
+      candidates.slice(i, i + batchSize).map(async (person) => {
+        let supported = false;
+        for (const source of person.sourceDetails.slice(0, 2)) {
+          const remaining = deadlineMs - Date.now();
+          if (remaining < 800) break;
+          try {
+            const response = await fetch(source.url, {
+              headers: {
+                'user-agent':
+                  'Mozilla/5.0 (compatible; TopDownResearch/1.0; +https://topdown.sh)',
+              },
+              redirect: 'follow',
+              signal: AbortSignal.timeout(Math.max(750, Math.min(3_000, remaining))),
+            });
+            if (!response.ok) {
+              await response.body?.cancel().catch(() => undefined);
+              continue;
+            }
+            const html = (await response.text()).slice(0, 500_000);
+            if (pageSupportsTitle(html, person)) {
+              supported = true;
+              break;
+            }
+          } catch {
+            // An inaccessible page is unknown, never positive verification.
+          }
+        }
+        if (!supported && person.researchStatus === 'verified') {
+          person.researchStatus = 'possibly_stale';
+          if (person.confidence === 'high') person.confidence = 'medium';
+        }
+      })
+    );
+  }
+}
+
 // Common nickname → canonical first name, so "Bob Komin" and "Robert Komin"
 // dedupe to one person.
 const FIRST_NAME_ALIASES: Record<string, string> = {
@@ -966,8 +1077,10 @@ export async function researchOrg(
         initiatives = [];
       }
     }
-    // Reserve a few seconds so the JSON response can still be sent.
-    await resolveSourceUrls(people, initiatives, deadlineMs - 2_500);
+    // Resolve redirects/dead links first, then reserve a bounded pass to verify
+    // that each surviving citation actually supports the claimed title.
+    await resolveSourceUrls(people, initiatives, deadlineMs - 7_000);
+    await verifyTitleClaims(people, deadlineMs - 2_500);
     return {
       companyName:
         typeof companyName === 'string'
