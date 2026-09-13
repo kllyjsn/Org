@@ -9,6 +9,10 @@ import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
 import { deadSourceUrls, researchOrg } from './research.js';
+import {
+  researchSellerProfile,
+  sanitizeSellerProfile,
+} from './seller-profile.js';
 import { activeProvider } from './llm.js';
 import { stripePost, verifyStripeSignature } from './billing.js';
 import {
@@ -35,6 +39,7 @@ import type {
   MemberRow,
   ShareLinkRow,
   WorkspaceRow,
+  SellerProfile,
 } from './types.js';
 
 type Vars = { user: UserRow };
@@ -111,13 +116,21 @@ async function workspacesFor(user: UserRow) {
       name: string;
       role: string;
       plan: 'pro';
+      seller_profile: SellerProfile | null;
     }>(
-      `SELECT w.id, w.name, 'pro'::text AS plan, 'owner'::text AS role
+      `SELECT w.id, w.name, w.seller_profile,
+              'pro'::text AS plan, 'owner'::text AS role
        FROM workspaces w ORDER BY w.created_at`
     );
   }
-  return query<{ id: string; name: string; role: string; plan: 'free' | 'pro' }>(
-    `SELECT w.id, w.name, w.plan, m.role FROM workspaces w
+  return query<{
+    id: string;
+    name: string;
+    role: string;
+    plan: 'free' | 'pro';
+    seller_profile: SellerProfile | null;
+  }>(
+    `SELECT w.id, w.name, w.plan, w.seller_profile, m.role FROM workspaces w
      JOIN workspace_members m ON m.workspace_id = w.id
      WHERE m.user_id = $1 ORDER BY w.created_at`,
     [user.id]
@@ -434,6 +447,7 @@ app.post('/api/workspaces', requireAuth, async (c) => {
       ...ws,
       plan: isSuperAdmin(user) ? 'pro' : ws.plan,
       role: 'owner',
+      seller_profile: null,
     },
   });
 });
@@ -479,11 +493,54 @@ app.post('/api/workspaces/:id/members', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+app.post('/api/workspaces/:id/seller-profile/research', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!canWrite(await workspaceRoleFor(user, workspaceId))) {
+    return bad(c, 'insufficient role', 403);
+  }
+  const body = await c.req.json().catch(() => null);
+  const domain =
+    typeof body?.domain === 'string'
+      ? body.domain
+          .trim()
+          .toLowerCase()
+          .replace(/^https?:\/\//, '')
+          .replace(/\/.*/, '')
+      : '';
+  if (!DOMAIN_RE.test(domain)) return bad(c, 'enter a valid company domain');
+  try {
+    return c.json({ profile: await researchSellerProfile(domain) });
+  } catch (error) {
+    console.error('seller profile research failed', error);
+    return bad(c, 'company research failed', 502);
+  }
+});
+
+app.patch('/api/workspaces/:id/seller-profile', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!canWrite(await workspaceRoleFor(user, workspaceId))) {
+    return bad(c, 'insufficient role', 403);
+  }
+  const body = await c.req.json().catch(() => null);
+  const profile = sanitizeSellerProfile(body?.profile);
+  if (!DOMAIN_RE.test(profile.domain) || !profile.companyName) {
+    return bad(c, 'company name and domain required');
+  }
+  await query('UPDATE workspaces SET seller_profile = $1 WHERE id = $2', [
+    JSON.stringify(profile),
+    workspaceId,
+  ]);
+  return c.json({ profile });
+});
+
 // ---------- research (T0) ----------
 
 const DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63})+$/i;
 
 app.post('/api/research', requireAuth, async (c) => {
+  const user = c.get('user');
   const body = await c.req.json().catch(() => null);
   const domain =
     typeof body?.domain === 'string'
@@ -493,6 +550,16 @@ app.post('/api/research', requireAuth, async (c) => {
     typeof body?.focus === 'string' ? body.focus.trim().slice(0, 300) : '';
   if (!DOMAIN_RE.test(domain)) return bad(c, 'enter a valid domain like acme.com');
   try {
+    const workspaceId =
+      typeof body?.workspaceId === 'string' ? body.workspaceId : '';
+    let sellerProfile: SellerProfile | null = null;
+    if (workspaceId && (await workspaceRoleFor(user, workspaceId))) {
+      const workspaces = await query<{ seller_profile: SellerProfile | null }>(
+        'SELECT seller_profile FROM workspaces WHERE id = $1',
+        [workspaceId]
+      );
+      sellerProfile = workspaces[0]?.seller_profile ?? null;
+    }
     // On refresh, the client sends the map's stored source URLs so citations
     // that have gone dead can be dropped. Runs in parallel with research.
     const knownUrls = Array.isArray(body?.knownSources)
@@ -507,7 +574,11 @@ app.post('/api/research', requireAuth, async (c) => {
       knownUrls.length > 0
         ? deadSourceUrls(new Set(knownUrls)).catch(() => new Set<string>())
         : Promise.resolve(new Set<string>());
-    const result = await researchOrg(domain, focus || undefined);
+    const result = await researchOrg(
+      domain,
+      focus || undefined,
+      sellerProfile
+    );
     const deadSources = Array.from(await deadPromise);
     return c.json({ ...result, deadSources });
   } catch (err) {

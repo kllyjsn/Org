@@ -5,7 +5,7 @@ import {
   researchOrg,
   type ResearchResult,
 } from './research.js';
-import type { MapRow, MapState, Person } from './types.js';
+import type { MapRow, MapState, Person, SellerProfile } from './types.js';
 
 function nextRefreshAt(cadence: MapState['meta']['refreshCadence']): string {
   const days = cadence === 'monthly' ? 30 : 7;
@@ -156,7 +156,15 @@ export async function refreshNextDueMap(): Promise<{
   const map = due[0];
   if (!map) return { refreshed: false };
 
-  const result = await researchOrg(map.domain);
+  const workspaces = await query<{ seller_profile: SellerProfile | null }>(
+    'SELECT seller_profile FROM workspaces WHERE id = $1',
+    [map.workspace_id]
+  );
+  const result = await researchOrg(
+    map.domain,
+    undefined,
+    workspaces[0]?.seller_profile ?? null
+  );
   const state = mergeBackgroundResearch(map.state as MapState, result);
   const timestamp = now();
   await query(

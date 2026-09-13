@@ -1,5 +1,5 @@
 import { chat, activeProvider, type Provider } from './llm.js';
-import type { Confidence, ResearchSource } from './types.js';
+import type { Confidence, ResearchSource, SellerProfile } from './types.js';
 
 export interface ResearchedPerson {
   name: string;
@@ -107,7 +107,25 @@ Rules:
 - JSON only.`;
 }
 
-function initiativesPrompt(domain: string): string {
+function sellerContext(profile: SellerProfile | null | undefined): string {
+  if (!profile) return '';
+  return `
+
+Seller context — make sales angles specific to what this seller offers, while
+labeling hypotheses and never fabricating fit:
+- Seller: ${profile.companyName} (${profile.domain})
+- Products: ${profile.products.join('; ') || 'unknown'}
+- Target customers: ${profile.targetCustomers.join('; ') || 'unknown'}
+- Use cases: ${profile.useCases.join('; ') || 'unknown'}
+- Proof points: ${profile.proofPoints.join('; ') || 'none verified'}
+- Competitors: ${profile.competitors.join('; ') || 'unknown'}
+- Positioning: ${profile.positioning || profile.summary || 'unknown'}`;
+}
+
+function initiativesPrompt(
+  domain: string,
+  sellerProfile?: SellerProfile | null
+): string {
   return `Research the company at "${domain}" and identify up to eight important
 initiatives from the last 18 months. Use product launches, executive interviews,
 earnings or investor materials, press releases, major hiring patterns, and
@@ -135,7 +153,7 @@ Rules:
 - Return direct source URLs and publication dates when available.
 - Sales angles must connect a likely business pressure to the initiative.
 - Do not invent budgets, pain, purchase intent, or internal plans.
-- JSON only.`;
+- JSON only.${sellerContext(sellerProfile)}`;
 }
 
 function stripFootnotes(value: string): string {
@@ -978,7 +996,8 @@ function fixtureOrg(domain: string): ResearchResult {
 
 export async function researchOrg(
   domain: string,
-  requestedFocus?: string
+  requestedFocus?: string,
+  sellerProfile?: SellerProfile | null
 ): Promise<ResearchResult> {
   const provider = activeProvider();
   if (provider === 'fixture') return fixtureOrg(domain);
@@ -993,7 +1012,7 @@ export async function researchOrg(
       ? Promise.resolve(null)
       : chat([
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: initiativesPrompt(domain) },
+          { role: 'user', content: initiativesPrompt(domain, sellerProfile) },
         ], { webSearch: true, maxTokens: 4000, deadlineMs }).catch(() => null);
     const focuses = requestedFocus
       ? [

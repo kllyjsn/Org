@@ -109,7 +109,21 @@ export interface WorkspaceRow {
   plan: 'free' | 'pro';
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  seller_profile: SellerProfile | null;
   created_at: string;
+}
+
+export interface SellerProfile {
+  companyName: string;
+  domain: string;
+  summary: string;
+  products: string[];
+  targetCustomers: string[];
+  useCases: string[];
+  proofPoints: string[];
+  competitors: string[];
+  positioning: string;
+  researchedAt: string;
 }
 
 export interface MemberRow {

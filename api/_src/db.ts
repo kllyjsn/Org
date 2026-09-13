@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS seller_profile JSONB;
 CREATE TABLE IF NOT EXISTS workspace_members (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

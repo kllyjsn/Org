@@ -12,6 +12,7 @@ import type {
   ProductEventName,
   ProductValueSummary,
   ResearchResult,
+  SellerProfile,
   SessionUser,
   ShareLink,
   Workspace,
@@ -80,6 +81,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email }),
     }),
+  researchSellerProfile: (workspaceId: string, domain: string) =>
+    req<{ profile: SellerProfile }>(
+      `/api/workspaces/${workspaceId}/seller-profile/research`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ domain }),
+      }
+    ),
+  saveSellerProfile: (workspaceId: string, profile: SellerProfile) =>
+    req<{ profile: SellerProfile }>(
+      `/api/workspaces/${workspaceId}/seller-profile`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ profile }),
+      }
+    ),
 
   createCheckout: (workspaceId: string) =>
     req<{ url: string }>('/api/billing/checkout', {
@@ -92,12 +109,18 @@ export const api = {
       body: JSON.stringify({ workspaceId }),
     }),
 
-  research: (domain: string, focus?: string, knownSources?: string[]) =>
+  research: (
+    domain: string,
+    focus?: string,
+    knownSources?: string[],
+    workspaceId?: string
+  ) =>
     req<ResearchResult>('/api/research', {
       method: 'POST',
       body: JSON.stringify({
         domain,
         focus,
+        workspaceId,
         ...(knownSources?.length ? { knownSources } : {}),
       }),
     }),

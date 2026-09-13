@@ -22,6 +22,7 @@ import { useSession } from '../store';
 import type { MapListItem } from '../types';
 import CreateMapModal from '../components/CreateMapModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
+import SellerProfileModal from '../components/SellerProfileModal';
 import { Wordmark } from '../components/Wordmark';
 
 function MembersModal({
@@ -192,6 +193,7 @@ export default function AccountsPage() {
   const [showMembers, setShowMembers] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
   const [showValue, setShowValue] = useState(false);
+  const [showSellerProfile, setShowSellerProfile] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -213,6 +215,12 @@ export default function AccountsPage() {
   useEffect(() => {
     refreshMaps();
   }, [refreshMaps]);
+
+  useEffect(() => {
+    if (workspaceId && workspace && !workspace.seller_profile) {
+      setShowSellerProfile(true);
+    }
+  }, [workspaceId, workspace]);
 
   const createWorkspace = async (e: FormEvent) => {
     e.preventDefault();
@@ -283,6 +291,15 @@ export default function AccountsPage() {
           )}
         </div>
         <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-3">
+          {workspaceId && (
+            <button
+              onClick={() => setShowSellerProfile(true)}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            >
+              <Sparkles size={15} />{' '}
+              <span className="hidden sm:inline">Your company</span>
+            </button>
+          )}
           {workspaceId && (
             <button
               onClick={() => setShowValue(true)}
@@ -502,6 +519,17 @@ export default function AccountsPage() {
         <ValueDashboardModal
           workspaceId={workspaceId}
           onClose={() => setShowValue(false)}
+        />
+      )}
+      {showSellerProfile && workspaceId && (
+        <SellerProfileModal
+          workspaceId={workspaceId}
+          initialProfile={workspace?.seller_profile ?? null}
+          onClose={() => setShowSellerProfile(false)}
+          onSaved={() => {
+            setShowSellerProfile(false);
+            void refreshWorkspaces();
+          }}
         />
       )}
     </div>

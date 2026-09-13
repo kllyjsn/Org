@@ -207,6 +207,7 @@ function MapInner() {
   const viewport = useViewport();
   const [mapName, setMapName] = useState('');
   const [domain, setDomain] = useState('');
+  const [workspaceId, setWorkspaceId] = useState('');
   const [meta, setMeta] = useState<MapState['meta'] | null>(null);
   const [role, setRole] = useState<'owner' | 'member' | 'viewer'>('member');
   const [nodes, setNodes, onNodesChange] = useNodesState<PersonNodeData>([]);
@@ -267,6 +268,7 @@ function MapInner() {
         setEdges(flow.edges);
         setMapName(map.name);
         setDomain(map.domain);
+        setWorkspaceId(map.workspace_id);
         setMeta(map.state.meta);
         setRole(map.role);
         remoteUpdatedAt.current = map.updated_at;
@@ -2134,6 +2136,7 @@ function MapInner() {
         <DeepResearchModal
           domain={domain}
           mapId={mapId}
+          workspaceId={workspaceId}
           people={people}
           selected={selected}
           initialFocus={deepResearchFocus}

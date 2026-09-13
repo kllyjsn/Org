@@ -101,6 +101,20 @@ export interface Workspace {
   name: string;
   role: 'owner' | 'member' | 'viewer';
   plan: 'free' | 'pro';
+  seller_profile: SellerProfile | null;
+}
+
+export interface SellerProfile {
+  companyName: string;
+  domain: string;
+  summary: string;
+  products: string[];
+  targetCustomers: string[];
+  useCases: string[];
+  proofPoints: string[];
+  competitors: string[];
+  positioning: string;
+  researchedAt: string;
 }
 
 export interface MapListItem {

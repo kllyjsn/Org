@@ -13,6 +13,7 @@ const STAGES = [
 export default function DeepResearchModal({
   domain,
   mapId,
+  workspaceId,
   people,
   selected,
   initialFocus,
@@ -22,6 +23,7 @@ export default function DeepResearchModal({
 }: {
   domain: string;
   mapId?: string;
+  workspaceId?: string;
   people: Person[];
   selected: Person | null;
   initialFocus?: string;
@@ -70,7 +72,8 @@ export default function DeepResearchModal({
         await api.research(
           domain,
           fullAccount ? undefined : focus.trim(),
-          fullAccount ? knownSources : undefined
+          fullAccount ? knownSources : undefined,
+          workspaceId
         )
       );
     } catch (err) {

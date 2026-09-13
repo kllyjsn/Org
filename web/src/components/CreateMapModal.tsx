@@ -93,7 +93,12 @@ export default function CreateMapModal({
     setStage(0);
     researchStartedAt.current = new Date().toISOString();
     try {
-      const r = await api.research(domain.trim());
+      const r = await api.research(
+        domain.trim(),
+        undefined,
+        undefined,
+        workspaceId
+      );
       setResult(r);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'research failed');
