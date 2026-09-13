@@ -85,6 +85,16 @@ test('briefing fallback separates evidence from seller hypotheses', async () => 
     assert.equal(deepened.valueCase?.currentState[0]?.provenance, 'sourced');
     assert.equal(deepened.valueCase?.desiredOutcomes[0]?.provenance, 'hypothesis');
     assert.deepEqual(deepened.valueCase?.desiredOutcomes[0]?.evidence, []);
+    assert.ok(
+      deepened.valueCase?.researchGaps.some((gap) =>
+        /business problems/i.test(gap)
+      )
+    );
+    assert.ok(
+      deepened.valueCase?.researchGaps.some((gap) =>
+        /decision criteria/i.test(gap)
+      )
+    );
     assert.match(
       deepened.valueCase?.stakeholderMessages[0]?.statement ?? '',
       /before positioning DevTools/

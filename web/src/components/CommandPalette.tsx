@@ -269,6 +269,7 @@ export default function CommandPalette({
           : message
       )
     );
+    window.setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const cancelCanvasCommand = (index: number) => {
@@ -283,6 +284,7 @@ export default function CommandPalette({
           : message
       )
     );
+    window.setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const submit = () => {

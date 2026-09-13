@@ -274,6 +274,38 @@ function strings(value: unknown): string[] {
   return value.map((item) => cleanText(item, 300)).filter(Boolean).slice(0, 6);
 }
 
+type ValueCaseWithoutGaps = Omit<AccountValueCase, 'researchGaps'>;
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean))).slice(0, 8);
+}
+
+function derivedResearchGaps(valueCase: ValueCaseWithoutGaps): string[] {
+  const gaps: string[] = [];
+  if (valueCase.currentState.length === 0) {
+    gaps.push('Current-state evidence is not established yet.');
+  }
+  if (valueCase.businessProblems.length === 0) {
+    gaps.push('Business problems are not established from account evidence yet.');
+  }
+  if (valueCase.businessImpact.length === 0) {
+    gaps.push('Business impact is not established from account evidence yet.');
+  }
+  if (valueCase.desiredOutcomes.length === 0) {
+    gaps.push('Desired outcomes are not established yet.');
+  }
+  if (valueCase.requiredCapabilities.length === 0) {
+    gaps.push('Required capabilities are not established yet.');
+  }
+  if (valueCase.decisionCriteria.length === 0) {
+    gaps.push('Decision criteria are not established yet.');
+  }
+  if (valueCase.stakeholderMessages.length === 0) {
+    gaps.push('No stakeholder-specific message is grounded in the map yet.');
+  }
+  return gaps;
+}
+
 function fallbackValueCase(
   state: MapState,
   sellerProfile: SellerProfile
@@ -297,7 +329,7 @@ function fallbackValueCase(
       )
     )
     .slice(0, 4);
-  return {
+  const valueCase: AccountValueCase = {
     methodology: 'Command of the Message',
     researchDepth: 'map_only',
     currentState,
@@ -341,15 +373,18 @@ function fallbackValueCase(
       'Which capabilities are mandatory, and who defines the decision criteria?',
       'How will the buying group measure success and economic impact?',
     ],
-    researchGaps: [
-      ...(currentState.length === 0
-        ? ['No sourced strategic initiative is attached to this map.']
-        : []),
-      ...(relevantPeople.length === 0
-        ? ['No stakeholder is explicitly connected to a current initiative.']
-        : []),
-    ],
+    researchGaps: [],
   };
+  valueCase.researchGaps = uniqueStrings([
+    ...(currentState.length === 0
+      ? ['No sourced strategic initiative is attached to this map.']
+      : []),
+    ...(relevantPeople.length === 0
+      ? ['No stakeholder is explicitly connected to a current initiative.']
+      : []),
+    ...derivedResearchGaps(valueCase),
+  ]);
+  return valueCase;
 }
 
 export async function deepenAccountBriefing(
@@ -480,50 +515,53 @@ Return JSON only:
       const parsedItems = strings(value);
       return parsedItems.length > 0 ? parsedItems : fallbackItems;
     };
-    return {
-      ...briefing,
-      valueCase: {
-        methodology: 'Command of the Message',
-        researchDepth: 'live',
-        currentState: useInsights(
-          parsed.currentState,
-          fallback.currentState
-        ),
-        businessProblems: useInsights(
-          parsed.businessProblems,
-          fallback.businessProblems
-        ),
-        businessImpact: useInsights(
-          parsed.businessImpact,
-          fallback.businessImpact
-        ),
-        desiredOutcomes: useInsights(
-          parsed.desiredOutcomes,
-          fallback.desiredOutcomes
-        ),
-        requiredCapabilities: useInsights(
-          parsed.requiredCapabilities,
-          fallback.requiredCapabilities
-        ),
-        decisionCriteria: useInsights(
-          parsed.decisionCriteria,
-          fallback.decisionCriteria
-        ),
-        differentiation: useInsights(
-          parsed.differentiation,
-          fallback.differentiation
-        ),
-        stakeholderMessages:
-          stakeholderMessages.length > 0
-            ? stakeholderMessages
-            : fallback.stakeholderMessages,
-        discoveryQuestions: useStrings(
-          parsed.discoveryQuestions,
-          fallback.discoveryQuestions
-        ),
-        researchGaps: strings(parsed.researchGaps),
-      },
+    const valueCase: AccountValueCase = {
+      methodology: 'Command of the Message',
+      researchDepth: 'live',
+      currentState: useInsights(
+        parsed.currentState,
+        fallback.currentState
+      ),
+      businessProblems: useInsights(
+        parsed.businessProblems,
+        fallback.businessProblems
+      ),
+      businessImpact: useInsights(
+        parsed.businessImpact,
+        fallback.businessImpact
+      ),
+      desiredOutcomes: useInsights(
+        parsed.desiredOutcomes,
+        fallback.desiredOutcomes
+      ),
+      requiredCapabilities: useInsights(
+        parsed.requiredCapabilities,
+        fallback.requiredCapabilities
+      ),
+      decisionCriteria: useInsights(
+        parsed.decisionCriteria,
+        fallback.decisionCriteria
+      ),
+      differentiation: useInsights(
+        parsed.differentiation,
+        fallback.differentiation
+      ),
+      stakeholderMessages:
+        stakeholderMessages.length > 0
+          ? stakeholderMessages
+          : fallback.stakeholderMessages,
+      discoveryQuestions: useStrings(
+        parsed.discoveryQuestions,
+        fallback.discoveryQuestions
+      ),
+      researchGaps: [],
     };
+    valueCase.researchGaps = uniqueStrings([
+      ...strings(parsed.researchGaps),
+      ...fallback.researchGaps,
+      ...derivedResearchGaps(valueCase),
+    ]);
+    return { ...briefing, valueCase };
   } catch {
     return { ...briefing, valueCase: fallback };
   }
