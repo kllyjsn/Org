@@ -148,7 +148,8 @@ export async function refreshNextDueMap(): Promise<{
          state->'meta'->>'nextRefreshAt' IS NULL
          OR state->'meta'->>'nextRefreshAt' <= $1
        )
-     ORDER BY COALESCE(state->'meta'->>'nextRefreshAt', created_at) ASC
+     ORDER BY is_live_opportunity DESC,
+              COALESCE(state->'meta'->>'nextRefreshAt', created_at) ASC
      LIMIT 1`,
     [now()]
   );
