@@ -8,7 +8,16 @@ import {
   Sparkles,
   Target,
 } from 'lucide-react';
-import type { MapEdge, Person, StrategicInitiative } from '../types';
+import {
+  personProductFit,
+  sellerBuyingFunctionLabel,
+} from '../lib/accountFit';
+import type {
+  MapEdge,
+  Person,
+  SellerProfile,
+  StrategicInitiative,
+} from '../types';
 
 const ROLE_PRIORITY: Record<Person['role'], number> = {
   champion: 100,
@@ -30,7 +39,11 @@ const TARGET_PRIORITY: Record<Person['role'], number> = {
   none: 0,
 };
 
-function personScore(person: Person, priorities: Record<Person['role'], number>) {
+function personScore(
+  person: Person,
+  priorities: Record<Person['role'], number>,
+  sellerProfile: SellerProfile | null
+) {
   const executive = /\b(chief|ceo|cto|cio|cfo|coo|president|vp|vice president|head)\b/i.test(
     person.title
   )
@@ -38,6 +51,7 @@ function personScore(person: Person, priorities: Record<Person['role'], number>)
     : 0;
   return (
     priorities[person.role] +
+    personProductFit(person, sellerProfile) +
     executive +
     Math.min(person.sources.length, 5) * 2 +
     (person.confidence === 'high' ? 8 : person.confidence === 'medium' ? 4 : 0)
@@ -141,6 +155,7 @@ export default function AccountStrategyModal({
   people,
   edges,
   initiatives,
+  sellerProfile,
   onClose,
   onFocusPerson,
 }: {
@@ -149,19 +164,23 @@ export default function AccountStrategyModal({
   people: Person[];
   edges: MapEdge[];
   initiatives: StrategicInitiative[];
+  sellerProfile: SellerProfile | null;
   onClose: () => void;
   onFocusPerson: (person: Person) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const strategy = useMemo(() => {
     const start = [...people].sort(
-      (a, b) => personScore(b, ROLE_PRIORITY) - personScore(a, ROLE_PRIORITY)
+      (a, b) =>
+        personScore(b, ROLE_PRIORITY, sellerProfile) -
+        personScore(a, ROLE_PRIORITY, sellerProfile)
     )[0];
     const target = [...people]
       .filter((person) => person.id !== start?.id)
       .sort(
         (a, b) =>
-          personScore(b, TARGET_PRIORITY) - personScore(a, TARGET_PRIORITY)
+          personScore(b, TARGET_PRIORITY, sellerProfile) -
+          personScore(a, TARGET_PRIORITY, sellerProfile)
       )[0] ?? start;
     const path =
       start && target
@@ -188,7 +207,8 @@ export default function AccountStrategyModal({
       initiatives: relevantInitiatives,
       objections: objectionHypotheses(target, relevantInitiatives),
     };
-  }, [edges, initiatives, people]);
+  }, [edges, initiatives, people, sellerProfile]);
+  const buyingFunction = sellerBuyingFunctionLabel(sellerProfile);
 
   const brief = useMemo(() => {
     const account = companyName || domain;
@@ -244,6 +264,12 @@ export default function AccountStrategyModal({
               The strongest mapped route to a buyer, plus a brief grounded in
               the people, relationships, and initiatives already on this map.
             </p>
+            {sellerProfile && buyingFunction && (
+              <p className="mt-2 text-xs font-medium text-[#5b4cf0]">
+                Prioritized for {sellerProfile.companyName}'s {buyingFunction}{' '}
+                use case.
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}

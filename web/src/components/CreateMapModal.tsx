@@ -9,10 +9,10 @@ function templateState(
   template: 'executive' | 'buying-committee'
 ): MapState {
   const executive = [
-    ['Chief Executive Officer', 'Executive', 'economic_buyer'],
-    ['Chief Financial Officer', 'Finance', 'decision_maker'],
-    ['Chief Technology Officer', 'Engineering', 'technical_buyer'],
-    ['Chief Revenue Officer', 'Sales', 'champion'],
+    ['Chief Executive Officer', 'Executive', 'none'],
+    ['Chief Financial Officer', 'Finance', 'none'],
+    ['Chief Technology Officer', 'Engineering', 'none'],
+    ['Chief Revenue Officer', 'Sales', 'none'],
   ] as const;
   const buyingCommittee = [
     ['Executive Sponsor', 'Executive', 'economic_buyer'],

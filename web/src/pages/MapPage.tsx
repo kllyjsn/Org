@@ -62,6 +62,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
+import { useSession } from '../store';
 import AccountBriefingModal from '../components/AccountBriefingModal';
 import AccountStrategyModal from '../components/AccountStrategyModal';
 import ChangeAlertsModal from '../components/ChangeAlertsModal';
@@ -213,6 +214,11 @@ function MapInner() {
   const [mapName, setMapName] = useState('');
   const [domain, setDomain] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
+  const sellerProfile = useSession(
+    (session) =>
+      session.workspaces.find((workspace) => workspace.id === workspaceId)
+        ?.seller_profile ?? null
+  );
   const [meta, setMeta] = useState<MapState['meta'] | null>(null);
   const [role, setRole] = useState<'owner' | 'member' | 'viewer'>('member');
   const [nodes, setNodes, onNodesChange] = useNodesState<PersonNodeData>([]);
@@ -2344,6 +2350,7 @@ function MapInner() {
           people={people}
           edges={edges.map(edgeToMap)}
           initiatives={meta.initiatives ?? []}
+          sellerProfile={sellerProfile}
           onClose={() => setShowStrategy(false)}
           onFocusPerson={(person) => {
             setShowStrategy(false);
