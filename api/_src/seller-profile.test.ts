@@ -31,3 +31,17 @@ test('seller profiles never preserve unexpected fields', () => {
   });
   assert.equal('privateNotes' in profile, false);
 });
+
+test('seller profiles remove bare grounding markers', () => {
+  const profile = sanitizeSellerProfile({
+    companyName: 'Stripe [1]',
+    summary: 'Payments infrastructure [2, 4] for internet businesses.',
+    products: ['Billing [8]', 'Payments'],
+    positioning: 'Unified financial infrastructure [12].',
+  });
+
+  assert.equal(profile.companyName, 'Stripe');
+  assert.equal(profile.summary, 'Payments infrastructure for internet businesses.');
+  assert.deepEqual(profile.products, ['Billing', 'Payments']);
+  assert.equal(profile.positioning, 'Unified financial infrastructure.');
+});

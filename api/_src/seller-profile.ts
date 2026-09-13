@@ -2,11 +2,18 @@ import { chat } from './llm.js';
 import { extractJson } from './research.js';
 import type { SellerProfile } from './types.js';
 
+function clean(value: string): string {
+  return value
+    .replace(/\s*\[\d+(?:\s*,\s*\d+)*\]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function strings(value: unknown, limit = 12): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim())
+    .map(clean)
     .filter(Boolean)
     .slice(0, limit);
 }
@@ -22,7 +29,7 @@ export function sanitizeSellerProfile(
   return {
     companyName:
       typeof value.companyName === 'string'
-        ? value.companyName.trim().slice(0, 160)
+        ? clean(value.companyName).slice(0, 160)
         : '',
     domain:
       typeof value.domain === 'string'
@@ -30,7 +37,7 @@ export function sanitizeSellerProfile(
         : fallbackDomain,
     summary:
       typeof value.summary === 'string'
-        ? value.summary.trim().slice(0, 1200)
+        ? clean(value.summary).slice(0, 1200)
         : '',
     products: strings(value.products),
     targetCustomers: strings(value.targetCustomers),
@@ -39,7 +46,7 @@ export function sanitizeSellerProfile(
     competitors: strings(value.competitors),
     positioning:
       typeof value.positioning === 'string'
-        ? value.positioning.trim().slice(0, 1200)
+        ? clean(value.positioning).slice(0, 1200)
         : '',
     researchedAt:
       typeof value.researchedAt === 'string'

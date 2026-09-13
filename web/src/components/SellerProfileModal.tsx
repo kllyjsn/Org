@@ -19,6 +19,8 @@ function ListField({
   value: string[];
   onChange: (value: string[]) => void;
 }) {
+  const [draft, setDraft] = useState(value.join('\n'));
+
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -26,8 +28,9 @@ function ListField({
       </span>
       <textarea
         className="min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm leading-5 outline-none transition focus:border-[#796df5] focus:bg-white"
-        value={value.join('\n')}
-        onChange={(event) => onChange(list(event.target.value))}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => onChange(list(draft))}
       />
     </label>
   );
