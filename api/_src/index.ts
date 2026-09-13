@@ -4,7 +4,11 @@ import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { answerAccountQuestion } from './account-agent.js';
-import { buildAccountBriefing } from './briefing.js';
+import {
+  buildAccountBriefing,
+  deepenAccountBriefing,
+} from './briefing.js';
+import type { AccountBriefing } from './briefing.js';
 import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
@@ -877,9 +881,51 @@ app.get('/api/maps/:id/briefing', requireAuth, async (c) => {
   const baseline = versions[0];
   const state = map.state as MapState;
   const changes = baseline ? compareMapStates(baseline.state, state) : [];
-  return c.json(
-    buildAccountBriefing(state, changes, baseline?.created_at ?? null)
+  const workspaces = await query<{ seller_profile: SellerProfile | null }>(
+    'SELECT seller_profile FROM workspaces WHERE id = $1',
+    [map.workspace_id]
   );
+  const sellerProfile = workspaces[0]?.seller_profile ?? null;
+  const cached = await query<{
+    briefing: AccountBriefing;
+    generated_at: string;
+  }>(
+    `SELECT briefing, generated_at FROM account_briefings
+     WHERE map_id = $1
+       AND map_updated_at = $2
+       AND seller_profile IS NOT DISTINCT FROM $3::jsonb
+       AND generated_at::timestamptz > NOW() - INTERVAL '6 hours'`,
+    [map.id, map.updated_at, sellerProfile]
+  );
+  if (cached[0]) return c.json(cached[0].briefing);
+  const briefing = buildAccountBriefing(
+    state,
+    changes,
+    baseline?.created_at ?? null
+  );
+  const deepBriefing = await deepenAccountBriefing(
+    briefing,
+    state,
+    sellerProfile
+  );
+  await query(
+    `INSERT INTO account_briefings
+       (map_id, map_updated_at, seller_profile, briefing, generated_at)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (map_id) DO UPDATE SET
+       map_updated_at = EXCLUDED.map_updated_at,
+       seller_profile = EXCLUDED.seller_profile,
+       briefing = EXCLUDED.briefing,
+       generated_at = EXCLUDED.generated_at`,
+    [
+      map.id,
+      map.updated_at,
+      sellerProfile,
+      deepBriefing,
+      deepBriefing.generatedAt,
+    ]
+  );
+  return c.json(deepBriefing);
 });
 
 app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => {

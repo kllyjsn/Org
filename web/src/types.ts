@@ -253,6 +253,34 @@ export interface AccountBriefing {
   summary: string;
   changes: MapChangeAlert[];
   actions: BriefingAction[];
+  valueCase: AccountValueCase | null;
+}
+
+export interface BriefingInsight {
+  statement: string;
+  provenance: 'sourced' | 'hypothesis';
+  evidence: string[];
+}
+
+export interface StakeholderMessage extends BriefingInsight {
+  personId?: string;
+  personName: string;
+  relevance: string;
+}
+
+export interface AccountValueCase {
+  methodology: 'Command of the Message';
+  researchDepth: 'live' | 'map_only';
+  currentState: BriefingInsight[];
+  businessProblems: BriefingInsight[];
+  businessImpact: BriefingInsight[];
+  desiredOutcomes: BriefingInsight[];
+  requiredCapabilities: BriefingInsight[];
+  decisionCriteria: BriefingInsight[];
+  differentiation: BriefingInsight[];
+  stakeholderMessages: StakeholderMessage[];
+  discoveryQuestions: string[];
+  researchGaps: string[];
 }
 
 export interface AccountAgentMessage {
