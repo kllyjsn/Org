@@ -1,4 +1,5 @@
 import { chat, activeProvider, type Provider } from './llm.js';
+import { exaPeopleContext } from './exa.js';
 import type { Confidence, ResearchSource, SellerProfile } from './types.js';
 
 export interface ResearchedPerson {
@@ -46,7 +47,11 @@ export interface StrategicInitiative {
 const SYSTEM_PROMPT = `You are an analyst mapping the organizational structure of companies.
 You answer only with strict JSON. No markdown, no prose, no footnotes.`;
 
-function researchPrompt(domain: string, focus: string): string {
+function researchPrompt(
+  domain: string,
+  focus: string,
+  discoveryContext = ''
+): string {
   return `Map the organizational structure of the company at domain "${domain}".
 
 Use public sources: the company's leadership/team/about pages, press releases,
@@ -104,7 +109,7 @@ Rules:
 - Use "conflicting" when credible sources disagree on the current title.
 - Use "possibly_stale" when the only evidence appears older than 18 months.
 - If you cannot verify the manager, use null — do not guess.
-- JSON only.`;
+- JSON only.${discoveryContext}`;
 }
 
 function sellerContext(profile: SellerProfile | null | undefined): string {
@@ -1008,6 +1013,9 @@ export async function researchOrg(
   const deadlineMs = Date.now() + 52_000;
 
   try {
+    const discoveryPromise = exaPeopleContext(domain, requestedFocus).catch(
+      () => ''
+    );
     const initiativesPromise = requestedFocus
       ? Promise.resolve(null)
       : chat([
@@ -1025,11 +1033,15 @@ export async function researchOrg(
           'engineering, product, design, data, security, and technology leadership',
           'sales, marketing, customer success, finance, operations, legal, and people leadership',
         ];
+    const discoveryContext = await discoveryPromise;
     const passes = await Promise.allSettled(
       focuses.map(async (focus) => {
         const result = await chat([
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: researchPrompt(domain, focus) },
+          {
+            role: 'user',
+            content: researchPrompt(domain, focus, discoveryContext),
+          },
         ], { webSearch: true, maxTokens: 4000, deadlineMs });
         const parsed = extractJson(result.content) as {
           companyName?: unknown;
@@ -1066,7 +1078,8 @@ export async function researchOrg(
             content: researchPrompt(
               domain,
               `missing or underrepresented functions: ${missing.join(', ')}. ` +
-              'Return only people you can verify; some functions may not exist.'
+              'Return only people you can verify; some functions may not exist.',
+              discoveryContext
             ),
           },
         ], { webSearch: true, maxTokens: 4000, deadlineMs });
