@@ -2104,8 +2104,8 @@ function MapInner() {
 
         {/* buying-committee coverage strip */}
         {people.length > 0 && (
-          <div className="pointer-events-none absolute left-2 top-16 z-10 max-w-[calc(100%-1rem)] rounded-2xl border border-white/80 bg-white/85 px-3.5 py-2.5 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:left-4 sm:top-20">
-            <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
+          <div className="pointer-events-none absolute bottom-12 right-2 z-10 max-w-[calc(100%-1rem)] rounded-2xl border border-white/80 bg-white/85 px-3 py-2 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:bottom-auto sm:left-4 sm:right-auto sm:top-20 sm:px-3.5 sm:py-2.5">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400 sm:mb-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
               Buying committee · {people.length} people
             </div>
