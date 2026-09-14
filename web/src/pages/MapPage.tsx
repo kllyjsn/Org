@@ -279,7 +279,7 @@ function MapInner() {
       rf.setViewport(
         {
           x: 32 - minX * zoom,
-          y: (isMobile ? 150 : 120) - minY * zoom,
+          y: (isMobile ? 170 : 200) - minY * zoom,
           zoom,
         },
         { duration: 450 }
