@@ -2077,7 +2077,7 @@ function MapInner() {
           <Controls
             showInteractive={false}
             fitViewOptions={openingFitOptions}
-            className="!bottom-3 !left-3 sm:!bottom-4 sm:!left-4"
+            className="!hidden !bottom-4 !left-4 sm:!flex"
           />
           <MiniMap
             pannable
@@ -2160,10 +2160,11 @@ function MapInner() {
 
         {/* buying-committee coverage strip */}
         {people.length > 0 && (
-          <div className="pointer-events-none absolute bottom-12 right-2 z-10 max-w-[calc(100%-1rem)] rounded-2xl border border-white/80 bg-white/85 px-3 py-2 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:bottom-auto sm:left-4 sm:right-auto sm:top-20 sm:px-3.5 sm:py-2.5">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400 sm:mb-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
-              Buying committee · {people.length} people
+          <div className="pointer-events-none absolute bottom-2 right-2 z-10 max-w-[calc(100%-1rem)] rounded-full border border-white/80 bg-white/85 px-2 py-1 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:bottom-auto sm:left-4 sm:right-auto sm:top-20 sm:rounded-2xl sm:px-3.5 sm:py-2.5">
+            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.08em] text-slate-400 sm:mb-1.5 sm:gap-2 sm:text-[10px] sm:tracking-[.12em]">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
+              <span className="sm:hidden">Committee · {people.length}</span>
+              <span className="hidden sm:inline">Buying committee · {people.length} people</span>
             </div>
             <div className="hidden flex-wrap gap-1.5 sm:flex">
               {(['champion', 'economic_buyer', 'decision_maker', 'technical_buyer', 'influencer', 'blocker'] as BuyingRole[]).map(
