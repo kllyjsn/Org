@@ -61,9 +61,11 @@ pages, employee announcements, conference bios, and reputable profiles.
 
 This pass focuses on: ${focus}.
 
-Identify up to 10 current employees in this focus area. Include executives,
-VPs, heads, directors, and named managers when publicly verifiable. Aim for at
-least 8 people when the public evidence exists; do not stop after the first
+Identify up to 14 current employees in this focus area. Go deeper than the
+executive row: include VPs, heads, directors, managers, team leads, and named
+senior individual contributors (staff/principal engineers, product managers,
+researchers, account leads) whenever public evidence names them. Aim for at
+least 10 people when the public evidence exists; do not stop after the first
 leadership page. Be concise: short titles, short summaries, no filler.
 
 Return ONLY this JSON object:
@@ -1059,8 +1061,14 @@ export async function researchOrg(
         ]
       : [
           'executive leadership and company-wide reporting structure',
-          'engineering, product, design, data, security, and technology leadership',
-          'sales, marketing, customer success, finance, operations, legal, and people leadership',
+          'engineering, platform, infrastructure, and security — including ' +
+            'engineering managers, team leads, and named staff or principal engineers',
+          'product, design, data, research, and AI/ML — including product ' +
+            'managers, designers, and named technical leads',
+          'sales, marketing, customer success, partnerships, and revenue ' +
+            'operations — including directors, managers, and named team leads',
+          'finance, legal, people, recruiting, support, and business operations ' +
+            '— including managers and named program owners',
         ];
     const discoveryContext = await discoveryPromise;
     const passes = await Promise.allSettled(
@@ -1071,7 +1079,7 @@ export async function researchOrg(
             role: 'user',
             content: researchPrompt(domain, focus, discoveryContext),
           },
-        ], { webSearch: true, maxTokens: 4000, deadlineMs });
+        ], { webSearch: true, maxTokens: 5_000, deadlineMs });
         const parsed = extractJson(result.content) as {
           companyName?: unknown;
           people?: unknown;

@@ -56,6 +56,68 @@ export function applyLayout(people: Person[], edges: MapEdge[]): Person[] {
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: 0, y: 0 }) }));
 }
 
+const LANE_COLUMNS = 4;
+const LANE_COL_GAP = 300;
+const LANE_ROW_GAP = 200;
+const LANE_GAP = 140;
+
+function laneName(person: Person): string {
+  return (
+    person.department?.trim() ||
+    person.productLine?.trim() ||
+    person.team?.trim() ||
+    'Unassigned'
+  );
+}
+
+/**
+ * Department-first reading order: one horizontal band per department, wrapped
+ * at a fixed column count so a large account stays a tall page instead of an
+ * endless horizontal scroll. Within a band people are ordered by seniority.
+ */
+export function departmentLanePositions(
+  people: Person[]
+): Map<string, { x: number; y: number }> {
+  const lanes = new Map<string, Person[]>();
+  for (const person of people) {
+    const name = laneName(person);
+    lanes.set(name, [...(lanes.get(name) ?? []), person]);
+  }
+
+  const ordered = [...lanes.entries()].sort((a, b) => {
+    const seniorityA = Math.min(...a[1].map((p) => titleRank(p.title)));
+    const seniorityB = Math.min(...b[1].map((p) => titleRank(p.title)));
+    if (seniorityA !== seniorityB) return seniorityA - seniorityB;
+    if (b[1].length !== a[1].length) return b[1].length - a[1].length;
+    return a[0].localeCompare(b[0]);
+  });
+
+  const pos = new Map<string, { x: number; y: number }>();
+  let laneTop = 0;
+  for (const [, members] of ordered) {
+    const sorted = [...members].sort((a, b) => {
+      const rank = titleRank(a.title) - titleRank(b.title);
+      return rank !== 0 ? rank : a.name.localeCompare(b.name);
+    });
+    sorted.forEach((person, index) => {
+      const column = index % LANE_COLUMNS;
+      const row = Math.floor(index / LANE_COLUMNS);
+      pos.set(person.id, {
+        x: column * LANE_COL_GAP,
+        y: laneTop + row * LANE_ROW_GAP,
+      });
+    });
+    const rows = Math.ceil(sorted.length / LANE_COLUMNS);
+    laneTop += rows * LANE_ROW_GAP + LANE_GAP;
+  }
+  return pos;
+}
+
+export function applyDepartmentLanes(people: Person[]): Person[] {
+  const pos = departmentLanePositions(people);
+  return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: p.x, y: p.y }) }));
+}
+
 /**
  * Title-seniority ladder used when research finds people but no reporting
  * lines. Lower number = more senior; the CEO/founder anchors the tree and each
@@ -157,7 +219,7 @@ export function stateFromResearch(result: ResearchResult): MapState {
   if (edges.length === 0 && people.length > 1) edges.push(...inferEdges(people));
 
   return {
-    people: applyLayout(people, edges),
+    people: applyDepartmentLanes(people),
     edges,
     meta: {
       domain: result.domain,

@@ -85,7 +85,7 @@ import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
 import PersonPanel from '../components/PersonPanel';
 import ShareModal from '../components/ShareModal';
-import { applyLayout } from '../lib/layout';
+import { applyDepartmentLanes, applyLayout } from '../lib/layout';
 import { useIsMobile } from '../lib/useIsMobile';
 import { ROLE_META } from '../lib/colors';
 import { parseCsv } from '../lib/csv';
@@ -684,11 +684,14 @@ function MapInner() {
     [setNodes, setEdges, markDirty, nodes, recordHistory]
   );
 
-  const autoLayout = useCallback(() => {
+  const autoLayout = useCallback((mode: 'department' | 'hierarchy' = 'department') => {
     recordHistory();
     const currentPeople = nodes.map((n) => ({ ...n.data.person, x: n.position.x, y: n.position.y }));
     const currentEdges: MapEdge[] = edges.map(edgeToMap);
-    const laid = applyLayout(currentPeople, currentEdges);
+    const laid =
+      mode === 'hierarchy'
+        ? applyLayout(currentPeople, currentEdges)
+        : applyDepartmentLanes(currentPeople);
     const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
     setNodes((ns) => {
       const next = ns.map((n) => ({
@@ -1097,8 +1100,15 @@ function MapInner() {
       }
       if (/(arrange|organize|layout|tidy)/.test(lower)) {
         if (readOnly) return say('I couldn’t edit this read-only map.');
-        autoLayout();
-        return say('I arranged the org chart.');
+        const hierarchy = /\b(reporting|reports|hierarchy|tree|manager)\b/.test(
+          lower
+        );
+        autoLayout(hierarchy ? 'hierarchy' : 'department');
+        return say(
+          hierarchy
+            ? 'I arranged the org chart by reporting line.'
+            : 'I arranged the org chart into department lanes.'
+        );
       }
       if (/\b(overview|show all|whole account|fit all)\b/.test(lower)) {
         setSelectedId(null);
@@ -1901,10 +1911,11 @@ function MapInner() {
                 <UserPlus size={15} /> Person
               </button>
               <button
-                onClick={autoLayout}
+                onClick={() => autoLayout('department')}
+                title="Arrange people into department lanes"
                 className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
               >
-                <LayoutGrid size={15} /> Layout
+                <LayoutGrid size={15} /> Departments
               </button>
               <button
                 onClick={() => crmInput.current?.click()}
