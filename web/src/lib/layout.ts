@@ -76,8 +76,10 @@ function laneName(person: Person): string {
  * endless horizontal scroll. Within a band people are ordered by seniority.
  */
 export function departmentLanePositions(
-  people: Person[]
+  people: Person[],
+  columns = LANE_COLUMNS
 ): Map<string, { x: number; y: number }> {
+  const perRow = Math.max(1, columns);
   const lanes = new Map<string, Person[]>();
   for (const person of people) {
     const name = laneName(person);
@@ -100,21 +102,24 @@ export function departmentLanePositions(
       return rank !== 0 ? rank : a.name.localeCompare(b.name);
     });
     sorted.forEach((person, index) => {
-      const column = index % LANE_COLUMNS;
-      const row = Math.floor(index / LANE_COLUMNS);
+      const column = index % perRow;
+      const row = Math.floor(index / perRow);
       pos.set(person.id, {
         x: column * LANE_COL_GAP,
         y: laneTop + row * LANE_ROW_GAP,
       });
     });
-    const rows = Math.ceil(sorted.length / LANE_COLUMNS);
+    const rows = Math.ceil(sorted.length / perRow);
     laneTop += rows * LANE_ROW_GAP + LANE_GAP;
   }
   return pos;
 }
 
-export function applyDepartmentLanes(people: Person[]): Person[] {
-  const pos = departmentLanePositions(people);
+export function applyDepartmentLanes(
+  people: Person[],
+  columns = LANE_COLUMNS
+): Person[] {
+  const pos = departmentLanePositions(people, columns);
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: p.x, y: p.y }) }));
 }
 

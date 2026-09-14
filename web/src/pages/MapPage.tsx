@@ -267,6 +267,26 @@ function MapInner() {
         : { padding: 0.2 },
     [isMobile]
   );
+  // Anchoring the first card near the top-left at a legible zoom keeps tall
+  // department lanes usable; centering a tall map can leave no whole card in
+  // view on a phone.
+  const anchorTopLeft = useCallback(
+    (positions: { x: number; y: number }[]) => {
+      if (positions.length === 0) return;
+      const minX = Math.min(...positions.map((point) => point.x));
+      const minY = Math.min(...positions.map((point) => point.y));
+      const zoom = isMobile ? 0.62 : 0.8;
+      rf.setViewport(
+        {
+          x: 32 - minX * zoom,
+          y: (isMobile ? 150 : 120) - minY * zoom,
+          zoom,
+        },
+        { duration: 450 }
+      );
+    },
+    [isMobile, rf]
+  );
   const researchDue = Boolean(
     meta?.researchedAt &&
       (!meta.nextRefreshAt || Date.parse(meta.nextRefreshAt) <= Date.now())
@@ -302,10 +322,13 @@ function MapInner() {
             entry: mapViewEntry.current,
           })
           .catch(() => undefined);
-        window.setTimeout(() => rf.fitView(openingFitOptions), 50);
+        window.setTimeout(() => {
+          if (isMobile) anchorTopLeft(map.state.people);
+          else rf.fitView(openingFitOptions);
+        }, 50);
       })
       .catch(() => setNotFound(true));
-  }, [mapId, setNodes, setEdges, rf, openingFitOptions]);
+  }, [mapId, setNodes, setEdges, rf, openingFitOptions, isMobile, anchorTopLeft]);
 
   useEffect(() => {
     if (searchParams.get('briefing') === '1') {
@@ -691,7 +714,7 @@ function MapInner() {
     const laid =
       mode === 'hierarchy'
         ? applyLayout(currentPeople, currentEdges)
-        : applyDepartmentLanes(currentPeople);
+        : applyDepartmentLanes(currentPeople, isMobile ? 2 : 4);
     const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
     setNodes((ns) => {
       const next = ns.map((n) => ({
@@ -701,8 +724,20 @@ function MapInner() {
       markDirty(next, edges);
       return next;
     });
-    window.setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
-  }, [nodes, edges, setNodes, markDirty, rf, recordHistory]);
+    window.setTimeout(() => {
+      if (mode === 'department') anchorTopLeft(laid);
+      else rf.fitView({ padding: 0.2 });
+    }, 50);
+  }, [
+    nodes,
+    edges,
+    setNodes,
+    markDirty,
+    rf,
+    recordHistory,
+    anchorTopLeft,
+    isMobile,
+  ]);
 
   const selectedNodes = useMemo(
     () => nodes.filter((node) => node.selected),
