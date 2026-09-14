@@ -2077,7 +2077,7 @@ function MapInner() {
           <Controls
             showInteractive={false}
             fitViewOptions={openingFitOptions}
-            className="!hidden !bottom-4 !left-4 sm:!flex"
+            className="max-sm:!hidden !bottom-4 !left-4"
           />
           <MiniMap
             pannable
