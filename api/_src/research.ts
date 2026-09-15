@@ -1,6 +1,6 @@
 import { chat, activeProvider, type Provider } from './llm.js';
 import { exaPeopleContext } from './exa.js';
-import { sumbleOrgPeople } from './sumble.js';
+import { canonicalDepartment, sumbleOrgPeople } from './sumble.js';
 import type { Confidence, ResearchSource, SellerProfile } from './types.js';
 
 export interface ResearchedPerson {
@@ -818,8 +818,12 @@ export function normalizePeople(
     const candidate: ResearchedPerson = {
       name,
       title,
-      department:
-        typeof p.department === 'string' ? stripFootnotes(p.department) : null,
+      // Canonical buckets keep LLM freeform departments ("Human Resources",
+      // "People Operations") from splintering lanes; unmatched values fall
+      // to "Other" rather than one lane per string.
+      department: canonicalDepartment(
+        typeof p.department === 'string' ? stripFootnotes(p.department) : null
+      ),
       team: typeof p.team === 'string' ? stripFootnotes(p.team) : null,
       productLine:
         typeof p.productLine === 'string' ? stripFootnotes(p.productLine) : null,
