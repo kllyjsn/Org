@@ -83,9 +83,11 @@ import DeepResearchModal from '../components/DeepResearchModal';
 import FeedbackModal from '../components/FeedbackModal';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
+import LaneHeaderNode from '../components/LaneHeaderNode';
+import type { LaneHeaderData } from '../components/LaneHeaderNode';
 import PersonPanel from '../components/PersonPanel';
 import ShareModal from '../components/ShareModal';
-import { applyDepartmentLanes, applyLayout } from '../lib/layout';
+import { applyDepartmentLanes, applyLayout, personLane } from '../lib/layout';
 import { useIsMobile } from '../lib/useIsMobile';
 import { ROLE_META } from '../lib/colors';
 import { parseCsv } from '../lib/csv';
@@ -107,7 +109,7 @@ import type {
   ResearchResult,
 } from '../types';
 
-const nodeTypes = { person: PersonNode };
+const nodeTypes = { person: PersonNode, lane: LaneHeaderNode };
 
 function reportsEdge(
   from: string,
@@ -545,6 +547,46 @@ function MapInner() {
 
   const selected = nodes.find((n) => n.id === selectedId)?.data.person ?? null;
   const people = useMemo(() => nodes.map((n) => n.data.person), [nodes]);
+
+  // Lane headers are derived from live node positions — they label each
+  // department/business-unit band and follow members when cards are dragged.
+  // They never enter MapState, undo history, or saved maps.
+  const laneHeaderNodes = useMemo(() => {
+    const lanes = new Map<
+      string,
+      { minX: number; minY: number; count: number }
+    >();
+    for (const node of nodes) {
+      const name = personLane(node.data.person);
+      const lane = lanes.get(name) ?? {
+        minX: Number.POSITIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        count: 0,
+      };
+      lane.minX = Math.min(lane.minX, node.position.x);
+      lane.minY = Math.min(lane.minY, node.position.y);
+      lane.count += 1;
+      lanes.set(name, lane);
+    }
+    return [...lanes.entries()].map(
+      ([label, lane]): Node<LaneHeaderData> => ({
+        id: `lane:${label}`,
+        type: 'lane',
+        position: { x: lane.minX, y: lane.minY - 62 },
+        data: { label, count: lane.count },
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        deletable: false,
+        zIndex: -1,
+      })
+    );
+  }, [nodes]);
+
+  const displayNodes = useMemo(
+    () => [...laneHeaderNodes, ...nodes],
+    [laneHeaderNodes, nodes]
+  );
 
   const knownSourceUrls = useMemo(() => {
     const urls = new Set<string>();
@@ -2025,7 +2067,7 @@ function MapInner() {
           </div>
         )}
         <ReactFlow
-          nodes={nodes}
+          nodes={displayNodes}
           edges={edges}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
@@ -2041,6 +2083,7 @@ function MapInner() {
             dragHistoryRecorded.current = false;
           }}
           onNodeClick={(_, n) => {
+            if (n.type !== 'person') return;
             setSelectedId(n.id);
             const groupId = n.data.person.groupId;
             if (groupId) {

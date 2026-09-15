@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  canonicalDepartment,
   sumblePeopleToRaw,
+  sumbleRelationships,
   sumbleTeamMemberships,
 } from './sumble.js';
 import { normalizePeople } from './research.js';
@@ -101,4 +103,101 @@ test('linkedin passthrough survives normalization', () => {
     60
   );
   assert.equal(person.linkedin, 'https://linkedin.com/in/grace');
+});
+
+test('granular job functions collapse into department buckets and stay as team', () => {
+  assert.equal(canonicalDepartment('Platform Engineer'), 'Engineering');
+  assert.equal(canonicalDepartment('General Counsel'), 'Legal');
+  assert.equal(canonicalDepartment('Recruiter'), 'People');
+  assert.equal(canonicalDepartment('Brand Marketing'), 'Marketing');
+  assert.equal(canonicalDepartment('Financial Controller'), 'Finance');
+  assert.equal(canonicalDepartment('Executive'), 'Executive');
+  assert.equal(canonicalDepartment('Executive Assistant'), 'Operations');
+  assert.equal(canonicalDepartment('Uncategorized'), null);
+  assert.equal(canonicalDepartment('Musician'), 'Other');
+  assert.equal(canonicalDepartment(null), null);
+
+  const raw = sumblePeopleToRaw(
+    [
+      {
+        sumble_url: 'https://sumble.com/l/person/x',
+        attributes: {
+          name: 'Ada Byron',
+          job_title: 'Staff Engineer',
+          job_function: 'Platform Engineer',
+          job_level: 'Senior IC',
+        },
+      },
+    ],
+    new Map()
+  );
+  assert.equal(raw[0].department, 'Engineering');
+  assert.equal(raw[0].team, 'Platform Engineer');
+  assert.equal(raw[0].jobLevel, 'Senior IC');
+});
+
+test('sumble relationships produce manager map and extra people', () => {
+  const { managerByName, extraPeople } = sumbleRelationships([
+    {
+      sumble_url: 'https://sumble.com/l/person/ceo',
+      attributes: { name: 'Ada Byron', job_title: 'CEO' },
+      related_people: {
+        managers: [],
+        direct_reports: [
+          {
+            sumble_url: 'https://sumble.com/l/person/felix',
+            attributes: { name: 'Felix Mercier', job_title: 'Director' },
+          },
+        ],
+      },
+    },
+    {
+      sumble_url: 'https://sumble.com/l/person/gc',
+      attributes: { name: 'Aref Wardak', job_title: 'General Counsel' },
+      related_people: {
+        managers: [
+          {
+            sumble_url: 'https://sumble.com/l/person/ceo',
+            attributes: { name: 'Ada Byron', job_title: 'CEO' },
+          },
+        ],
+        direct_reports: [
+          {
+            sumble_url: 'https://sumble.com/l/person/matthew',
+            attributes: { name: 'Matthew Pelnar', job_title: 'Legal Counsel' },
+          },
+        ],
+      },
+    },
+  ]);
+  assert.equal(managerByName.get('aref wardak'), 'Ada Byron');
+  assert.equal(managerByName.get('felix mercier'), 'Ada Byron');
+  assert.equal(managerByName.get('matthew pelnar'), 'Aref Wardak');
+  // The CEO appears both as a main row and as Aref's manager entry — the
+  // caller (sumbleOrgPeople) drops extraPeople already covered by the pull.
+  const names = extraPeople.map((p) => p.name).sort();
+  assert.deepEqual(names, ['Ada Byron', 'Felix Mercier', 'Matthew Pelnar']);
+  const felix = extraPeople.find((p) => p.name === 'Felix Mercier')!;
+  assert.equal(felix.reportsTo, 'Ada Byron');
+  assert.equal(felix.department, 'Other');
+  const matthew = extraPeople.find((p) => p.name === 'Matthew Pelnar')!;
+  assert.equal(matthew.department, 'Legal');
+});
+
+test('manager names feed reportsTo on the main pull', () => {
+  const raw = sumblePeopleToRaw(
+    [
+      {
+        sumble_url: 'https://sumble.com/l/person/felix',
+        attributes: {
+          name: 'Felix Mercier',
+          job_title: 'Director',
+          job_function: 'Operations',
+        },
+      },
+    ],
+    new Map(),
+    new Map([['felix mercier', 'Ada Byron']])
+  );
+  assert.equal(raw[0].reportsTo, 'Ada Byron');
 });

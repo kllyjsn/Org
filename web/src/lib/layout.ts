@@ -61,7 +61,8 @@ const LANE_COL_GAP = 300;
 const LANE_ROW_GAP = 200;
 const LANE_GAP = 140;
 
-function laneName(person: Person): string {
+/** The lane a person belongs to — shared by layout and lane headers. */
+export function personLane(person: Person): string {
   return (
     person.department?.trim() ||
     person.productLine?.trim() ||
@@ -82,13 +83,13 @@ export function departmentLanePositions(
   const perRow = Math.max(1, columns);
   const lanes = new Map<string, Person[]>();
   for (const person of people) {
-    const name = laneName(person);
+    const name = personLane(person);
     lanes.set(name, [...(lanes.get(name) ?? []), person]);
   }
 
   const ordered = [...lanes.entries()].sort((a, b) => {
-    const seniorityA = Math.min(...a[1].map((p) => titleRank(p.title)));
-    const seniorityB = Math.min(...b[1].map((p) => titleRank(p.title)));
+    const seniorityA = Math.min(...a[1].map((p) => seniorityRank(p)));
+    const seniorityB = Math.min(...b[1].map((p) => seniorityRank(p)));
     if (seniorityA !== seniorityB) return seniorityA - seniorityB;
     if (b[1].length !== a[1].length) return b[1].length - a[1].length;
     return a[0].localeCompare(b[0]);
@@ -97,8 +98,13 @@ export function departmentLanePositions(
   const pos = new Map<string, { x: number; y: number }>();
   let laneTop = 0;
   for (const [, members] of ordered) {
+    // Cluster teammates adjacently so business units read as visible blocks
+    // inside the department lane, then order within each block by seniority.
     const sorted = [...members].sort((a, b) => {
-      const rank = titleRank(a.title) - titleRank(b.title);
+      const teamA = (a.team ?? a.productLine ?? '').toLowerCase();
+      const teamB = (b.team ?? b.productLine ?? '').toLowerCase();
+      if (teamA !== teamB) return teamA.localeCompare(teamB);
+      const rank = seniorityRank(a) - seniorityRank(b);
       return rank !== 0 ? rank : a.name.localeCompare(b.name);
     });
     sorted.forEach((person, index) => {
@@ -146,19 +152,41 @@ function titleRank(title: string): number {
   return DEFAULT_RANK;
 }
 
+/** Structured seniority (Sumble job_level) when present, else title guess. */
+function jobLevelRank(jobLevel: string | null | undefined): number | null {
+  const value = jobLevel?.trim();
+  if (!value) return null;
+  if (/cxo|c-level|chief|founder|president|owner/i.test(value)) return 0;
+  if (/svp|evp|senior vice|executive vice/i.test(value)) return 3;
+  if (/head|gm|general manager/i.test(value)) return 4;
+  if (/vp|vice president/i.test(value)) return 5;
+  if (/director/i.test(value)) return 6;
+  if (/manager|lead/i.test(value)) return 7;
+  if (/senior|staff|principal/i.test(value)) return 8;
+  return 9;
+}
+
+function seniorityRank(person: Person): number {
+  return jobLevelRank(person.jobLevel) ?? titleRank(person.title);
+}
+
 /**
  * Draft a plausible reporting hierarchy for people with no known managers.
  * Acyclic by construction: parents are always strictly more senior or the root.
  */
-export function inferEdges(people: Person[]): MapEdge[] {
+export function inferEdges(
+  people: Person[],
+  parentless: Set<string> | null = null
+): MapEdge[] {
   if (people.length < 2) return [];
-  const rankOf = new Map(people.map((p) => [p.id, titleRank(p.title)]));
+  const rankOf = new Map(people.map((p) => [p.id, seniorityRank(p)]));
   const root = people.reduce((a, b) =>
     rankOf.get(b.id)! < rankOf.get(a.id)! ? b : a
   );
   const edges: MapEdge[] = [];
   for (const p of people) {
     if (p.id === root.id) continue;
+    if (parentless && !parentless.has(p.id)) continue;
     const myRank = rankOf.get(p.id)!;
     const seniors = people.filter(
       (c) => c.id !== p.id && rankOf.get(c.id)! < myRank
@@ -204,6 +232,7 @@ export function stateFromResearch(result: ResearchResult): MapState {
     notes: '',
     email: null,
     linkedin: p.linkedin ?? null,
+    jobLevel: p.jobLevel ?? null,
     x: 0,
     y: 0,
   }));
@@ -220,8 +249,13 @@ export function stateFromResearch(result: ResearchResult): MapState {
   }
 
   // Public-web research often comes back as a flat list — draft a hierarchy
-  // from titles rather than landing the user on an unconnected row of cards.
-  if (edges.length === 0 && people.length > 1) edges.push(...inferEdges(people));
+  // for everyone without a real edge rather than leaving them disconnected.
+  const parentless = new Set(
+    people
+      .filter((p) => !edges.some((e) => e.to === p.id))
+      .map((p) => p.id)
+  );
+  if (people.length > 1) edges.push(...inferEdges(people, parentless));
 
   return {
     people: applyDepartmentLanes(people),

@@ -105,13 +105,53 @@ function breadcrumbLeaf(value: unknown): string | null {
 }
 
 /**
+ * Sumble's job_function is granular ("Platform Engineer", "AI Engineer") —
+ * feeding it straight to department would splinter lanes into one-person
+ * rows. Collapse it into the department buckets the canvas groups by, and
+ * keep the granular function as the team.
+ */
+const DEPARTMENT_PATTERNS: [RegExp, string][] = [
+  [/^executives?$|founder|owner|chief|\bcxo\b|\bce[foorst]\b|\bpresident\b/i, 'Executive'],
+  [/engineer|developer|software|devops|sre|platform|infrastructure|architect|automation|technician/i, 'Engineering'],
+  [/data|machine learning|\bml\b|\bai\b|analytics|scientist|annotat/i, 'Engineering'],
+  [/information technology|\bit\b|systems|help ?desk/i, 'Engineering'],
+  [/product (manager|owner|lead|designer)|product/i, 'Product'],
+  [/\bdesign(er)?\b|\bux\b|\bui\b|\bcreative\b|brand design/i, 'Design'],
+  [/marketing|brand|communications|content|demand|media|social|growth marketing/i, 'Marketing'],
+  [/\bsales\b|account executive|business development|\brevenue\b|partnership|\bgrowth\b/i, 'Sales'],
+  [/financ|accounting|controller|procurement|treasury|payroll|billing/i, 'Finance'],
+  [/recruit|talent|human resources|\bhr\b|\bpeople\b|learning|\bdevelopment\b|training/i, 'People'],
+  [/legal|lawyer|counsel|attorney|paralegal|compliance|governance/i, 'Legal'],
+  [/security|trust|safety/i, 'Security'],
+  [/customer|support|success|service|experience/i, 'Customer Success'],
+  [/analyst|operations|\bops\b|program|project|administrat|facilit|coordinator|office/i, 'Operations'],
+];
+
+export function canonicalDepartment(
+  jobFunctionOrTitle: string | null
+): string | null {
+  if (!jobFunctionOrTitle) return null;
+  const value = jobFunctionOrTitle.trim();
+  if (!value || /^uncategorized$/i.test(value)) return null;
+  // "Executive Assistant" is a support role, not the exec row.
+  if (/(executive|administrative|personal|virtual)\s+(assistant|coordinator)/i.test(value)) {
+    return 'Operations';
+  }
+  for (const [re, department] of DEPARTMENT_PATTERNS) {
+    if (re.test(value)) return department;
+  }
+  return 'Other';
+}
+
+/**
  * Convert Sumble people + team memberships into the same raw person shape the
  * LLM passes produce, so everything flows through one normalizePeople merge.
  * Pure and exported for tests.
  */
 export function sumblePeopleToRaw(
   people: unknown[],
-  teamByName: Map<string, string>
+  teamByName: Map<string, string>,
+  managerByName: Map<string, string> = new Map()
 ): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
   for (const row of people) {
@@ -128,8 +168,11 @@ export function sumblePeopleToRaw(
     if (!name || !title) continue;
     const linkedin = textOf(p.linkedin_url);
     const sumbleUrl = textOf(rowRecord.sumble_url ?? p.sumble_url);
-    const department = textOf(p.job_function);
-    const team = teamByName.get(name.trim().toLowerCase()) ?? null;
+    const jobFunction = textOf(p.job_function);
+    const team =
+      teamByName.get(name.trim().toLowerCase()) ??
+      (jobFunction && canonicalDepartment(jobFunction) ? jobFunction : null);
+    const reportsTo = managerByName.get(name.trim().toLowerCase()) ?? null;
     const sources = [sumbleUrl, linkedin]
       .filter((url): url is string => !!url && /^https?:\/\//i.test(url))
       .map((url) => ({
@@ -141,14 +184,15 @@ export function sumblePeopleToRaw(
     out.push({
       name,
       title,
-      department,
+      department: canonicalDepartment(jobFunction ?? title),
       team,
       productLine: null,
       teamEvidence: sources.length > 0 ? 'sourced' : 'inferred',
-      reportsTo: null,
+      reportsTo,
       confidence: 'medium',
       sources,
       linkedin,
+      jobLevel: textOf(p.job_level),
     });
   }
   return out;
@@ -194,11 +238,115 @@ export interface SumbleOrgData {
   people: Record<string, unknown>[];
 }
 
+function relatedName(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const attrs = (
+    record.attributes && typeof record.attributes === 'object'
+      ? record.attributes
+      : record
+  ) as Record<string, unknown>;
+  return textOf(attrs.name);
+}
+
+function relatedTitle(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const attrs = (
+    record.attributes && typeof record.attributes === 'object'
+      ? record.attributes
+      : record
+  ) as Record<string, unknown>;
+  return textOf(attrs.job_title ?? attrs.title);
+}
+
+function relatedUrl(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  return textOf(record.sumble_url);
+}
+
+/**
+ * From a /people response carrying related_people, build the name → manager
+ * map and extra people rows for names not covered by the main pull — this is
+ * where real reporting edges come from.
+ */
+export function sumbleRelationships(people: unknown[]): {
+  managerByName: Map<string, string>;
+  extraPeople: Record<string, unknown>[];
+} {
+  const managerByName = new Map<string, string>();
+  const extraPeople: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  for (const row of people) {
+    if (!row || typeof row !== 'object') continue;
+    const rowRecord = row as Record<string, unknown>;
+    const p = (
+      rowRecord.attributes && typeof rowRecord.attributes === 'object'
+        ? rowRecord.attributes
+        : rowRecord
+    ) as Record<string, unknown>;
+    const name = textOf(p.name);
+    if (!name) continue;
+    const key = name.trim().toLowerCase();
+    const related = rowRecord.related_people;
+    if (!related || typeof related !== 'object') continue;
+    const rel = related as Record<string, unknown>;
+    const managers = Array.isArray(rel.managers) ? rel.managers : [];
+    const reports = Array.isArray(rel.direct_reports) ? rel.direct_reports : [];
+    const manager = relatedName(managers[0]);
+    if (manager && !managerByName.has(key)) {
+      managerByName.set(key, manager);
+    }
+    for (const entry of reports) {
+      const reportName = relatedName(entry);
+      if (!reportName) continue;
+      const reportKey = reportName.trim().toLowerCase();
+      if (!managerByName.has(reportKey)) managerByName.set(reportKey, name);
+    }
+    // Related people are named employees even when they fall outside the top
+    // N pull — surface them as sourced nodes rather than dropping the data.
+    for (const entry of [...managers, ...reports]) {
+      const relatedNameValue = relatedName(entry);
+      if (!relatedNameValue) continue;
+      const relatedKey = relatedNameValue.trim().toLowerCase();
+      if (seen.has(relatedKey)) continue;
+      seen.add(relatedKey);
+      const title = relatedTitle(entry);
+      const url = relatedUrl(entry);
+      extraPeople.push({
+        name: relatedNameValue,
+        title: title ?? 'Employee',
+        department: canonicalDepartment(title),
+        team: null,
+        productLine: null,
+        teamEvidence: 'sourced',
+        reportsTo: managerByName.get(relatedKey) ?? null,
+        confidence: 'medium',
+        sources: url && /^https?:\/\//i.test(url)
+          ? [
+              {
+                url,
+                title: 'Sumble profile',
+                publisher: 'Sumble',
+                sourceType: 'profile',
+              },
+            ]
+          : [],
+        linkedin: null,
+        jobLevel: null,
+      });
+    }
+  }
+  return { managerByName, extraPeople };
+}
+
 /**
  * Resolve a domain to Sumble's organization, then pull its people (ordered by
- * job level for seniority + depth) and its extracted teams for membership.
- * Returns null when the key is missing, the org is unknown, or the budget
- * expires — callers treat it as a best-effort enrichment layer.
+ * job level for seniority + depth), its extracted teams for membership, and
+ * manager/direct-report relationships for real reporting edges. Returns null
+ * when the key is missing, the org is unknown, or the budget expires —
+ * callers treat it as a best-effort enrichment layer.
  */
 export async function sumbleOrgPeople(
   domain: string,
@@ -229,7 +377,7 @@ export async function sumbleOrgPeople(
   if (remaining < 2_000) return null;
   const innerDeadline = Date.now() + remaining;
 
-  const [peoplePayload, teamsPayload] = await Promise.all([
+  const [peoplePayload, teamsPayload, relatedPayload] = await Promise.all([
     sumbleCall(
       '/people',
       {
@@ -244,7 +392,7 @@ export async function sumbleOrgPeople(
             'location',
           ],
         },
-        limit: 80,
+        limit: 200,
         order_by_column: 'job_level',
         order_by_direction: 'DESC',
       },
@@ -267,14 +415,44 @@ export async function sumbleOrgPeople(
       apiKey,
       innerDeadline
     ),
+    // related_people is list-mode only (limit ≤ 25): a separate call against
+    // the senior-most people, where reporting relationships actually live.
+    sumbleCall(
+      '/people',
+      {
+        filter: { organization_ids: [orgId] },
+        select: {
+          attributes: ['name', 'job_title'],
+          related_people: {
+            attributes: ['name', 'job_title'],
+            direction: ['managers', 'direct_reports'],
+          },
+        },
+        limit: 25,
+        order_by_column: 'job_level',
+        order_by_direction: 'DESC',
+      },
+      apiKey,
+      innerDeadline
+    ),
   ]);
 
   const teams = rowsOf(teamsPayload, 'teams');
   const teamByName = sumbleTeamMemberships(teams);
-  const people = sumblePeopleToRaw(rowsOf(peoplePayload, 'people'), teamByName);
-  if (people.length === 0) return null;
+  const { managerByName, extraPeople } = sumbleRelationships(
+    rowsOf(relatedPayload, 'people')
+  );
+  const people = sumblePeopleToRaw(
+    rowsOf(peoplePayload, 'people'),
+    teamByName,
+    managerByName
+  );
+  const covered = new Set(people.map((p) => String(p.name).toLowerCase()));
+  const extra = extraPeople.filter((p) => !covered.has(String(p.name).toLowerCase()));
+  const combined = [...people, ...extra];
+  if (combined.length === 0) return null;
   return {
     companyName: textOf(org?.name),
-    people,
+    people: combined,
   };
 }

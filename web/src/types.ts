@@ -43,6 +43,8 @@ export interface Person {
   lastVerifiedAt?: string | null;
   conflictingTitles?: string[];
   researchStatus?: 'verified' | 'possibly_stale' | 'conflicting';
+  /** Structured seniority from enrichment (CXO/VP/Director/…) when known. */
+  jobLevel?: string | null;
   notes: string;
   email: string | null;
   linkedin: string | null;
@@ -178,6 +180,7 @@ export interface ResearchedPerson {
   conflictingTitles: string[];
   researchStatus: 'verified' | 'possibly_stale' | 'conflicting';
   linkedin?: string | null;
+  jobLevel?: string | null;
 }
 
 export interface ResearchResult {

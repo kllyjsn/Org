@@ -21,6 +21,8 @@ export interface ResearchedPerson {
   conflictingTitles: string[];
   researchStatus: 'verified' | 'possibly_stale' | 'conflicting';
   linkedin?: string | null;
+  /** Structured seniority from Sumble (CXO/VP/Director/…) when present. */
+  jobLevel?: string | null;
 }
 
 export interface ResearchResult {
@@ -63,11 +65,11 @@ pages, employee announcements, conference bios, and reputable profiles.
 
 This pass focuses on: ${focus}.
 
-Identify up to 14 current employees in this focus area. Go deeper than the
+Identify up to 24 current employees in this focus area. Go deeper than the
 executive row: include VPs, heads, directors, managers, team leads, and named
 senior individual contributors (staff/principal engineers, product managers,
 researchers, account leads) whenever public evidence names them. Aim for at
-least 10 people when the public evidence exists; do not stop after the first
+least 12 people when the public evidence exists; do not stop after the first
 leadership page. Be concise: short titles, short summaries, no filler.
 
 Return ONLY this JSON object:
@@ -826,6 +828,10 @@ export function normalizePeople(
         typeof p.linkedin === 'string' && /^https?:\/\//i.test(p.linkedin)
           ? p.linkedin
           : null,
+      jobLevel:
+        typeof p.jobLevel === 'string' && p.jobLevel.trim()
+          ? p.jobLevel.trim()
+          : null,
       reportsToName:
         typeof p.reportsTo === 'string' && p.reportsTo.trim()
           ? stripFootnotes(p.reportsTo)
@@ -869,6 +875,8 @@ export function normalizePeople(
         preferred.teamEvidence ?? existing.teamEvidence ?? candidate.teamEvidence,
       linkedin:
         preferred.linkedin ?? existing.linkedin ?? candidate.linkedin,
+      jobLevel:
+        preferred.jobLevel ?? existing.jobLevel ?? candidate.jobLevel,
       reportsToName:
         preferred.reportsToName ??
         existing.reportsToName ??
@@ -1109,7 +1117,7 @@ export async function researchOrg(
             role: 'user',
             content: researchPrompt(domain, focus, discoveryContext),
           },
-        ], { webSearch: true, maxTokens: 5_000, deadlineMs });
+        ], { webSearch: true, maxTokens: 8_000, deadlineMs });
         const parsed = extractJson(result.content) as {
           companyName?: unknown;
           people?: unknown;
@@ -1138,7 +1146,7 @@ export async function researchOrg(
         ),
         ...(sumble?.people ?? []),
       ],
-      140
+      260
     );
     const missing = requestedFocus ? [] : missingFunctions(people);
     if (missing.length > 0 && deadlineMs - Date.now() > 15_000) {
