@@ -59,6 +59,7 @@ import {
   Group,
   MessageSquare,
   MoreHorizontal,
+  Rows3,
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
@@ -88,6 +89,7 @@ import type { LaneHeaderData } from '../components/LaneHeaderNode';
 import MoreNode from '../components/MoreNode';
 import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
+import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
 import {
   applyDepartmentLanes,
@@ -234,6 +236,7 @@ function MapInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState<PersonNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<EdgeData>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'canvas' | 'roster'>('canvas');
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -555,6 +558,16 @@ function MapInner() {
 
   const selected = nodes.find((n) => n.id === selectedId)?.data.person ?? null;
   const people = useMemo(() => nodes.map((n) => n.data.person), [nodes]);
+  const managerOf = useMemo(() => {
+    const nameById = new Map(people.map((person) => [person.id, person.name]));
+    const map = new Map<string, string>();
+    for (const edge of edges) {
+      if (edge.data?.kind !== 'reports') continue;
+      const manager = nameById.get(edge.source);
+      if (manager && !map.has(edge.target)) map.set(edge.target, manager);
+    }
+    return map;
+  }, [people, edges]);
 
   // Progressive disclosure for large accounts: each lane shows its most
   // senior people plus a "+N more" tile; expanding reveals the full bench.
@@ -1974,6 +1987,30 @@ function MapInner() {
           ))}
         </div>
         <div className="order-last flex w-full flex-wrap items-center gap-2 border-t border-white/10 pt-2 sm:order-none sm:w-auto sm:flex-nowrap sm:overflow-x-auto sm:border-0 sm:pt-0">
+          <div className="flex shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[.06]">
+            <button
+              onClick={() => setViewMode('canvas')}
+              title="Canvas view"
+              className={`flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-medium sm:min-h-0 ${
+                viewMode === 'canvas'
+                  ? 'bg-white text-slate-950'
+                  : 'text-slate-300 hover:bg-white/10'
+              }`}
+            >
+              <LayoutGrid size={15} /> Canvas
+            </button>
+            <button
+              onClick={() => setViewMode('roster')}
+              title="Roster — every person as a searchable list"
+              className={`flex min-h-11 items-center gap-1.5 border-l border-white/10 px-3 py-1.5 text-sm font-medium sm:min-h-0 ${
+                viewMode === 'roster'
+                  ? 'bg-white text-slate-950'
+                  : 'text-slate-300 hover:bg-white/10'
+              }`}
+            >
+              <Rows3 size={15} /> Roster
+            </button>
+          </div>
           {!readOnly && (
             <>
             <button
@@ -2105,6 +2142,15 @@ function MapInner() {
       </header>
 
       <div className="relative flex-1 bg-[#f6f7f2]">
+        {viewMode === 'roster' ? (
+          <RosterView
+            people={people}
+            managerOf={managerOf}
+            selectedId={selectedId}
+            onSelect={(person) => setSelectedId(person.id)}
+          />
+        ) : (
+        <>
         <button
           onClick={() => setShowCommands(true)}
           className="absolute left-1/2 top-3 z-30 flex w-[calc(100%_-_7rem)] max-w-md -translate-x-1/2 items-center gap-2.5 rounded-2xl border border-white/90 bg-white/90 px-3.5 py-2.5 text-left text-sm text-slate-500 shadow-[0_12px_40px_rgba(15,23,42,.12)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_16px_45px_rgba(15,23,42,.16)] sm:top-4 sm:px-4"
@@ -2331,6 +2377,9 @@ function MapInner() {
               )}
             </div>
           </div>
+        )}
+
+        </>
         )}
 
         <AnimatePresence>
