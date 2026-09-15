@@ -25,6 +25,7 @@ import type {
   Person,
 } from '../types';
 import type { AgentCommandResult } from '../lib/agentCanvas';
+import { tokenMatch } from '../lib/searchText';
 
 export type PaletteAction =
   | 'layout'
@@ -176,7 +177,7 @@ export default function CommandPalette({
     const matches = people
       .filter((person) => {
         const text = personSearchText(person);
-        return tokens.every((token) => text.includes(token));
+        return tokens.every((token) => tokenMatch(text, token));
       })
       .sort((a, b) => {
         const aName = a.name.toLowerCase();

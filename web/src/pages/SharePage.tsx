@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import ReactFlow, {
   Background,
@@ -17,11 +17,16 @@ import { Wordmark } from '../components/Wordmark';
 import { api, ApiError } from '../api';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
+import LaneHeaderNode from '../components/LaneHeaderNode';
+import type { LaneHeaderData } from '../components/LaneHeaderNode';
+import MoreNode from '../components/MoreNode';
+import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
 import { useIsMobile } from '../lib/useIsMobile';
+import { computeLaneView } from '../lib/laneView';
 import type { MapState } from '../types';
 
-const nodeTypes = { person: PersonNode };
+const nodeTypes = { person: PersonNode, lane: LaneHeaderNode, more: MoreNode };
 
 interface SharedMap {
   name: string;
@@ -94,6 +99,81 @@ function ShareInner() {
 
   const selected =
     nodes.find((n) => n.id === selectedId)?.data.person ?? null;
+
+  // Same progressive disclosure as the editor: collapsed lanes show their
+  // leaders plus a "+N more" tile so a 200-person share stays readable.
+  const [expandedLanes, setExpandedLanes] = useState<Set<string>>(new Set());
+  const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
+  const [showAllLanes, setShowAllLanes] = useState(false);
+  const toggleLane = useCallback((lane: string) => {
+    setExpandedLanes((prev) => {
+      const next = new Set(prev);
+      if (next.has(lane)) next.delete(lane);
+      else next.add(lane);
+      return next;
+    });
+    setCollapsedLanes((prev) => {
+      const next = new Set(prev);
+      if (next.has(lane)) next.delete(lane);
+      else next.add(lane);
+      return next;
+    });
+  }, []);
+
+  const laneView = useMemo(() => {
+    const view = computeLaneView(
+      nodes.map((n) => ({
+        id: n.id,
+        x: n.position.x,
+        y: n.position.y,
+        person: n.data.person,
+      })),
+      {
+        columns: isMobile ? 2 : 4,
+        expandedLanes,
+        collapsedLanes,
+        showAll: showAllLanes,
+      }
+    );
+    const headers: Node<LaneHeaderData>[] = view.headers.map((header) => ({
+      id: `lane:${header.lane}`,
+      type: 'lane',
+      position: { x: header.x, y: header.y },
+      data: {
+        label: header.lane,
+        count: header.count,
+        shown: header.shown,
+        expanded: header.expanded,
+        onToggle: toggleLane,
+      },
+      draggable: false,
+      selectable: false,
+      connectable: false,
+      deletable: false,
+      zIndex: -1,
+    }));
+    const tiles: Node<MoreNodeData>[] = view.tiles.map((tile) => ({
+      id: `more:${tile.lane}`,
+      type: 'more',
+      position: { x: tile.x, y: tile.y },
+      data: { count: tile.count, lane: tile.lane, onExpand: toggleLane },
+      draggable: false,
+      selectable: false,
+      connectable: false,
+      deletable: false,
+    }));
+    const visibleNodes = nodes
+      .filter((node) => view.visibleIds.has(node.id))
+      .map((node) => {
+        const pos = view.posOverride.get(node.id);
+        return pos ? { ...node, position: pos } : node;
+      });
+    return {
+      nodes: [...headers, ...tiles, ...visibleNodes],
+      shownCount: view.shownCount,
+      hiddenCount: view.hiddenCount,
+    };
+  }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, toggleLane]);
 
   const exportPng = useCallback(async () => {
     const el = document.querySelector('.react-flow__viewport') as HTMLElement;
@@ -172,9 +252,12 @@ function ShareInner() {
 
       <div className="relative flex-1 bg-[#f6f7f2]">
         <ReactFlow
-          nodes={nodes}
+          nodes={laneView.nodes}
           edges={edges}
-          onNodeClick={(_, n) => setSelectedId(n.id)}
+          onNodeClick={(_, n) => {
+            if (n.type !== 'person') return;
+            setSelectedId(n.id);
+          }}
           onPaneClick={() => setSelectedId(null)}
           nodeTypes={nodeTypes}
           nodesDraggable={false}
@@ -192,6 +275,29 @@ function ShareInner() {
           />
           <MiniMap pannable zoomable className="!bg-slate-50" />
         </ReactFlow>
+
+        {(laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) && (
+          <div className="pointer-events-auto absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAllLanes(laneView.hiddenCount > 0);
+                setExpandedLanes(new Set());
+                setCollapsedLanes(new Set());
+              }}
+              className="flex items-center gap-2 rounded-full border border-white/80 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.1)] backdrop-blur-xl transition hover:text-[#5b4cf0]"
+            >
+              {laneView.hiddenCount === 0 ? (
+                <>Collapse lanes</>
+              ) : (
+                <>
+                  Showing {laneView.shownCount} of {nodes.length}
+                  <span className="text-[#5b4cf0]">Show all</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         <AnimatePresence>
           {selected && (

@@ -85,10 +85,18 @@ import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
 import LaneHeaderNode from '../components/LaneHeaderNode';
 import type { LaneHeaderData } from '../components/LaneHeaderNode';
+import MoreNode from '../components/MoreNode';
+import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
 import ShareModal from '../components/ShareModal';
-import { applyDepartmentLanes, applyLayout, personLane } from '../lib/layout';
+import {
+  applyDepartmentLanes,
+  applyLayout,
+  personLane,
+} from '../lib/layout';
+import { computeLaneView } from '../lib/laneView';
 import { useIsMobile } from '../lib/useIsMobile';
+import { matchesAllTokens } from '../lib/searchText';
 import { ROLE_META } from '../lib/colors';
 import { parseCsv } from '../lib/csv';
 import {
@@ -109,7 +117,7 @@ import type {
   ResearchResult,
 } from '../types';
 
-const nodeTypes = { person: PersonNode, lane: LaneHeaderNode };
+const nodeTypes = { person: PersonNode, lane: LaneHeaderNode, more: MoreNode };
 
 function reportsEdge(
   from: string,
@@ -548,45 +556,87 @@ function MapInner() {
   const selected = nodes.find((n) => n.id === selectedId)?.data.person ?? null;
   const people = useMemo(() => nodes.map((n) => n.data.person), [nodes]);
 
-  // Lane headers are derived from live node positions — they label each
-  // department/business-unit band and follow members when cards are dragged.
-  // They never enter MapState, undo history, or saved maps.
-  const laneHeaderNodes = useMemo(() => {
-    const lanes = new Map<
-      string,
-      { minX: number; minY: number; count: number }
-    >();
-    for (const node of nodes) {
-      const name = personLane(node.data.person);
-      const lane = lanes.get(name) ?? {
-        minX: Number.POSITIVE_INFINITY,
-        minY: Number.POSITIVE_INFINITY,
-        count: 0,
-      };
-      lane.minX = Math.min(lane.minX, node.position.x);
-      lane.minY = Math.min(lane.minY, node.position.y);
-      lane.count += 1;
-      lanes.set(name, lane);
-    }
-    return [...lanes.entries()].map(
-      ([label, lane]): Node<LaneHeaderData> => ({
-        id: `lane:${label}`,
-        type: 'lane',
-        position: { x: lane.minX, y: lane.minY - 62 },
-        data: { label, count: lane.count },
-        draggable: false,
-        selectable: false,
-        connectable: false,
-        deletable: false,
-        zIndex: -1,
-      })
-    );
-  }, [nodes]);
+  // Progressive disclosure for large accounts: each lane shows its most
+  // senior people plus a "+N more" tile; expanding reveals the full bench.
+  // All of it is derived at render time — expansion state, packed positions,
+  // headers, and tiles never enter MapState, undo history, or saved maps.
+  const [expandedLanes, setExpandedLanes] = useState<Set<string>>(new Set());
+  const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
+  const [showAllLanes, setShowAllLanes] = useState(false);
 
-  const displayNodes = useMemo(
-    () => [...laneHeaderNodes, ...nodes],
-    [laneHeaderNodes, nodes]
-  );
+  const toggleLane = useCallback((lane: string) => {
+    setExpandedLanes((prev) => {
+      const next = new Set(prev);
+      if (next.has(lane)) next.delete(lane);
+      else next.add(lane);
+      return next;
+    });
+    setCollapsedLanes((prev) => {
+      const next = new Set(prev);
+      if (next.has(lane)) next.delete(lane);
+      else next.add(lane);
+      return next;
+    });
+  }, []);
+
+  const laneView = useMemo(() => {
+    const view = computeLaneView(
+      nodes.map((n) => ({
+        id: n.id,
+        x: n.position.x,
+        y: n.position.y,
+        person: n.data.person,
+        dragging: n.dragging,
+      })),
+      {
+        columns: isMobile ? 2 : 4,
+        expandedLanes,
+        collapsedLanes,
+        showAll: showAllLanes,
+      }
+    );
+    const headers: Node<LaneHeaderData>[] = view.headers.map((header) => ({
+      id: `lane:${header.lane}`,
+      type: 'lane',
+      position: { x: header.x, y: header.y },
+      data: {
+        label: header.lane,
+        count: header.count,
+        shown: header.shown,
+        expanded: header.expanded,
+        onToggle: toggleLane,
+      },
+      draggable: false,
+      selectable: false,
+      connectable: false,
+      deletable: false,
+      zIndex: -1,
+    }));
+    const tiles: Node<MoreNodeData>[] = view.tiles.map((tile) => ({
+      id: `more:${tile.lane}`,
+      type: 'more',
+      position: { x: tile.x, y: tile.y },
+      data: { count: tile.count, lane: tile.lane, onExpand: toggleLane },
+      draggable: false,
+      selectable: false,
+      connectable: false,
+      deletable: false,
+    }));
+    const visibleNodes = nodes
+      .filter((node) => view.visibleIds.has(node.id))
+      .map((node) => {
+        if (node.dragging) return node;
+        const pos = view.posOverride.get(node.id);
+        return pos ? { ...node, position: pos } : node;
+      });
+    return {
+      nodes: [...headers, ...tiles, ...visibleNodes],
+      shownCount: view.shownCount,
+      hiddenCount: view.hiddenCount,
+    };
+  }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, toggleLane]);
+
+  const displayNodes = laneView.nodes;
 
   const knownSourceUrls = useMemo(() => {
     const urls = new Set<string>();
@@ -711,6 +761,17 @@ function MapInner() {
   const focusPeople = useCallback(
     (matches: Person[]) => {
       if (matches.length === 0) return;
+      // Reveal any lanes whose members are collapsed out of view so matches
+      // are actually visible on the canvas.
+      const lanes = new Set(matches.map((person) => personLane(person)));
+      setCollapsedLanes((prev) =>
+        prev.size === 0 ? prev : new Set([...prev].filter((l) => !lanes.has(l)))
+      );
+      setExpandedLanes((prev) => {
+        const next = new Set(prev);
+        for (const lane of lanes) next.add(lane);
+        return next;
+      });
       const ids = new Set(matches.map((person) => person.id));
       setNodes((items) =>
         items.map((node) => ({ ...node, selected: ids.has(node.id) }))
@@ -1370,14 +1431,12 @@ function MapInner() {
         return say(`Found ${matchedPerson.name}.`);
       }
 
-      const searchTerms = lower
+      const searchQuery = lower
         .replace(
-          /\b(show|find|open|focus|take me to|people|person|everyone|the|team|department|product|in)\b/g,
+          /\b(show|find|open|focus|take me to|filter|people|person|everyone|everybody|folks|members?|anyone|the|a|an|teams?|departments?|products?|in|of|to|for|me|my|all|any|from|with|at|on|by|who|whom|is|are|list|display|view|only|into|working|work|us|now|please|and|or)\b/g,
           ' '
         )
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
+        .trim();
       const matches = people.filter((person) => {
         const text = [
           person.name,
@@ -1389,7 +1448,7 @@ function MapInner() {
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
-        return searchTerms.length > 0 && searchTerms.every((term) => text.includes(term));
+        return matchesAllTokens(text, searchQuery);
       });
       if (matches.length > 0) {
         focusPeople(matches);
@@ -2197,6 +2256,30 @@ function MapInner() {
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
             >
               <Copy size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* density control — collapse/expand every lane at once */}
+        {(laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) && (
+          <div className="pointer-events-auto absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAllLanes(laneView.hiddenCount > 0);
+                setExpandedLanes(new Set());
+                setCollapsedLanes(new Set());
+              }}
+              className="flex items-center gap-2 rounded-full border border-white/80 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.1)] backdrop-blur-xl transition hover:text-[#5b4cf0]"
+            >
+              {laneView.hiddenCount === 0 ? (
+                <>Collapse lanes</>
+              ) : (
+                <>
+                  Showing {laneView.shownCount} of {people.length}
+                  <span className="text-[#5b4cf0]">Show all</span>
+                </>
+              )}
             </button>
           </div>
         )}

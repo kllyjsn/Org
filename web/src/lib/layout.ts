@@ -56,9 +56,9 @@ export function applyLayout(people: Person[], edges: MapEdge[]): Person[] {
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: 0, y: 0 }) }));
 }
 
-const LANE_COLUMNS = 4;
-const LANE_COL_GAP = 300;
-const LANE_ROW_GAP = 200;
+export const LANE_COLUMNS = 4;
+export const LANE_COL_GAP = 300;
+export const LANE_ROW_GAP = 200;
 const LANE_GAP = 140;
 
 /** The lane a person belongs to — shared by layout and lane headers. */
@@ -98,14 +98,16 @@ export function departmentLanePositions(
   const pos = new Map<string, { x: number; y: number }>();
   let laneTop = 0;
   for (const [, members] of ordered) {
-    // Cluster teammates adjacently so business units read as visible blocks
-    // inside the department lane, then order within each block by seniority.
+    // Seniority first so each lane reads as a leadership stack (and collapsed
+    // lanes keep their leaders visible); equal ranks cluster by team so
+    // business units still sit together.
     const sorted = [...members].sort((a, b) => {
+      const rank = seniorityRank(a) - seniorityRank(b);
+      if (rank !== 0) return rank;
       const teamA = (a.team ?? a.productLine ?? '').toLowerCase();
       const teamB = (b.team ?? b.productLine ?? '').toLowerCase();
       if (teamA !== teamB) return teamA.localeCompare(teamB);
-      const rank = seniorityRank(a) - seniorityRank(b);
-      return rank !== 0 ? rank : a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name);
     });
     sorted.forEach((person, index) => {
       const column = index % perRow;
@@ -166,7 +168,7 @@ function jobLevelRank(jobLevel: string | null | undefined): number | null {
   return 9;
 }
 
-function seniorityRank(person: Person): number {
+export function seniorityRank(person: Person): number {
   return jobLevelRank(person.jobLevel) ?? titleRank(person.title);
 }
 
