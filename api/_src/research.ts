@@ -1,5 +1,6 @@
 import { chat, activeProvider, type Provider } from './llm.js';
 import { exaPeopleContext } from './exa.js';
+import { sumbleOrgPeople } from './sumble.js';
 import type { Confidence, ResearchSource, SellerProfile } from './types.js';
 
 export interface ResearchedPerson {
@@ -19,6 +20,7 @@ export interface ResearchedPerson {
   lastVerifiedAt: string | null;
   conflictingTitles: string[];
   researchStatus: 'verified' | 'possibly_stale' | 'conflicting';
+  linkedin?: string | null;
 }
 
 export interface ResearchResult {
@@ -570,8 +572,21 @@ export async function verifyTitleClaims(
     if (Date.now() >= deadlineMs) break;
     await Promise.all(
       candidates.slice(i, i + batchSize).map(async (person) => {
-        let supported = false;
+        // Sumble-sourced people assert their title from Sumble's structured
+        // dataset itself — LinkedIn/sumble profile pages are the citation, and
+        // LinkedIn blocks datacenter fetches, so a failed page fetch is not
+        // evidence of a stale claim.
+        const sumbleSourced =
+          person.sourceDetails.length > 0 &&
+          person.sourceDetails.every((source) =>
+            ['sumble.com', 'linkedin.com'].includes(sourceDomain(source))
+          ) &&
+          person.sourceDetails.some(
+            (source) => sourceDomain(source) === 'sumble.com'
+          );
+        let supported = sumbleSourced;
         for (const source of person.sourceDetails.slice(0, 2)) {
+          if (supported) break;
           const remaining = deadlineMs - Date.now();
           if (remaining < 800) break;
           try {
@@ -807,6 +822,10 @@ export function normalizePeople(
       productLine:
         typeof p.productLine === 'string' ? stripFootnotes(p.productLine) : null,
       teamEvidence: adjustedTeamEvidence,
+      linkedin:
+        typeof p.linkedin === 'string' && /^https?:\/\//i.test(p.linkedin)
+          ? p.linkedin
+          : null,
       reportsToName:
         typeof p.reportsTo === 'string' && p.reportsTo.trim()
           ? stripFootnotes(p.reportsTo)
@@ -848,6 +867,8 @@ export function normalizePeople(
         preferred.productLine ?? existing.productLine ?? candidate.productLine,
       teamEvidence:
         preferred.teamEvidence ?? existing.teamEvidence ?? candidate.teamEvidence,
+      linkedin:
+        preferred.linkedin ?? existing.linkedin ?? candidate.linkedin,
       reportsToName:
         preferred.reportsToName ??
         existing.reportsToName ??
@@ -1018,6 +1039,15 @@ export async function researchOrg(
     const discoveryPromise = exaPeopleContext(domain, requestedFocus).catch(
       () => ''
     );
+    // Sumble's structured org data runs alongside the LLM passes: canonical
+    // job functions, team memberships, and LinkedIn URLs at commercial-data
+    // depth. Best-effort — absent key or timeout just means LLM-only results.
+    const sumblePromise = requestedFocus
+      ? Promise.resolve(null)
+      : sumbleOrgPeople(
+          domain,
+          Math.min(deadlineMs, Date.now() + 30_000)
+        ).catch(() => null);
     const initiativesPromise: Promise<StrategicInitiative[]> = requestedFocus
       ? Promise.resolve([])
       : (async () => {
@@ -1100,10 +1130,15 @@ export async function researchOrg(
     if (successful.length === 0) {
       throw new Error('All company research passes failed');
     }
+    const sumble = await sumblePromise;
     let people = normalizePeople(
-      successful.flatMap((pass) =>
-        Array.isArray(pass.parsed.people) ? pass.parsed.people : []
-      )
+      [
+        ...successful.flatMap((pass) =>
+          Array.isArray(pass.parsed.people) ? pass.parsed.people : []
+        ),
+        ...(sumble?.people ?? []),
+      ],
+      140
     );
     const missing = requestedFocus ? [] : missingFunctions(people);
     if (missing.length > 0 && deadlineMs - Date.now() > 15_000) {
@@ -1131,9 +1166,10 @@ export async function researchOrg(
         // The broad passes still provide a useful result if a follow-up times out.
       }
     }
-    const companyName = successful.find(
-      (pass) => typeof pass.parsed.companyName === 'string'
-    )?.parsed.companyName;
+    const companyName =
+      successful.find(
+        (pass) => typeof pass.parsed.companyName === 'string'
+      )?.parsed.companyName ?? sumble?.companyName;
     const initiatives = await initiativesPromise;
     // Resolve redirects/dead links first, then reserve a bounded pass to verify
     // that each surviving citation actually supports the claimed title.

@@ -177,6 +177,7 @@ export interface ResearchedPerson {
   lastVerifiedAt: string | null;
   conflictingTitles: string[];
   researchStatus: 'verified' | 'possibly_stale' | 'conflicting';
+  linkedin?: string | null;
 }
 
 export interface ResearchResult {

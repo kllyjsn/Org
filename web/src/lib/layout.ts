@@ -203,7 +203,7 @@ export function stateFromResearch(result: ResearchResult): MapState {
     researchStatus: p.researchStatus,
     notes: '',
     email: null,
-    linkedin: null,
+    linkedin: p.linkedin ?? null,
     x: 0,
     y: 0,
   }));
