@@ -89,9 +89,9 @@ function textOf(value: unknown): string | null {
   return null;
 }
 
-function idOf(value: unknown): number | null {
+function idOf(value: unknown): string | number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
+  if (typeof value === 'string' && value.trim()) return value.trim();
   return null;
 }
 
@@ -116,12 +116,18 @@ export function sumblePeopleToRaw(
   const out: Record<string, unknown>[] = [];
   for (const row of people) {
     if (!row || typeof row !== 'object') continue;
-    const p = row as Record<string, unknown>;
+    const rowRecord = row as Record<string, unknown>;
+    // Rows carry paid fields under `attributes`; fall back to flat rows.
+    const p = (
+      rowRecord.attributes && typeof rowRecord.attributes === 'object'
+        ? rowRecord.attributes
+        : rowRecord
+    ) as Record<string, unknown>;
     const name = textOf(p.name);
     const title = textOf(p.job_title ?? p.title);
     if (!name || !title) continue;
     const linkedin = textOf(p.linkedin_url);
-    const sumbleUrl = textOf(p.sumble_url);
+    const sumbleUrl = textOf(rowRecord.sumble_url ?? p.sumble_url);
     const department = textOf(p.job_function);
     const team = teamByName.get(name.trim().toLowerCase()) ?? null;
     const sources = [sumbleUrl, linkedin]
@@ -156,13 +162,25 @@ export function sumbleTeamMemberships(teams: unknown[]): Map<string, string> {
   const memberships = new Map<string, string>();
   for (const row of teams) {
     if (!row || typeof row !== 'object') continue;
-    const team = row as Record<string, unknown>;
-    const teamName = textOf(team.name);
+    const rowRecord = row as Record<string, unknown>;
+    const team = (
+      rowRecord.attributes && typeof rowRecord.attributes === 'object'
+        ? rowRecord.attributes
+        : rowRecord
+    ) as Record<string, unknown>;
+    const teamName = textOf(team.name ?? rowRecord.name);
     if (!teamName) continue;
-    const related = Array.isArray(team.related_people) ? team.related_people : [];
+    const relatedSource = team.related_people ?? rowRecord.related_people;
+    const related = Array.isArray(relatedSource) ? relatedSource : [];
     for (const person of related) {
       if (!person || typeof person !== 'object') continue;
-      const name = textOf((person as Record<string, unknown>).name);
+      const personRecord = person as Record<string, unknown>;
+      const personAttrs = (
+        personRecord.attributes && typeof personRecord.attributes === 'object'
+          ? personRecord.attributes
+          : personRecord
+      ) as Record<string, unknown>;
+      const name = textOf(personAttrs.name);
       if (!name) continue;
       const key = name.trim().toLowerCase();
       if (!memberships.has(key)) memberships.set(key, teamName);
@@ -193,12 +211,15 @@ export async function sumbleOrgPeople(
     '/organizations',
     {
       organizations: [{ url: domain }],
-      select: { attributes: ['name'] },
+      select: { attributes: ['id', 'name'] },
     },
     apiKey,
     deadlineMs
   );
-  const org = rowsOf(orgPayload, 'organizations')[0] as
+  const orgRow = rowsOf(orgPayload, 'organizations')[0] as
+    | Record<string, unknown>
+    | undefined;
+  const org = (orgRow?.attributes ?? orgRow) as
     | Record<string, unknown>
     | undefined;
   const orgId = org ? idOf(org.id ?? org.organization_id) : null;

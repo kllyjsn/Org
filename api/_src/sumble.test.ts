@@ -31,14 +31,16 @@ test('sumble people become research rows with team + linkedin + profile sources'
   const raw = sumblePeopleToRaw(
     [
       {
-        name: 'Ada Byron',
-        job_title: 'Staff Engineer',
-        job_function: 'Engineering',
-        linkedin_url: 'https://linkedin.com/in/adabyron',
         sumble_url: 'https://sumble.com/people/ada-byron',
+        attributes: {
+          name: 'Ada Byron',
+          job_title: 'Staff Engineer',
+          job_function: 'Engineering',
+          linkedin_url: 'https://linkedin.com/in/adabyron',
+        },
       },
-      { name: 'No Title Person' },
-      { job_title: 'Nameless' },
+      { attributes: { name: 'No Title Person' } },
+      { attributes: { job_title: 'Nameless' } },
     ],
     memberships
   );
