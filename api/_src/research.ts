@@ -1143,6 +1143,13 @@ export async function researchOrg(
       throw new Error('All company research passes failed');
     }
     const sumble = await sumblePromise;
+    // Scale the cap to company size — Sumble reports the org's real headcount,
+    // so a 6,700-person company gets depth headroom while a small one doesn't
+    // inflate. 600 ceiling; 240 floor for when Sumble isn't available.
+    const peopleCap = Math.min(
+      600,
+      Math.max(240, Math.ceil((sumble?.total ?? 0) * 1.3))
+    );
     let people = normalizePeople(
       [
         ...successful.flatMap((pass) =>
@@ -1150,7 +1157,7 @@ export async function researchOrg(
         ),
         ...(sumble?.people ?? []),
       ],
-      260
+      peopleCap
     );
     const missing = requestedFocus ? [] : missingFunctions(people);
     if (missing.length > 0 && deadlineMs - Date.now() > 15_000) {
@@ -1170,10 +1177,17 @@ export async function researchOrg(
         const parsedFollowUp = extractJson(followUp.content) as {
           people?: unknown;
         };
-        people = normalizePeople([
-          ...people,
-          ...(Array.isArray(parsedFollowUp.people) ? parsedFollowUp.people : []),
-        ]);
+        // Same cap — the default limit here would otherwise truncate the
+        // whole merged map back to 60 people.
+        people = normalizePeople(
+          [
+            ...people,
+            ...(Array.isArray(parsedFollowUp.people)
+              ? parsedFollowUp.people
+              : []),
+          ],
+          peopleCap
+        );
       } catch {
         // The broad passes still provide a useful result if a follow-up times out.
       }

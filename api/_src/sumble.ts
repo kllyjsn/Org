@@ -236,6 +236,8 @@ export function sumbleTeamMemberships(teams: unknown[]): Map<string, string> {
 export interface SumbleOrgData {
   companyName: string | null;
   people: Record<string, unknown>[];
+  /** Org-wide headcount reported by /people — sizes the merge cap. */
+  total: number | null;
 }
 
 function relatedName(value: unknown): string | null {
@@ -451,8 +453,11 @@ export async function sumbleOrgPeople(
   const extra = extraPeople.filter((p) => !covered.has(String(p.name).toLowerCase()));
   const combined = [...people, ...extra];
   if (combined.length === 0) return null;
+  const total =
+    typeof peoplePayload?.total === 'number' ? peoplePayload.total : null;
   return {
     companyName: textOf(org?.name),
     people: combined,
+    total,
   };
 }
