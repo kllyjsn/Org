@@ -50,13 +50,16 @@ export function computeLaneView(
     expandedLanes: Set<string>;
     collapsedLanes: Set<string>;
     showAll: boolean;
+    /** Lane key extractor — must match the grouping the layout used. */
+    laneOf?: (person: Person) => string;
   }
 ): LaneViewResult {
   const columns = Math.max(1, options.columns);
   const cap = columns * 2;
+  const laneOf = options.laneOf ?? personLane;
   const lanes = new Map<string, LaneViewItem[]>();
   for (const item of items) {
-    const name = personLane(item.person);
+    const name = laneOf(item.person);
     lanes.set(name, [...(lanes.get(name) ?? []), item]);
   }
   const ordered = [...lanes.entries()]

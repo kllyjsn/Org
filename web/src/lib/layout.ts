@@ -71,23 +71,51 @@ export function personLane(person: Person): string {
   );
 }
 
+export type LaneGrouping = 'department' | 'team' | 'met';
+
+/** Lane label for a person under a given grouping dimension. */
+export function laneKey(
+  person: Person,
+  grouping: LaneGrouping = 'department'
+): string {
+  if (grouping === 'team') {
+    return (
+      person.team?.trim() ||
+      person.productLine?.trim() ||
+      person.department?.trim() ||
+      'No team'
+    );
+  }
+  if (grouping === 'met') {
+    return person.metWith ? 'Met with' : 'Haven’t met';
+  }
+  return personLane(person);
+}
+
 /**
- * Department-first reading order: one horizontal band per department, wrapped
- * at a fixed column count so a large account stays a tall page instead of an
- * endless horizontal scroll. Within a band people are ordered by seniority.
+ * Lane-first reading order: one horizontal band per lane, wrapped at a fixed
+ * column count so a large account stays a tall page instead of an endless
+ * horizontal scroll. Within a band people are ordered by seniority. A pinned
+ * lane (e.g. "Met with") always sorts first.
  */
-export function departmentLanePositions(
+function lanePositions(
   people: Person[],
-  columns = LANE_COLUMNS
+  columns: number,
+  keyOf: (person: Person) => string,
+  pinnedLane?: string
 ): Map<string, { x: number; y: number }> {
   const perRow = Math.max(1, columns);
   const lanes = new Map<string, Person[]>();
   for (const person of people) {
-    const name = personLane(person);
+    const name = keyOf(person);
     lanes.set(name, [...(lanes.get(name) ?? []), person]);
   }
 
   const ordered = [...lanes.entries()].sort((a, b) => {
+    if (pinnedLane) {
+      if (a[0] === pinnedLane) return -1;
+      if (b[0] === pinnedLane) return 1;
+    }
     const seniorityA = Math.min(...a[1].map((p) => seniorityRank(p)));
     const seniorityB = Math.min(...b[1].map((p) => seniorityRank(p)));
     if (seniorityA !== seniorityB) return seniorityA - seniorityB;
@@ -123,11 +151,33 @@ export function departmentLanePositions(
   return pos;
 }
 
+export function departmentLanePositions(
+  people: Person[],
+  columns = LANE_COLUMNS
+): Map<string, { x: number; y: number }> {
+  return lanePositions(people, columns, personLane);
+}
+
 export function applyDepartmentLanes(
   people: Person[],
   columns = LANE_COLUMNS
 ): Person[] {
   const pos = departmentLanePositions(people, columns);
+  return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: p.x, y: p.y }) }));
+}
+
+/** Lay people into lanes under any grouping dimension. */
+export function applyLanes(
+  people: Person[],
+  columns = LANE_COLUMNS,
+  grouping: LaneGrouping = 'department'
+): Person[] {
+  const pos = lanePositions(
+    people,
+    columns,
+    (person) => laneKey(person, grouping),
+    grouping === 'met' ? 'Met with' : undefined
+  );
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: p.x, y: p.y }) }));
 }
 

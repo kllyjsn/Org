@@ -58,7 +58,9 @@ import {
   Undo2,
   Waypoints,
   Group,
+  Handshake,
   MessageSquare,
+  Network,
   Rows3,
   UserCheck,
   UserPlus,
@@ -94,11 +96,8 @@ import MeetingsImportModal from '../components/MeetingsImportModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
-import {
-  applyDepartmentLanes,
-  applyLayout,
-  personLane,
-} from '../lib/layout';
+import { applyLanes, applyLayout, laneKey } from '../lib/layout';
+import type { LaneGrouping } from '../lib/layout';
 import { computeLaneView } from '../lib/laneView';
 import { useIsMobile } from '../lib/useIsMobile';
 import { matchesAllTokens } from '../lib/searchText';
@@ -579,6 +578,11 @@ function MapInner() {
   const [expandedLanes, setExpandedLanes] = useState<Set<string>>(new Set());
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
   const [showAllLanes, setShowAllLanes] = useState(false);
+  const [laneGrouping, setLaneGrouping] = useState<LaneGrouping>('department');
+  const laneOf = useCallback(
+    (person: Person) => laneKey(person, laneGrouping),
+    [laneGrouping]
+  );
 
   const toggleLane = useCallback((lane: string) => {
     setExpandedLanes((prev) => {
@@ -609,6 +613,7 @@ function MapInner() {
         expandedLanes,
         collapsedLanes,
         showAll: showAllLanes,
+        laneOf,
       }
     );
     const headers: Node<LaneHeaderData>[] = view.headers.map((header) => ({
@@ -650,7 +655,7 @@ function MapInner() {
       shownCount: view.shownCount,
       hiddenCount: view.hiddenCount,
     };
-  }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, toggleLane]);
+  }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, laneOf, toggleLane]);
 
   const displayNodes = laneView.nodes;
 
@@ -867,7 +872,7 @@ function MapInner() {
       if (matches.length === 0) return;
       // Reveal any lanes whose members are collapsed out of view so matches
       // are actually visible on the canvas.
-      const lanes = new Set(matches.map((person) => personLane(person)));
+      const lanes = new Set(matches.map((person) => laneOf(person)));
       setCollapsedLanes((prev) =>
         prev.size === 0 ? prev : new Set([...prev].filter((l) => !lanes.has(l)))
       );
@@ -892,7 +897,7 @@ function MapInner() {
         30
       );
     },
-    [nodes, rf, setNodes]
+    [nodes, rf, setNodes, laneOf]
   );
 
   const deletePerson = useCallback(
@@ -914,37 +919,45 @@ function MapInner() {
     [setNodes, setEdges, markDirty, nodes, recordHistory]
   );
 
-  const autoLayout = useCallback((mode: 'department' | 'hierarchy' = 'department') => {
-    recordHistory();
-    const currentPeople = nodes.map((n) => ({ ...n.data.person, x: n.position.x, y: n.position.y }));
-    const currentEdges: MapEdge[] = edges.map(edgeToMap);
-    const laid =
-      mode === 'hierarchy'
-        ? applyLayout(currentPeople, currentEdges)
-        : applyDepartmentLanes(currentPeople, isMobile ? 2 : 4);
-    const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
-    setNodes((ns) => {
-      const next = ns.map((n) => ({
-        ...n,
-        position: pos.get(n.id) ?? n.position,
+  const autoLayout = useCallback(
+    (mode: LaneGrouping | 'hierarchy' = 'department') => {
+      recordHistory();
+      const currentPeople = nodes.map((n) => ({
+        ...n.data.person,
+        x: n.position.x,
+        y: n.position.y,
       }));
-      markDirty(next, edges);
-      return next;
-    });
-    window.setTimeout(() => {
-      if (mode === 'department') anchorTopLeft(laid);
-      else rf.fitView({ padding: 0.2 });
-    }, 50);
-  }, [
-    nodes,
-    edges,
-    setNodes,
-    markDirty,
-    rf,
-    recordHistory,
-    anchorTopLeft,
-    isMobile,
-  ]);
+      const currentEdges: MapEdge[] = edges.map(edgeToMap);
+      const laid =
+        mode === 'hierarchy'
+          ? applyLayout(currentPeople, currentEdges)
+          : applyLanes(currentPeople, isMobile ? 2 : 4, mode);
+      if (mode !== 'hierarchy') setLaneGrouping(mode);
+      const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
+      setNodes((ns) => {
+        const next = ns.map((n) => ({
+          ...n,
+          position: pos.get(n.id) ?? n.position,
+        }));
+        markDirty(next, edges);
+        return next;
+      });
+      window.setTimeout(() => {
+        if (mode !== 'hierarchy') anchorTopLeft(laid);
+        else rf.fitView({ padding: 0.2 });
+      }, 50);
+    },
+    [
+      nodes,
+      edges,
+      setNodes,
+      markDirty,
+      rf,
+      recordHistory,
+      anchorTopLeft,
+      isMobile,
+    ]
+  );
 
   const selectedNodes = useMemo(
     () => nodes.filter((node) => node.selected),
@@ -1291,6 +1304,29 @@ function MapInner() {
       const lower = query.toLowerCase();
       if (!query) return say('I couldn’t find a command to run.');
 
+      // Lane re-arrangement by team or met-status — map-wide phrasing goes to
+      // the lane layout; selection-scoped phrasing stays on preview grouping.
+      const laneVerb =
+        /\b(arrange|organize|organise|separate|split|divide|layout|tidy|bucket|break|group)\b/.test(
+          lower
+        );
+      const wantsMetLanes =
+        (laneVerb || /\b(show|view|filter|who)\b/.test(lower)) &&
+        /\b(met|unmet)\b/.test(lower);
+      const wantsTeamLanes = laneVerb && /\bteams?\b/.test(lower);
+      if (
+        (wantsTeamLanes || wantsMetLanes) &&
+        !/\b(this|these|selected|selection)\b/.test(lower)
+      ) {
+        if (readOnly) return say('I couldn’t edit this read-only map.');
+        autoLayout(wantsMetLanes ? 'met' : 'team');
+        return say(
+          wantsMetLanes
+            ? 'I split the map into Met with and Haven’t met lanes.'
+            : 'I arranged the org chart into team lanes.'
+        );
+      }
+
       const groupField: AgentGroupingField = /\bproduct/.test(lower)
         ? 'productLine'
         : /\b(team|sub-?team)s?\b/.test(lower)
@@ -1352,7 +1388,11 @@ function MapInner() {
             : 'I arranged the org chart into department lanes.'
         );
       }
-      if (/\b(overview|show all|whole account|fit all)\b/.test(lower)) {
+      if (
+        /\b(overview|show all|whole (account|map|chart|canvas|org)|zoom out|one view|single view|see (everyone|everything|the whole)|fit)\b/.test(
+          lower
+        )
+      ) {
         setSelectedId(null);
         void rf.fitView({ padding: 0.2, duration: 450 });
         return say('Showing the whole account.');
@@ -2087,7 +2127,20 @@ function MapInner() {
             <RailButton
               icon={<LayoutGrid size={16} />}
               label="Arrange by department"
+              active={laneGrouping === 'department'}
               onClick={() => autoLayout('department')}
+            />
+            <RailButton
+              icon={<Network size={16} />}
+              label="Arrange by team"
+              active={laneGrouping === 'team'}
+              onClick={() => autoLayout('team')}
+            />
+            <RailButton
+              icon={<Handshake size={16} />}
+              label="Split met vs unmet"
+              active={laneGrouping === 'met'}
+              onClick={() => autoLayout('met')}
             />
             <RailButton
               icon={<FileUp size={16} />}
