@@ -87,7 +87,12 @@ export function laneKey(
     );
   }
   if (grouping === 'met') {
-    return person.metWith ? 'Met with' : 'Haven’t met';
+    const team =
+      person.team?.trim() ||
+      person.productLine?.trim() ||
+      person.department?.trim() ||
+      'No team';
+    return person.metWith ? `Met with · ${team}` : `Haven’t met · ${team}`;
   }
   return personLane(person);
 }
@@ -95,14 +100,14 @@ export function laneKey(
 /**
  * Lane-first reading order: one horizontal band per lane, wrapped at a fixed
  * column count so a large account stays a tall page instead of an endless
- * horizontal scroll. Within a band people are ordered by seniority. A pinned
- * lane (e.g. "Met with") always sorts first.
+ * horizontal scroll. Within a band people are ordered by seniority. An
+ * optional lane rank orders lane groups first (e.g. Haven't met before Met).
  */
 function lanePositions(
   people: Person[],
   columns: number,
   keyOf: (person: Person) => string,
-  pinnedLane?: string
+  laneRank?: (name: string) => number
 ): Map<string, { x: number; y: number }> {
   const perRow = Math.max(1, columns);
   const lanes = new Map<string, Person[]>();
@@ -112,9 +117,9 @@ function lanePositions(
   }
 
   const ordered = [...lanes.entries()].sort((a, b) => {
-    if (pinnedLane) {
-      if (a[0] === pinnedLane) return -1;
-      if (b[0] === pinnedLane) return 1;
+    if (laneRank) {
+      const rankDiff = laneRank(a[0]) - laneRank(b[0]);
+      if (rankDiff !== 0) return rankDiff;
     }
     const seniorityA = Math.min(...a[1].map((p) => seniorityRank(p)));
     const seniorityB = Math.min(...b[1].map((p) => seniorityRank(p)));
@@ -176,7 +181,9 @@ export function applyLanes(
     people,
     columns,
     (person) => laneKey(person, grouping),
-    grouping === 'met' ? 'Met with' : undefined
+    grouping === 'met'
+      ? (name) => (name.startsWith('Met with') ? 1 : 0)
+      : undefined
   );
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: p.x, y: p.y }) }));
 }

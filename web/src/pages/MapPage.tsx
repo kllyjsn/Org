@@ -321,6 +321,24 @@ function MapInner() {
       .getMap(mapId)
       .then(({ map }) => {
         const flow = toFlow(map.state, map.role === 'viewer');
+        // Default view for accounts with meeting coverage: met/unmet lanes
+        // segmented by team. Pure arrangement — nothing marked dirty.
+        let anchorPeople = map.state.people;
+        if (map.state.people.some((person) => person.metWith)) {
+          setLaneGrouping('met');
+          anchorPeople = applyLanes(
+            map.state.people,
+            isMobile ? 2 : 4,
+            'met'
+          );
+          const pos = new Map(
+            anchorPeople.map((p) => [p.id, { x: p.x, y: p.y }])
+          );
+          flow.nodes = flow.nodes.map((n) => ({
+            ...n,
+            position: pos.get(n.id) ?? n.position,
+          }));
+        }
         setNodes(flow.nodes);
         setEdges(flow.edges);
         setMapName(map.name);
@@ -338,7 +356,7 @@ function MapInner() {
           })
           .catch(() => undefined);
         window.setTimeout(() => {
-          if (isMobile) anchorTopLeft(map.state.people);
+          if (isMobile) anchorTopLeft(anchorPeople);
           else rf.fitView(openingFitOptions);
         }, 50);
       })
@@ -1383,7 +1401,7 @@ function MapInner() {
         autoLayout(wantsMetLanes ? 'met' : 'team');
         return say(
           wantsMetLanes
-            ? 'I split the map into Met with and Haven’t met lanes.'
+            ? 'I split the map into Met with and Haven’t met lanes by team.'
             : 'I arranged the org chart into team lanes.'
         );
       }
@@ -2199,7 +2217,7 @@ function MapInner() {
             />
             <RailButton
               icon={<Handshake size={16} />}
-              label="Split met vs unmet"
+              label="Met vs unmet by team"
               active={laneGrouping === 'met'}
               onClick={() => autoLayout('met')}
             />
