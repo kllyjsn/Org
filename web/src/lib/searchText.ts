@@ -1,5 +1,5 @@
 /**
- * Loose token matching for Spotlight search and commands. Every query token
+ * Loose token matching for command palette search and commands. Every query token
  * must appear in the text, with a singular fallback so "engineers" still
  * matches "Software Engineer" and "directors" matches "Director".
  */
