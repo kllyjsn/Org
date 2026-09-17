@@ -50,10 +50,10 @@ function personScore(
     ? 18
     : 0;
   return (
-    priorities[person.role] +
+    priorities[person.role ?? 'none'] +
     personProductFit(person, sellerProfile) +
     executive +
-    Math.min(person.sources.length, 5) * 2 +
+    Math.min((person.sources ?? []).length, 5) * 2 +
     (person.confidence === 'high' ? 8 : person.confidence === 'medium' ? 4 : 0)
   );
 }
@@ -188,7 +188,7 @@ export default function AccountStrategyModal({
         : { people: [], inferredHops: 0 };
     const relevantInitiatives = initiatives
       .filter((initiative) =>
-        initiative.relevantPeople.some((name) =>
+        (initiative.relevantPeople ?? []).some((name) =>
           [start?.name, target?.name].some(
             (personName) => personName?.toLowerCase() === name.toLowerCase()
           )
@@ -232,8 +232,8 @@ export default function AccountStrategyModal({
         : ['- No recent initiative evidence is attached yet']),
       '',
       'Conversation opening:',
-      strategy.initiatives[0]?.salesAngles[0]
-        ? `- ${strategy.initiatives[0].salesAngles[0]}`
+      strategy.initiatives[0]?.salesAngles?.[0]
+        ? `- ${strategy.initiatives[0].salesAngles?.[0]}`
         : '- Ask how the primary target measures the current priority and where execution is constrained',
       '',
       'Objection hypotheses to validate:',

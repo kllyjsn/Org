@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { buildAccountContext } from './account-agent.js';
 import {
   buildAccountBriefing,
   deepenAccountBriefing,
 } from './briefing.js';
-import type { MapState, SellerProfile } from './types.js';
+import { compareMapStates } from './changes.js';
+import type { MapState, Person, SellerProfile } from './types.js';
 
 const state: MapState = {
   people: [
@@ -106,4 +108,31 @@ test('briefing fallback separates evidence from seller hypotheses', async () => 
       else process.env[key] = value;
     }
   }
+});
+
+test('analysis survives legacy states with missing person and initiative fields', () => {
+  // Map versions saved before fields like role/notes/relevantPeople existed
+  // arrive as plain JSON — missing keys are undefined at runtime.
+  const legacyPeople = [
+    { id: 'old-1', name: 'Old Stakeholder' },
+    { id: 'old-2', name: 'Taylor Engineer' },
+  ] as unknown as Person[];
+  const legacyState = {
+    people: legacyPeople,
+    edges: [{ id: 'e1', from: 'old-1', to: 'old-2', inferred: true }],
+    meta: {
+      domain: 'target.example',
+      initiatives: [
+        { summary: 'Legacy initiative row without list fields.' },
+        { name: 'Named', evidence: ['https://x.example/a'] },
+      ],
+    },
+  } as unknown as MapState;
+
+  const changes = compareMapStates(legacyState, state);
+  assert.ok(changes.length > 0);
+  const briefing = buildAccountBriefing(legacyState, changes, null);
+  assert.ok(briefing.actions.length > 0);
+  const { context } = buildAccountContext(legacyState);
+  assert.equal(context.people.length, 2);
 });

@@ -63,16 +63,16 @@ export interface AccountValueCase {
   researchGaps: string[];
 }
 
-function normalized(value: string) {
-  return value.trim().toLowerCase();
+function normalized(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase();
 }
 
 function findPeople(
   people: Person[],
   initiative: StrategicInitiative
 ): Person[] {
-  const names = new Set(initiative.relevantPeople.map(normalized));
-  const teams = new Set(initiative.relevantTeams.map(normalized));
+  const names = new Set((initiative.relevantPeople ?? []).map(normalized));
+  const teams = new Set((initiative.relevantTeams ?? []).map(normalized));
   return people.filter(
     (person) =>
       names.has(normalized(person.name)) ||
@@ -83,12 +83,12 @@ function findPeople(
 }
 
 function sourcesFor(person: Person | undefined) {
-  return person?.sources.filter(Boolean).slice(0, 3) ?? [];
+  return (person?.sources ?? []).filter(Boolean).slice(0, 3);
 }
 
 function confidenceFor(person: Person | undefined) {
   if (!person) return 'low' as const;
-  if (person.confidence === 'high' && person.sources.length > 0) {
+  if (person.confidence === 'high' && (person.sources ?? []).length > 0) {
     return 'high' as const;
   }
   return person.confidence === 'low' ? ('low' as const) : ('medium' as const);
@@ -137,19 +137,20 @@ export function buildAccountBriefing(
   }
 
   const initiative = initiatives.find(
-    (item) => item.salesAngles.length > 0 && item.evidence.length > 0
+    (item) =>
+      (item.salesAngles ?? []).length > 0 && (item.evidence ?? []).length > 0
   );
   if (initiative) {
     const relevantPeople = findPeople(state.people, initiative);
     actions.push({
       id: `initiative-${normalized(initiative.name).replace(/\s+/g, '-')}`,
-      title: initiative.salesAngles[0] ?? `Review ${initiative.name}`,
-      reason: `${initiative.name}: ${initiative.summary}`,
+      title: (initiative.salesAngles ?? [])[0] ?? `Review ${initiative.name ?? 'initiative'}`,
+      reason: `${initiative.name ?? 'Initiative'}: ${initiative.summary ?? ''}`,
       confidence: relevantPeople.length > 0 ? 'high' : 'medium',
       provenance: 'sourced',
       type: relevantPeople.length > 0 ? 'focus_people' : 'open_initiatives',
       personIds: relevantPeople.slice(0, 4).map((person) => person.id),
-      evidence: initiative.evidence.slice(0, 3),
+      evidence: (initiative.evidence ?? []).slice(0, 3),
     });
   }
 
@@ -158,12 +159,12 @@ export function buildAccountBriefing(
       (person) =>
         person.researchStatus === 'conflicting' ||
         person.researchStatus === 'possibly_stale' ||
-        person.sources.length === 0
+        (person.sources ?? []).length === 0
     )
     .sort((a, b) => {
       const aPriority = a.researchStatus === 'conflicting' ? 2 : 1;
       const bPriority = b.researchStatus === 'conflicting' ? 2 : 1;
-      return bPriority - aPriority || a.name.localeCompare(b.name);
+      return bPriority - aPriority || (a.name ?? '').localeCompare(b.name ?? '');
     })[0];
   if (researchGap) {
     actions.push({
@@ -312,9 +313,9 @@ function fallbackValueCase(
 ): AccountValueCase {
   const initiatives = state.meta.initiatives ?? [];
   const evidenceFor = (initiative: StrategicInitiative) =>
-    initiative.evidence.filter((url) => /^https?:\/\//i.test(url)).slice(0, 3);
+    (initiative.evidence ?? []).filter((url) => /^https?:\/\//i.test(url)).slice(0, 3);
   const currentState = initiatives.slice(0, 3).map((initiative) => ({
-    statement: `${initiative.name}: ${initiative.summary}`,
+    statement: `${initiative.name ?? 'Initiative'}: ${initiative.summary ?? ''}`,
     provenance: evidenceFor(initiative).length
       ? ('sourced' as const)
       : ('hypothesis' as const),
@@ -323,7 +324,7 @@ function fallbackValueCase(
   const relevantPeople = state.people
     .filter((person) =>
       initiatives.some((initiative) =>
-        initiative.relevantPeople.some(
+        (initiative.relevantPeople ?? []).some(
           (name) => normalized(name) === normalized(person.name)
         )
       )
@@ -396,9 +397,9 @@ export async function deepenAccountBriefing(
   const fallback = fallbackValueCase(state, sellerProfile);
   const sources = Array.from(
     new Set([
-      ...state.people.flatMap((person) => person.sources),
+      ...state.people.flatMap((person) => person.sources ?? []),
       ...(state.meta.initiatives ?? []).flatMap((initiative) =>
-        initiative.evidence.filter((url) => /^https?:\/\//i.test(url))
+        (initiative.evidence ?? []).filter((url) => /^https?:\/\//i.test(url))
       ),
     ])
   ).slice(0, 30);
@@ -429,7 +430,7 @@ ${JSON.stringify(
     department: person.department,
     team: person.team,
     productLine: person.productLine,
-    sources: person.sources.slice(0, 3),
+    sources: (person.sources ?? []).slice(0, 3),
   }))
 )}
 

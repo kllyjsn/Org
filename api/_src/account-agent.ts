@@ -67,7 +67,7 @@ export function buildAccountContext(state: MapState) {
     buyingRole: person.role,
     confidence: person.confidence,
     researchStatus: person.researchStatus ?? null,
-    notes: person.notes.slice(0, 500),
+    notes: (person.notes ?? '').slice(0, 500),
     reportsFrom: state.edges
       .filter((edge) => edge.to === person.id && edge.kind === 'reports')
       .map((edge) => ({
@@ -80,8 +80,8 @@ export function buildAccountContext(state: MapState) {
         personId: edge.to,
         label: edge.label,
       })),
-    citationIds: person.sources.slice(0, 5).map((source) =>
-      citationId(source, `${person.name}: ${source}`, person.id)
+    citationIds: (person.sources ?? []).slice(0, 5).map((source) =>
+      citationId(source, `${person.name ?? 'Stakeholder'}: ${source}`, person.id)
     ),
   }));
 
@@ -92,8 +92,8 @@ export function buildAccountContext(state: MapState) {
     relevantPeople: initiative.relevantPeople,
     relevantTeams: initiative.relevantTeams,
     salesAngles: initiative.salesAngles,
-    citationIds: initiative.evidence.slice(0, 5).map((source) =>
-      citationId(source, `${initiative.name}: ${source}`)
+    citationIds: (initiative.evidence ?? []).slice(0, 5).map((source) =>
+      citationId(source, `${initiative.name ?? 'Initiative'}: ${source}`)
     ),
   }));
 

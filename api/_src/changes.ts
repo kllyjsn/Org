@@ -16,8 +16,8 @@ export interface MapChangeAlert {
   sources?: string[];
 }
 
-function normalized(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+function normalized(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function peopleByName(people: Person[]) {
@@ -41,7 +41,7 @@ export function compareMapStates(
         title: `${person.name} was added`,
         detail: person.title || person.team || person.department || 'New stakeholder',
         personId: person.id,
-        sources: person.sources,
+        sources: person.sources ?? [],
       });
       continue;
     }
@@ -52,7 +52,7 @@ export function compareMapStates(
         title: `${person.name} has a new title`,
         detail: `${previous.title || 'Unknown'} → ${person.title || 'Unknown'}`,
         personId: person.id,
-        sources: person.sources,
+        sources: person.sources ?? [],
       });
     }
     const previousTeam = previous.team || previous.department || '';
@@ -64,17 +64,19 @@ export function compareMapStates(
         title: `${person.name} moved teams`,
         detail: `${previousTeam || 'Unassigned'} → ${currentTeam || 'Unassigned'}`,
         personId: person.id,
-        sources: person.sources,
+        sources: person.sources ?? [],
       });
     }
-    if (previous.role !== person.role) {
+    if ((previous.role ?? 'none') !== (person.role ?? 'none')) {
+      const previousRole = previous.role ?? 'none';
+      const currentRole = person.role ?? 'none';
       changes.push({
         id: `role-${person.id}`,
         type: 'role_changed',
         title: `${person.name}'s buying role changed`,
-        detail: `${previous.role.replaceAll('_', ' ')} → ${person.role.replaceAll('_', ' ')}`,
+        detail: `${previousRole.replaceAll('_', ' ')} → ${currentRole.replaceAll('_', ' ')}`,
         personId: person.id,
-        sources: person.sources,
+        sources: person.sources ?? [],
       });
     }
   }
@@ -86,7 +88,7 @@ export function compareMapStates(
         type: 'person_removed',
         title: `${person.name} was removed`,
         detail: person.title || person.team || person.department || 'Stakeholder removed',
-        sources: person.sources,
+        sources: person.sources ?? [],
       });
     }
   }
@@ -108,9 +110,9 @@ export function compareMapStates(
       changes.push({
         id: `initiative-added-${name}`,
         type: 'initiative_added',
-        title: `New initiative: ${initiative.name}`,
-        detail: initiative.summary,
-        sources: initiative.evidence,
+        title: `New initiative: ${initiative.name ?? 'Unnamed'}`,
+        detail: initiative.summary ?? '',
+        sources: initiative.evidence ?? [],
       });
     }
   }
@@ -119,9 +121,9 @@ export function compareMapStates(
       changes.push({
         id: `initiative-removed-${name}`,
         type: 'initiative_removed',
-        title: `Initiative removed: ${initiative.name}`,
-        detail: initiative.summary,
-        sources: initiative.evidence,
+        title: `Initiative removed: ${initiative.name ?? 'Unnamed'}`,
+        detail: initiative.summary ?? '',
+        sources: initiative.evidence ?? [],
       });
     }
   }
