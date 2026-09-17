@@ -2416,6 +2416,7 @@ function MapInner() {
             managerOf={managerOf}
             selectedId={selectedId}
             onSelect={(person) => setSelectedId(person.id)}
+            fileName={mapName || 'roster'}
           />
         ) : (
         <>

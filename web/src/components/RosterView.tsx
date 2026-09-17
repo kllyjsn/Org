@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownWideNarrow, Search, UserCheck } from 'lucide-react';
+import { ArrowDownWideNarrow, Download, Search, UserCheck } from 'lucide-react';
 import { deptColor, initials, ROLE_META } from '../lib/colors';
 import { matchesAllTokens } from '../lib/searchText';
 import { personLane, seniorityRank } from '../lib/layout';
@@ -39,11 +39,13 @@ export default function RosterView({
   managerOf,
   selectedId,
   onSelect,
+  fileName,
 }: {
   people: Person[];
   managerOf: Map<string, string>;
   selectedId: string | null;
   onSelect: (person: Person) => void;
+  fileName?: string;
 }) {
   const [query, setQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState<Set<string>>(new Set());
@@ -141,6 +143,40 @@ export default function RosterView({
     setSortKey((prev) => order[(order.indexOf(prev) + 1) % order.length]);
   };
 
+  const exportCsv = () => {
+    const esc = (value: string | null | undefined) =>
+      `"${(value ?? '').replace(/"/g, '""')}"`;
+    const lines = [
+      ['Name', 'Title', 'Department', 'Team', 'Reports to', 'Buying role', 'Met', 'Email', 'LinkedIn']
+        .map(esc)
+        .join(','),
+      ...rows.map((person) =>
+        [
+          person.name,
+          person.title,
+          personLane(person),
+          person.team ?? person.productLine ?? '',
+          managerOf.get(person.id) ?? '',
+          ROLE_META[person.role ?? 'none']?.label ?? '',
+          person.metWith ? 'Yes' : '',
+          person.email,
+          person.linkedin,
+        ]
+          .map(esc)
+          .join(',')
+      ),
+    ];
+    const blob = new Blob([lines.join('\n')], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${fileName || 'roster'}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex h-full flex-col bg-[#f6f7f2]">
       <div className="shrink-0 space-y-2 border-b border-slate-200/80 bg-white/80 px-3 py-2.5 backdrop-blur-xl sm:px-4">
@@ -162,6 +198,15 @@ export default function RosterView({
           >
             <ArrowDownWideNarrow size={14} />
             <span className="hidden sm:inline">{SORT_LABEL[sortKey]}</span>
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            title="Export the visible rows as CSV"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:text-[#5b4cf0]"
+          >
+            <Download size={14} />
+            <span className="hidden sm:inline">Export</span>
           </button>
           <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {(['all', 'met', 'unmet'] as const).map((value) => (
@@ -272,7 +317,7 @@ export default function RosterView({
             </thead>
             <tbody>
               {rows.map((person) => {
-                const role = ROLE_META[person.role];
+                const role = ROLE_META[person.role] ?? ROLE_META.none;
                 const lane = personLane(person);
                 const needsReview =
                   person.researchStatus === 'conflicting' ||
