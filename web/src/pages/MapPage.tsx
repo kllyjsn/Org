@@ -89,7 +89,13 @@ import MeetingsImportModal from '../components/MeetingsImportModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
-import { applyLanes, applyLayout, laneKey, LANE_COL_GAP } from '../lib/layout';
+import {
+  applyLanes,
+  applyLayout,
+  laneKey,
+  lanesInterleave,
+  LANE_COL_GAP,
+} from '../lib/layout';
 import type { LaneGrouping } from '../lib/layout';
 import { computeLaneView } from '../lib/laneView';
 import { useIsMobile } from '../lib/useIsMobile';
@@ -292,12 +298,20 @@ function MapInner() {
         // Default view for accounts with meeting coverage: met/unmet lanes
         // segmented by team. Pure arrangement — nothing marked dirty.
         let anchorPeople = map.state.people;
-        if ((map.state.people ?? []).some((person) => person.metWith)) {
-          setLaneGrouping('met');
+        const hasMet = (map.state.people ?? []).some(
+          (person) => person.metWith
+        );
+        const grouping = hasMet
+          ? 'met'
+          : lanesInterleave(map.state.people ?? [])
+            ? 'department'
+            : null;
+        if (grouping) {
+          if (hasMet) setLaneGrouping('met');
           anchorPeople = applyLanes(
             map.state.people,
             isMobile ? 2 : 4,
-            'met',
+            grouping,
             isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
           );
           const pos = new Map(
@@ -685,6 +699,27 @@ function MapInner() {
     return counts;
   }, [people]);
 
+  const relayLanes = useCallback(
+    (ns: Node<PersonNodeData>[]) => {
+      const laid = applyLanes(
+        ns.map((n) => ({
+          ...n.data.person,
+          x: n.position.x,
+          y: n.position.y,
+        })),
+        isMobile ? 2 : 4,
+        laneGrouping,
+        isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
+      );
+      const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
+      return ns.map((n) => ({
+        ...n,
+        position: pos.get(n.id) ?? n.position,
+      }));
+    },
+    [isMobile, laneGrouping]
+  );
+
   const updatePerson = useCallback(
     (updated: Person) => {
       if (!editTimer.current) recordHistory();
@@ -707,27 +742,7 @@ function MapInner() {
         );
         // Under the met split a met flip changes the person's lane — relay
         // so the card physically joins the other band.
-        const positioned = metChanged
-          ? (() => {
-              const laid = applyLanes(
-                next.map((n) => ({
-                  ...n.data.person,
-                  x: n.position.x,
-                  y: n.position.y,
-                })),
-                isMobile ? 2 : 4,
-                'met',
-                isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
-              );
-              const pos = new Map(
-                laid.map((p) => [p.id, { x: p.x, y: p.y }])
-              );
-              return next.map((n) => ({
-                ...n,
-                position: pos.get(n.id) ?? n.position,
-              }));
-            })()
-          : next;
+        const positioned = metChanged ? relayLanes(next) : next;
         setEdges((es) => {
           markDirty(positioned, es);
           return es;
@@ -735,7 +750,7 @@ function MapInner() {
         return positioned;
       });
     },
-    [setNodes, setEdges, markDirty, recordHistory, laneGrouping, isMobile]
+    [setNodes, setEdges, markDirty, recordHistory, laneGrouping, relayLanes]
   );
 
   const setManager = useCallback(
@@ -848,28 +863,11 @@ function MapInner() {
           }),
           ...additions,
         ];
-        // Under the met split, imported matches belong in the Met lane.
+        // Imported matches belong in the Met lane under the met split, and
+        // unmatched names land in their lane band rather than a loose row.
         const positioned =
-          laneGrouping === 'met'
-            ? (() => {
-                const laid = applyLanes(
-                  next.map((n) => ({
-                    ...n.data.person,
-                    x: n.position.x,
-                    y: n.position.y,
-                  })),
-                  isMobile ? 2 : 4,
-                  'met',
-                  isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
-                );
-                const pos = new Map(
-                  laid.map((p) => [p.id, { x: p.x, y: p.y }])
-                );
-                return next.map((n) => ({
-                  ...n,
-                  position: pos.get(n.id) ?? n.position,
-                }));
-              })()
+          laneGrouping === 'met' || unmatched.length > 0
+            ? relayLanes(next)
             : next;
         setEdges((es) => {
           markDirty(positioned, es);
@@ -887,7 +885,7 @@ function MapInner() {
       setEdges,
       setNodes,
       laneGrouping,
-      isMobile,
+      relayLanes,
     ]
   );
 
@@ -1954,8 +1952,9 @@ function MapInner() {
           });
           added += 1;
         }
-        markDirty(next, edges);
-        return next;
+        const finalNodes = added > 0 ? relayLanes(next) : next;
+        markDirty(finalNodes, edges);
+        return finalNodes;
       });
       setImportNotice(
         updated + added === 0
@@ -1964,7 +1963,7 @@ function MapInner() {
       );
       window.setTimeout(() => setImportNotice(''), 5_000);
     },
-    [readOnly, recordHistory, rf, setNodes, markDirty, edges]
+    [readOnly, recordHistory, rf, setNodes, markDirty, edges, relayLanes]
   );
 
   const mergeResearch = useCallback(
@@ -2197,14 +2196,15 @@ function MapInner() {
       }
       metaRef.current = nextMeta;
       setMeta(nextMeta);
-      setNodes(nextNodes);
+      const finalNodes = added > 0 ? relayLanes(nextNodes) : nextNodes;
+      setNodes(finalNodes);
       setEdges(nextEdges);
-      markDirty(nextNodes, nextEdges);
-      const addedIds = nextNodes.slice(nodes.length).map((node) => node.id);
+      markDirty(finalNodes, nextEdges);
+      const addedIds = finalNodes.slice(nodes.length).map((node) => node.id);
       if (addedIds.length > 0) {
         window.setTimeout(() => {
           void rf.fitView({
-            nodes: nextNodes.filter((node) => addedIds.includes(node.id)),
+            nodes: finalNodes.filter((node) => addedIds.includes(node.id)),
             padding: 0.5,
             duration: 450,
           });
@@ -2219,6 +2219,7 @@ function MapInner() {
       nodes,
       readOnly,
       recordHistory,
+      relayLanes,
       rf,
       setEdges,
       setNodes,
