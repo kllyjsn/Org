@@ -90,7 +90,6 @@ export default function MeetingsImportModal({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-6"
-      onClick={onClose}
     >
       <motion.div
         initial={{ y: 40, opacity: 0 }}
