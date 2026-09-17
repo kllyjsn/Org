@@ -95,15 +95,6 @@ function idOf(value: unknown): string | number | null {
   return null;
 }
 
-/** "breadcrumbs" may be strings or {name} objects; leaf-most entry wins. */
-function breadcrumbLeaf(value: unknown): string | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
-  const names = value
-    .map(textOf)
-    .filter((entry): entry is string => !!entry);
-  return names.at(-1) ?? null;
-}
-
 /**
  * Sumble's job_function is granular ("Platform Engineer", "AI Engineer") —
  * feeding it straight to department would splinter lanes into one-person
