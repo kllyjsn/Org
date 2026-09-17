@@ -1356,6 +1356,14 @@ async function shareAccess(c: Context) {
             link.token,
           ]
         );
+        return c.json(
+          {
+            error: 'too many attempts',
+            requires: 'passcode',
+            retryAfterSec: Math.ceil(PASSCODE_LOCK_MS / 1000),
+          },
+          429
+        );
       } else {
         await query(
           'UPDATE share_links SET failed_attempts = $1 WHERE token = $2',
