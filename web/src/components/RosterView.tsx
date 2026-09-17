@@ -90,24 +90,16 @@ export default function RosterView({
     );
   }, [people]);
 
-  const rows = useMemo(() => {
+  const compare = useMemo(() => {
     const laneOrder = new Map<string, number>(
       departments.map(([lane], index) => [lane, index] as const)
     );
-    const filtered = people.filter((person) => {
-      if (deptFilter.size > 0 && !deptFilter.has(personLane(person))) {
-        return false;
-      }
-      if (metFilter === 'met' && !person.metWith) return false;
-      if (metFilter === 'unmet' && person.metWith) return false;
-      return !query.trim() || matchesAllTokens(searchText(person), query);
-    });
     const rank = (person: Person) => seniorityRank(person);
-    const sorted = [...filtered].sort((a, b) => {
+    return (a: Person, b: Person) => {
       let result = 0;
       switch (sortKey) {
         case 'name':
-          result = a.name.localeCompare(b.name);
+          result = (a.name ?? '').localeCompare(b.name ?? '');
           break;
         case 'department':
           result = personLane(a).localeCompare(personLane(b));
@@ -124,10 +116,21 @@ export default function RosterView({
               (laneOrder.get(personLane(b)) ?? 0) ||
             rank(a) - rank(b);
       }
-      return result !== 0 ? result : a.name.localeCompare(b.name);
+      return result !== 0 ? result : (a.name ?? '').localeCompare(b.name ?? '');
+    };
+  }, [departments, sortKey]);
+
+  const rows = useMemo(() => {
+    const filtered = people.filter((person) => {
+      if (deptFilter.size > 0 && !deptFilter.has(personLane(person))) {
+        return false;
+      }
+      if (metFilter === 'met' && !person.metWith) return false;
+      if (metFilter === 'unmet' && person.metWith) return false;
+      return !query.trim() || matchesAllTokens(searchText(person), query);
     });
-    return sorted;
-  }, [people, departments, deptFilter, metFilter, query, sortKey]);
+    return [...filtered].sort(compare);
+  }, [people, deptFilter, metFilter, query, compare]);
 
   const toggleDept = (lane: string) => {
     setDeptFilter((prev) => {
@@ -143,14 +146,16 @@ export default function RosterView({
     setSortKey((prev) => order[(order.indexOf(prev) + 1) % order.length]);
   };
 
-  const exportCsv = () => {
+  const exportCsv = (scope: 'visible' | 'all') => {
     const esc = (value: string | null | undefined) =>
       `"${(value ?? '').replace(/"/g, '""')}"`;
+    const list =
+      scope === 'all' ? [...people].sort(compare) : rows;
     const lines = [
       ['Name', 'Title', 'Department', 'Team', 'Reports to', 'Buying role', 'Met', 'Email', 'LinkedIn']
         .map(esc)
         .join(','),
-      ...rows.map((person) =>
+      ...list.map((person) =>
         [
           person.name,
           person.title,
@@ -166,13 +171,14 @@ export default function RosterView({
           .join(',')
       ),
     ];
-    const blob = new Blob([lines.join('\n')], {
+    // BOM keeps Excel on the right encoding.
+    const blob = new Blob(['\uFEFF' + lines.join('\n')], {
       type: 'text/csv;charset=utf-8',
     });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `${fileName || 'roster'}.csv`;
+    anchor.download = `${fileName || 'roster'}${scope === 'all' ? '-all' : ''}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -201,13 +207,24 @@ export default function RosterView({
           </button>
           <button
             type="button"
-            onClick={exportCsv}
-            title="Export the visible rows as CSV"
+            onClick={() => exportCsv('visible')}
+            title={`Export the ${rows.length} visible rows as CSV`}
             className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:text-[#5b4cf0]"
           >
             <Download size={14} />
             <span className="hidden sm:inline">Export</span>
           </button>
+          {rows.length < people.length && (
+            <button
+              type="button"
+              onClick={() => exportCsv('all')}
+              title={`Filters are active — export all ${people.length} people instead`}
+              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-[#5b4cf0]/30 bg-[#eeecff] px-3 py-2 text-xs font-semibold text-[#5144d7] shadow-sm hover:bg-[#e2dfff]"
+            >
+              <Download size={14} />
+              <span className="hidden sm:inline">All {people.length}</span>
+            </button>
+          )}
           <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {(['all', 'met', 'unmet'] as const).map((value) => (
               <button
