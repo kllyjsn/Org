@@ -36,6 +36,16 @@ import {
   memberRole,
   publicUser,
 } from './auth.js';
+import {
+  PASSCODE_LOCK_MS,
+  PASSCODE_MAX_ATTEMPTS,
+  SHARE_GRANT_TTL_MS,
+  evaluateShareAccess,
+  hashShareToken,
+  isValidPasscode,
+  newShareSecret,
+  normalizeAllowedEmails,
+} from './share.js';
 import type {
   MapRow,
   MapState,
@@ -46,7 +56,7 @@ import type {
   SellerProfile,
 } from './types.js';
 
-type Vars = { user: UserRow };
+type Vars = { user: UserRow; reader: UserRow | null };
 const app = new Hono<{ Variables: Vars }>();
 
 const ALLOWED_ORIGINS = (
@@ -154,6 +164,41 @@ async function mapForUser(
   const map = rows[0];
   if (!map) return [null, null];
   return [map, await workspaceRoleFor(user, map.workspace_id)];
+}
+
+function shareCookieName(mapId: string): string {
+  return `org_share_${mapId}`;
+}
+
+/** Optional auth for read-only surfaces that share-link viewers can open. */
+async function allowShareRead(c: Context, next: Next) {
+  c.set('reader', await getSessionUser(getCookie(c, SESSION_COOKIE)));
+  await next();
+}
+
+/** Fetch a map for a signed-in member or a share-link grant cookie holder. */
+async function mapForReader(
+  c: Context,
+  mapId: string
+): Promise<[MapRow | null, MemberRow['role'] | null]> {
+  const rows = await query<MapRow>('SELECT * FROM maps WHERE id = $1', [mapId]);
+  const map = rows[0];
+  if (!map) return [null, null];
+  const user = c.get('reader');
+  if (user) {
+    const role = await workspaceRoleFor(user, map.workspace_id);
+    if (role) return [map, role];
+  }
+  const grantToken = getCookie(c, shareCookieName(mapId));
+  if (!grantToken) return [map, null];
+  const grants = await query(
+    `SELECT g.token FROM share_grants g
+     JOIN share_links l ON l.token = g.link_id
+     WHERE g.token = $1 AND g.map_id = $2 AND g.expires_at > $3
+       AND (l.expires_at IS NULL OR l.expires_at > $3)`,
+    [grantToken, mapId, now()]
+  );
+  return [map, grants[0] ? 'viewer' : null];
 }
 
 function canWrite(role: MemberRow['role'] | null): boolean {
@@ -735,9 +780,8 @@ app.post('/api/maps', requireAuth, async (c) => {
   return c.json({ id });
 });
 
-app.get('/api/maps/:id', requireAuth, async (c) => {
-  const user = c.get('user');
-  const [map, role] = await mapForUser(user, param(c, 'id'));
+app.get('/api/maps/:id', allowShareRead, async (c) => {
+  const [map, role] = await mapForReader(c, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   return c.json({ map: { ...map, role } });
 });
@@ -875,9 +919,8 @@ app.delete('/api/maps/:id', requireAuth, async (c) => {
 
 // ---------- collaborative history and presence ----------
 
-app.get('/api/maps/:id/versions', requireAuth, async (c) => {
-  const user = c.get('user');
-  const [map, role] = await mapForUser(user, param(c, 'id'));
+app.get('/api/maps/:id/versions', allowShareRead, async (c) => {
+  const [map, role] = await mapForReader(c, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   const versions = await query(
     `SELECT v.id, v.name, v.created_at, u.name AS author_name
@@ -888,9 +931,8 @@ app.get('/api/maps/:id/versions', requireAuth, async (c) => {
   return c.json({ versions });
 });
 
-app.get('/api/maps/:id/changes', requireAuth, async (c) => {
-  const user = c.get('user');
-  const [map, role] = await mapForUser(user, param(c, 'id'));
+app.get('/api/maps/:id/changes', allowShareRead, async (c) => {
+  const [map, role] = await mapForReader(c, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   const versions = await query<{ state: MapState; created_at: string }>(
     `SELECT state, created_at FROM map_versions
@@ -904,9 +946,8 @@ app.get('/api/maps/:id/changes', requireAuth, async (c) => {
   return c.json({ baselineAt: baseline.created_at, changes });
 });
 
-app.get('/api/maps/:id/briefing', requireAuth, async (c) => {
-  const user = c.get('user');
-  const [map, role] = await mapForUser(user, param(c, 'id'));
+app.get('/api/maps/:id/briefing', allowShareRead, async (c) => {
+  const [map, role] = await mapForReader(c, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   const versions = await query<{ state: MapState; created_at: string }>(
     `SELECT state, created_at FROM map_versions
@@ -1075,22 +1116,51 @@ app.post('/api/maps/:id/share', requireAuth, async (c) => {
     typeof body?.expiresInDays === 'number' && body.expiresInDays > 0
       ? body.expiresInDays
       : null;
-  const token = randomBytes(12).toString('base64url');
+  const passcode =
+    typeof body?.passcode === 'string' ? body.passcode.trim() : '';
+  if (passcode && !isValidPasscode(passcode)) {
+    return bad(c, 'passcode must be 6–128 characters');
+  }
+  const label =
+    typeof body?.label === 'string' && body.label.trim()
+      ? body.label.trim().slice(0, 80)
+      : null;
+  const allowedEmails = normalizeAllowedEmails(body?.allowedEmails);
+  const id = randomUUID();
+  const secret = newShareSecret();
   const expiresAt = days
     ? new Date(Date.now() + days * 86400000).toISOString()
     : null;
   await query(
-    'INSERT INTO share_links (token, map_id, created_by, expires_at, created_at) VALUES ($1,$2,$3,$4,$5)',
-    [token, map.id, user.id, expiresAt, now()]
+    `INSERT INTO share_links
+       (token, token_hash, map_id, created_by, label, passcode_hash,
+        allowed_emails, expires_at, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      id,
+      hashShareToken(secret),
+      map.id,
+      user.id,
+      label,
+      passcode ? hashPassword(passcode) : null,
+      allowedEmails ? JSON.stringify(allowedEmails) : null,
+      expiresAt,
+      now(),
+    ]
   );
   await recordAnalytics({
     eventName: 'share_created',
     userId: user.id,
     workspaceId: map.workspace_id,
     mapId: map.id,
-    properties: { expires: Boolean(expiresAt) },
+    properties: {
+      expires: Boolean(expiresAt),
+      passcode: Boolean(passcode),
+      restricted: Boolean(allowedEmails),
+    },
   });
-  return c.json({ token });
+  // The secret is returned only here — later reads never expose it again.
+  return c.json({ id, token: secret, expires_at: expiresAt });
 });
 
 // ---------- privacy-safe product value ----------
@@ -1132,20 +1202,24 @@ app.get('/api/maps/:id/share', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
-  const links = await query<ShareLinkRow>(
-    'SELECT * FROM share_links WHERE map_id = $1 ORDER BY created_at DESC',
+  const links = await query(
+    `SELECT l.token AS id, l.label, l.expires_at, l.created_at,
+            (l.passcode_hash IS NOT NULL) AS has_passcode, l.allowed_emails,
+            l.view_count, l.last_viewed_at, u.name AS created_by_name
+     FROM share_links l JOIN users u ON u.id = l.created_by
+     WHERE l.map_id = $1 ORDER BY l.created_at DESC`,
     [map.id]
   );
   return c.json({ links });
 });
 
-app.delete('/api/maps/:id/share/:token', requireAuth, async (c) => {
+app.delete('/api/maps/:id/share/:linkId', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   if (!canWrite(role)) return bad(c, 'viewers cannot revoke links', 403);
   await query('DELETE FROM share_links WHERE token = $1 AND map_id = $2', [
-    param(c, 'token'),
+    param(c, 'linkId'),
     map.id,
   ]);
   return c.json({ ok: true });
@@ -1229,31 +1303,120 @@ app.patch('/api/admin/feedback/:id', requireAuth, async (c) => {
   return c.json({ status });
 });
 
-// Public, unauthenticated share view
-app.get('/api/share/:token', async (c) => {
+// Public share-link gate: checks the URL secret plus any passcode or email
+// restriction, then issues a short-lived read grant cookie for the map.
+async function shareAccess(c: Context) {
+  c.header('Cache-Control', 'no-store');
+  c.header('X-Robots-Tag', 'noindex, nofollow');
   const links = await query<ShareLinkRow>(
-    'SELECT * FROM share_links WHERE token = $1',
-    [param(c, 'token')]
+    'SELECT * FROM share_links WHERE token_hash = $1',
+    [hashShareToken(param(c, 'token'))]
   );
   const link = links[0];
   if (!link) return bad(c, 'link not found', 404);
-  if (link.expires_at && link.expires_at <= now())
-    return bad(c, 'link expired', 410);
+  const body =
+    c.req.method === 'POST' ? await c.req.json().catch(() => null) : null;
+  const passcode =
+    typeof body?.passcode === 'string' ? body.passcode : null;
+  const user = await getSessionUser(getCookie(c, SESSION_COOKIE));
+  const decision = evaluateShareAccess(
+    link,
+    { passcode, userEmail: user?.email ?? null },
+    now()
+  );
+  switch (decision.kind) {
+    case 'expired':
+      return bad(c, 'link expired', 410);
+    case 'login_required':
+      return c.json({ error: 'sign in required', requires: 'login' }, 401);
+    case 'not_allowed':
+      return bad(c, 'this link is restricted to specific people', 403);
+    case 'locked':
+      return c.json(
+        {
+          error: 'too many attempts',
+          requires: 'passcode',
+          retryAfterSec: decision.retryAfterSec,
+        },
+        429
+      );
+    case 'passcode_required':
+      return c.json(
+        { error: 'passcode required', requires: 'passcode' },
+        401
+      );
+    case 'wrong_passcode': {
+      const attempts = link.failed_attempts + 1;
+      if (attempts >= PASSCODE_MAX_ATTEMPTS) {
+        await query(
+          `UPDATE share_links
+           SET failed_attempts = 0, locked_until = $1 WHERE token = $2`,
+          [
+            new Date(Date.now() + PASSCODE_LOCK_MS).toISOString(),
+            link.token,
+          ]
+        );
+      } else {
+        await query(
+          'UPDATE share_links SET failed_attempts = $1 WHERE token = $2',
+          [attempts, link.token]
+        );
+      }
+      return c.json(
+        {
+          error: 'incorrect passcode',
+          requires: 'passcode',
+          attemptsLeft: PASSCODE_MAX_ATTEMPTS - attempts,
+        },
+        401
+      );
+    }
+  }
+  const grantExpiry = new Date(Date.now() + SHARE_GRANT_TTL_MS);
+  const linkExpiry = link.expires_at ? new Date(link.expires_at) : null;
+  const grantExpiresAt = (
+    linkExpiry && linkExpiry < grantExpiry ? linkExpiry : grantExpiry
+  ).toISOString();
+  const grantToken = randomBytes(32).toString('hex');
+  await query(
+    `INSERT INTO share_grants (token, link_id, map_id, created_at, expires_at)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [grantToken, link.token, link.map_id, now(), grantExpiresAt]
+  );
+  await query(
+    `UPDATE share_links
+     SET failed_attempts = 0, locked_until = NULL,
+         view_count = view_count + 1, last_viewed_at = $1
+     WHERE token = $2`,
+    [now(), link.token]
+  );
+  const secure = process.env.COOKIE_SECURE === '1';
+  setCookie(c, shareCookieName(link.map_id), grantToken, {
+    httpOnly: true,
+    sameSite: secure ? 'None' : 'Lax',
+    secure,
+    path: '/',
+    maxAge: Math.floor(SHARE_GRANT_TTL_MS / 1000),
+  });
   const rows = await query<MapRow>(
-    'SELECT name, domain, company_name, state, updated_at FROM maps WHERE id = $1',
+    'SELECT name, domain, company_name, updated_at FROM maps WHERE id = $1',
     [link.map_id]
   );
   const map = rows[0];
   if (!map) return bad(c, 'map not found', 404);
   return c.json({
+    mapId: link.map_id,
     map: {
       name: map.name,
       domain: map.domain,
       company_name: map.company_name,
       updated_at: map.updated_at,
-      state: map.state,
     },
+    grantExpiresAt,
   });
-});
+}
+
+app.get('/api/share/:token', shareAccess);
+app.post('/api/share/:token/access', shareAccess);
 
 export default app;
