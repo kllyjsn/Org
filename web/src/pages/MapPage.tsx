@@ -1720,8 +1720,11 @@ function MapInner() {
 
   const exportPng = useCallback(async () => {
     const el = document.querySelector('.react-flow__viewport') as HTMLElement;
-    if (!el || nodes.length === 0) return;
-    const bounds = getNodesBounds(nodes);
+    // displayNodes is exactly what's rendered: packed collapsed lanes,
+    // lane headers, +N tiles, and the active grouping — so the PNG is 1:1
+    // with the canvas instead of the raw saved positions.
+    if (!el || displayNodes.length === 0) return;
+    const bounds = getNodesBounds(displayNodes);
     const W = 1920;
     const H = Math.max(1080, Math.ceil((bounds.height * 1920) / Math.max(bounds.width, 1)) + 200);
     const vp = getViewportForBounds(bounds, W, H, 0.4, 1.5, 0.08);
@@ -1739,7 +1742,7 @@ function MapInner() {
     a.href = url;
     a.download = `${mapName || 'org-map'}.png`;
     a.click();
-  }, [nodes, mapName]);
+  }, [displayNodes, mapName]);
 
   const saveName = useCallback(() => {
     if (!mapId || readOnly) return;
