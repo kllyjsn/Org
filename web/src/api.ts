@@ -17,15 +17,22 @@ import type {
   ResearchResult,
   SellerProfile,
   SessionUser,
+  ShareAccess,
   ShareLink,
   Workspace,
 } from './types';
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  data: Record<string, unknown>;
+  constructor(
+    message: string,
+    status: number,
+    data: Record<string, unknown> = {}
+  ) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -44,7 +51,8 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     throw new ApiError(
       typeof data.error === 'string' ? data.error : `request failed (${res.status})`,
-      res.status
+      res.status,
+      data
     );
   }
   return data as T;
@@ -216,26 +224,34 @@ export const api = {
       body: JSON.stringify({ body, personId }),
     }),
 
-  createShare: (mapId: string, expiresInDays?: number) =>
-    req<{ token: string }>(`/api/maps/${mapId}/share`, {
-      method: 'POST',
-      body: JSON.stringify({ expiresInDays }),
-    }),
+  createShare: (
+    mapId: string,
+    opts: {
+      expiresInDays?: number;
+      passcode?: string;
+      allowedEmails?: string[];
+      label?: string;
+    }
+  ) =>
+    req<{ id: string; token: string; expires_at: string | null }>(
+      `/api/maps/${mapId}/share`,
+      {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      }
+    ),
   listShares: (mapId: string) =>
     req<{ links: ShareLink[] }>(`/api/maps/${mapId}/share`),
-  deleteShare: (mapId: string, token: string) =>
-    req<{ ok: true }>(`/api/maps/${mapId}/share/${token}`, { method: 'DELETE' }),
+  deleteShare: (mapId: string, linkId: string) =>
+    req<{ ok: true }>(`/api/maps/${mapId}/share/${linkId}`, {
+      method: 'DELETE',
+    }),
 
-  shareView: (token: string) =>
-    req<{
-      map: {
-        name: string;
-        domain: string;
-        company_name: string | null;
-        updated_at: string;
-        state: MapState;
-      };
-    }>(`/api/share/${token}`),
+  shareAccess: (token: string, passcode?: string) =>
+    req<ShareAccess>(`/api/share/${token}/access`, {
+      method: 'POST',
+      body: JSON.stringify({ passcode }),
+    }),
 
   trackEvent: (
     mapId: string,

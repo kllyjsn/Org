@@ -198,11 +198,26 @@ export interface ResearchResult {
 }
 
 export interface ShareLink {
-  token: string;
-  map_id: string;
-  created_by: string;
+  id: string;
+  label: string | null;
   expires_at: string | null;
   created_at: string;
+  has_passcode: boolean;
+  allowed_emails: string[] | null;
+  view_count: number;
+  last_viewed_at: string | null;
+  created_by_name: string;
+}
+
+export interface ShareAccess {
+  mapId: string;
+  map: {
+    name: string;
+    domain: string;
+    company_name: string | null;
+    updated_at: string;
+  };
+  grantExpiresAt: string;
 }
 
 export interface MapComment {

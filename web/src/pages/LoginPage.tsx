@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
   BarChart3,
@@ -61,6 +61,7 @@ const audiences = [
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const login = useSession((s) => s.login);
   const register = useSession((s) => s.register);
   const [mode, setMode] = useState<'login' | 'register'>('register');
@@ -78,7 +79,10 @@ export default function LoginPage() {
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, password, name, workspaceName || undefined);
-      navigate('/app', { replace: true });
+      const next = searchParams.get('next');
+      navigate(next && next.startsWith('/') ? next : '/app', {
+        replace: true,
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'something went wrong');
     } finally {
