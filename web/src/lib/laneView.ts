@@ -1,4 +1,10 @@
-import { LANE_COL_GAP, LANE_ROW_GAP, personLane, seniorityRank } from './layout';
+import {
+  LANE_COL_GAP,
+  LANE_ROW_GAP,
+  laneSpan,
+  personLane,
+  seniorityRank,
+} from './layout';
 import type { Person } from '../types';
 
 export interface LaneViewItem {
@@ -14,6 +20,8 @@ export interface LaneViewHeader {
   lane: string;
   x: number;
   y: number;
+  /** Columns the lane occupies — headers only overlap within this span. */
+  span: number;
   count: number;
   shown: number;
   expanded: boolean;
@@ -88,8 +96,8 @@ export function computeLaneView(
   let shown = 0;
   // Headers must never overlap: lanes whose members interleave in position
   // (dragged cards, met-status flips under the met grouping) can report the
-  // same minX/minY, stacking two headers into unreadable double text.
-  let prevHeaderY = Number.NEGATIVE_INFINITY;
+  // same minX/minY, stacking two headers into unreadable double text. Only
+  // lanes whose column spans overlap horizontally can actually clash.
   for (const lane of ordered) {
     const expanded = options.showAll
       ? !options.collapsedLanes.has(lane.name)
@@ -129,17 +137,31 @@ export function computeLaneView(
         visibleIds.add(item.id);
       }
     }
-    const headerY = Math.max(top - 62, prevHeaderY + 32);
-    prevHeaderY = headerY;
+    const span = laneSpan(members.length, columns);
+    const spanWidth = span * colGap;
+    let headerY = top - 56;
+    for (;;) {
+      const clashing = headers.find(
+        (h) =>
+          Math.abs(h.y - headerY) < 32 &&
+          h.x < lane.minX + spanWidth &&
+          lane.minX < h.x + h.span * colGap
+      );
+      if (!clashing) break;
+      headerY = clashing.y + 32;
+    }
     headers.push({
       lane: lane.name,
       x: lane.minX,
       y: headerY,
+      span,
       count: members.length,
       shown: shownCount,
       expanded,
     });
     shown += shownCount;
+    // offset only grows after this lane, so lanes sharing a band (same
+    // minY) all shift by the same amount.
     const originalHeight = Math.max(0, lane.maxY - lane.minY);
     const packedRows = collapsible ? Math.ceil((shownCount + 1) / columns) : 0;
     const newHeight = collapsible
