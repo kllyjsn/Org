@@ -84,6 +84,10 @@ export function computeLaneView(
   const tiles: LaneViewTile[] = [];
   let offset = 0;
   let shown = 0;
+  // Headers must never overlap: lanes whose members interleave in position
+  // (dragged cards, met-status flips under the met grouping) can report the
+  // same minX/minY, stacking two headers into unreadable double text.
+  let prevHeaderY = Number.NEGATIVE_INFINITY;
   for (const lane of ordered) {
     const expanded = options.showAll
       ? !options.collapsedLanes.has(lane.name)
@@ -123,10 +127,12 @@ export function computeLaneView(
         visibleIds.add(item.id);
       }
     }
+    const headerY = Math.max(top - 62, prevHeaderY + 32);
+    prevHeaderY = headerY;
     headers.push({
       lane: lane.name,
       x: lane.minX,
-      y: top - 62,
+      y: headerY,
       count: members.length,
       shown: shownCount,
       expanded,

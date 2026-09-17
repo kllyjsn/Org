@@ -689,19 +689,48 @@ function MapInner() {
         editTimer.current = null;
       }, 750);
       setNodes((ns) => {
+        const metChanged =
+          laneGrouping === 'met' &&
+          ns.some(
+            (n) =>
+              n.id === updated.id &&
+              Boolean(n.data.person.metWith) !== Boolean(updated.metWith)
+          );
         const next = ns.map((n) =>
           n.id === updated.id
             ? { ...n, data: { ...n.data, person: updated } }
             : n
         );
+        // Under the met split a met flip changes the person's lane — relay
+        // so the card physically joins the other band.
+        const positioned = metChanged
+          ? (() => {
+              const laid = applyLanes(
+                next.map((n) => ({
+                  ...n.data.person,
+                  x: n.position.x,
+                  y: n.position.y,
+                })),
+                isMobile ? 2 : 4,
+                'met'
+              );
+              const pos = new Map(
+                laid.map((p) => [p.id, { x: p.x, y: p.y }])
+              );
+              return next.map((n) => ({
+                ...n,
+                position: pos.get(n.id) ?? n.position,
+              }));
+            })()
+          : next;
         setEdges((es) => {
-          markDirty(next, es);
+          markDirty(positioned, es);
           return es;
         });
-        return next;
+        return positioned;
       });
     },
-    [setNodes, setEdges, markDirty, recordHistory]
+    [setNodes, setEdges, markDirty, recordHistory, laneGrouping, isMobile]
   );
 
   const setManager = useCallback(
@@ -814,14 +843,46 @@ function MapInner() {
           }),
           ...additions,
         ];
+        // Under the met split, imported matches belong in the Met lane.
+        const positioned =
+          laneGrouping === 'met'
+            ? (() => {
+                const laid = applyLanes(
+                  next.map((n) => ({
+                    ...n.data.person,
+                    x: n.position.x,
+                    y: n.position.y,
+                  })),
+                  isMobile ? 2 : 4,
+                  'met'
+                );
+                const pos = new Map(
+                  laid.map((p) => [p.id, { x: p.x, y: p.y }])
+                );
+                return next.map((n) => ({
+                  ...n,
+                  position: pos.get(n.id) ?? n.position,
+                }));
+              })()
+            : next;
         setEdges((es) => {
-          markDirty(next, es);
+          markDirty(positioned, es);
           return es;
         });
-        return next;
+        return positioned;
       });
     },
-    [markDirty, nodes, readOnly, recordHistory, rf, setEdges, setNodes]
+    [
+      markDirty,
+      nodes,
+      readOnly,
+      recordHistory,
+      rf,
+      setEdges,
+      setNodes,
+      laneGrouping,
+      isMobile,
+    ]
   );
 
   const addPerson = useCallback((draft?: Partial<Person>) => {
