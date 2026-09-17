@@ -46,7 +46,7 @@ function ShareInner() {
   const isMobile = useIsMobile();
   const openingFitOptions = isMobile
     ? { padding: 0.1, minZoom: 0.62, maxZoom: 0.9 }
-    : { padding: 0.2 };
+    : { padding: 0.2, minZoom: 0.45 };
 
   useEffect(() => {
     if (!token) return;
@@ -135,10 +135,16 @@ function ShareInner() {
         showAll: showAllLanes,
       }
     );
+    // Synthetic nodes must declare their size: React Flow hides nodes until
+    // they are measured, and these objects are recreated on every lane
+    // recompute, which wipes their measured dimensions and leaves them
+    // permanently invisible.
     const headers: Node<LaneHeaderData>[] = view.headers.map((header) => ({
       id: `lane:${header.lane}`,
       type: 'lane',
       position: { x: header.x, y: header.y },
+      width: 340,
+      height: 34,
       data: {
         label: header.lane,
         count: header.count,
@@ -156,6 +162,9 @@ function ShareInner() {
       id: `more:${tile.lane}`,
       type: 'more',
       position: { x: tile.x, y: tile.y },
+      width: 250,
+      height: 52,
+      style: { width: 250 },
       data: { count: tile.count, lane: tile.lane, onExpand: toggleLane },
       draggable: false,
       selectable: false,
