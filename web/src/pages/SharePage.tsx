@@ -16,6 +16,7 @@ import { Download, Loader2 } from 'lucide-react';
 import { Wordmark } from '../components/Wordmark';
 import { api, ApiError } from '../api';
 import { influenceEdge, reportsEdge } from '../lib/flowEdges';
+import { applyLanes, LANE_COL_GAP } from '../lib/layout';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
 import LaneHeaderNode from '../components/LaneHeaderNode';
@@ -56,11 +57,20 @@ function ShareInner() {
       .shareView(token)
       .then(({ map }) => {
         setShared(map);
+        // Normalize to lane positions — saved coordinates may predate the
+        // current grouping, which left headers clamped in a cluster.
+        const laid = applyLanes(
+          map.state.people ?? [],
+          isMobile ? 2 : 4,
+          'department',
+          isMobile ? 270 : LANE_COL_GAP
+        );
+        const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
         setNodes(
           (map.state.people ?? []).map((p) => ({
             id: p.id,
             type: 'person',
-            position: { x: p.x, y: p.y },
+            position: pos.get(p.id) ?? { x: p.x, y: p.y },
             data: { person: p, readOnly: true },
           }))
         );
@@ -83,10 +93,16 @@ function ShareInner() {
           if (!tallEnough) return;
           const minX = Math.min(...people.map((p) => p.x));
           const minY = Math.min(...people.map((p) => p.y));
-          const zoom = isMobile ? 0.62 : 0.8;
+          const maxX = Math.max(...people.map((p) => p.x));
+          const spread = maxX - minX + 250;
+          const rail = isMobile ? 48 : 224;
+          const zoom = Math.min(
+            isMobile ? 0.62 : 0.8,
+            (window.innerWidth - rail - 16) / spread
+          );
           void rf.setViewport(
             {
-              x: 32 - minX * zoom,
+              x: (isMobile ? 8 : 32) - minX * zoom,
               y: (isMobile ? 170 : 200) - minY * zoom,
               zoom,
             },
@@ -107,6 +123,13 @@ function ShareInner() {
   // Same progressive disclosure as the editor: collapsed lanes show their
   // leaders plus a "+N more" tile so a 200-person share stays readable.
   const [expandedLanes, setExpandedLanes] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
   const [showAllLanes, setShowAllLanes] = useState(false);
   const toggleLane = useCallback((lane: string) => {
@@ -134,6 +157,7 @@ function ShareInner() {
       })),
       {
         columns: isMobile ? 2 : 4,
+        colGap: isMobile ? 270 : LANE_COL_GAP,
         expandedLanes,
         collapsedLanes,
         showAll: showAllLanes,

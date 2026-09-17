@@ -52,11 +52,13 @@ export function computeLaneView(
     showAll: boolean;
     /** Lane key extractor — must match the grouping the layout used. */
     laneOf?: (person: Person) => string;
+    colGap?: number;
   }
 ): LaneViewResult {
   const columns = Math.max(1, options.columns);
   const cap = columns * 2;
   const laneOf = options.laneOf ?? personLane;
+  const colGap = options.colGap ?? LANE_COL_GAP;
   const lanes = new Map<string, LaneViewItem[]>();
   for (const item of items) {
     const name = laneOf(item.person);
@@ -104,7 +106,7 @@ export function computeLaneView(
       members.forEach((item, index) => {
         if (index < shownCount) {
           posOverride.set(item.id, {
-            x: lane.minX + (index % columns) * LANE_COL_GAP,
+            x: lane.minX + (index % columns) * colGap,
             y: top + Math.floor(index / columns) * LANE_ROW_GAP,
           });
           visibleIds.add(item.id);
@@ -112,7 +114,7 @@ export function computeLaneView(
       });
       tiles.push({
         lane: lane.name,
-        x: lane.minX + (shownCount % columns) * LANE_COL_GAP,
+        x: lane.minX + (shownCount % columns) * colGap,
         y: top + Math.floor(shownCount / columns) * LANE_ROW_GAP,
         count: members.length - shownCount,
       });

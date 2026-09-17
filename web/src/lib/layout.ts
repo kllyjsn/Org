@@ -107,7 +107,8 @@ function lanePositions(
   people: Person[],
   columns: number,
   keyOf: (person: Person) => string,
-  laneRank?: (name: string) => number
+  laneRank?: (name: string) => number,
+  colGap = LANE_COL_GAP
 ): Map<string, { x: number; y: number }> {
   const perRow = Math.max(1, columns);
   const lanes = new Map<string, Person[]>();
@@ -146,7 +147,7 @@ function lanePositions(
       const column = index % perRow;
       const row = Math.floor(index / perRow);
       pos.set(person.id, {
-        x: column * LANE_COL_GAP,
+        x: column * colGap,
         y: laneTop + row * LANE_ROW_GAP,
       });
     });
@@ -175,7 +176,8 @@ export function applyDepartmentLanes(
 export function applyLanes(
   people: Person[],
   columns = LANE_COLUMNS,
-  grouping: LaneGrouping = 'department'
+  grouping: LaneGrouping = 'department',
+  colGap = LANE_COL_GAP
 ): Person[] {
   const pos = lanePositions(
     people,
@@ -183,7 +185,8 @@ export function applyLanes(
     (person) => laneKey(person, grouping),
     grouping === 'met'
       ? (name) => (name.startsWith('Met with') ? 1 : 0)
-      : undefined
+      : undefined,
+    colGap
   );
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: p.x, y: p.y }) }));
 }

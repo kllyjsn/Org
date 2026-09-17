@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2, MessageSquare, X } from 'lucide-react';
 import { api, ApiError } from '../api';
 import type { FeedbackCategory } from '../types';
+import { useFocusTrap } from '../lib/useFocusTrap';
 
 const CATEGORIES: { id: FeedbackCategory; label: string; detail: string }[] = [
   { id: 'bug', label: 'Something broke', detail: 'It failed or looked wrong' },
@@ -25,6 +26,8 @@ export default function FeedbackModal({
   const [category, setCategory] = useState<FeedbackCategory>('idea');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
 
@@ -58,6 +61,9 @@ export default function FeedbackModal({
       }}
     >
       <motion.div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
         initial={{ y: 24, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 26, stiffness: 260 }}

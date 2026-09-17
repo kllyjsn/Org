@@ -222,7 +222,11 @@ export default function AccountsPage() {
 
   useEffect(() => {
     if (workspaceId && workspace && !workspace.seller_profile) {
-      setShowSellerProfile(true);
+      const key = `topdown_seller_prompted_${workspaceId}`;
+      if (!window.localStorage.getItem(key)) {
+        window.localStorage.setItem(key, '1');
+        setShowSellerProfile(true);
+      }
     }
   }, [workspaceId, workspace]);
 
@@ -481,9 +485,14 @@ export default function AccountsPage() {
                       </div>
                       <div className="min-w-0">
                         <span className="block truncate font-semibold tracking-tight text-slate-950">
-                          {m.company_name || m.name}
+                          {m.name}
                         </span>
-                        <span className="block truncate text-xs text-slate-400">{m.domain}</span>
+                        <span className="block truncate text-xs text-slate-400">
+                          {m.company_name && m.company_name !== m.name
+                            ? `${m.company_name} · `
+                            : ''}
+                          {m.domain}
+                        </span>
                       </div>
                     </div>
                     <button
@@ -491,7 +500,7 @@ export default function AccountsPage() {
                         e.stopPropagation();
                         void deleteMap(m.id);
                       }}
-                      className="rounded p-2 text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 sm:p-1 sm:opacity-0 sm:group-hover:opacity-100"
+                      className="rounded p-2 text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 sm:p-1 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                       aria-label="Delete account map"
                     >
                       <Trash2 size={14} />
@@ -530,7 +539,7 @@ export default function AccountsPage() {
                         className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition ${
                           m.is_live_opportunity
                             ? 'bg-[#effbd0] text-slate-700 hover:bg-[#e4f7b7]'
-                            : 'bg-slate-100 text-slate-500 hover:text-[#5b4cf0] sm:opacity-0 sm:group-hover:opacity-100'
+                            : 'bg-slate-100 text-slate-500 hover:text-[#5b4cf0] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100'
                         }`}
                       >
                         <BriefcaseBusiness size={12} />
@@ -544,7 +553,7 @@ export default function AccountsPage() {
                         event.stopPropagation();
                         navigate(`/app/maps/${m.id}?briefing=1`);
                       }}
-                      className="flex items-center gap-1.5 rounded-lg bg-[#eeecff] px-2.5 py-1.5 text-[10px] font-semibold text-[#5b4cf0] transition hover:bg-[#e3dfff] sm:opacity-0 sm:group-hover:opacity-100"
+                      className="flex items-center gap-1.5 rounded-lg bg-[#eeecff] px-2.5 py-1.5 text-[10px] font-semibold text-[#5b4cf0] transition hover:bg-[#e3dfff] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                     >
                       <Radar size={12} /> Next moves
                     </button>

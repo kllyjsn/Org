@@ -89,7 +89,7 @@ import MeetingsImportModal from '../components/MeetingsImportModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
-import { applyLanes, applyLayout, laneKey } from '../lib/layout';
+import { applyLanes, applyLayout, laneKey, LANE_COL_GAP } from '../lib/layout';
 import type { LaneGrouping } from '../lib/layout';
 import { computeLaneView } from '../lib/laneView';
 import { useIsMobile } from '../lib/useIsMobile';
@@ -115,6 +115,9 @@ import type {
 } from '../types';
 
 const nodeTypes = { person: PersonNode, lane: LaneHeaderNode, more: MoreNode };
+
+// Tighter column spacing on phones so two lanes fit the viewport.
+const MOBILE_COL_GAP = 270;
 
 function toFlow(
   state: MapState,
@@ -249,10 +252,16 @@ function MapInner() {
       if (positions.length === 0) return;
       const minX = Math.min(...positions.map((point) => point.x));
       const minY = Math.min(...positions.map((point) => point.y));
-      const zoom = isMobile ? 0.62 : 0.8;
+      const maxX = Math.max(...positions.map((point) => point.x));
+      const spread = maxX - minX + 250;
+      const rail = isMobile ? 48 : 224;
+      const zoom = Math.min(
+        isMobile ? 0.62 : 0.8,
+        (window.innerWidth - rail - 16) / spread
+      );
       rf.setViewport(
         {
-          x: 32 - minX * zoom,
+          x: (isMobile ? 8 : 32) - minX * zoom,
           y: (isMobile ? 170 : 200) - minY * zoom,
           zoom,
         },
@@ -288,7 +297,8 @@ function MapInner() {
           anchorPeople = applyLanes(
             map.state.people,
             isMobile ? 2 : 4,
-            'met'
+            'met',
+            isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
           );
           const pos = new Map(
             anchorPeople.map((p) => [p.id, { x: p.x, y: p.y }])
@@ -594,6 +604,7 @@ function MapInner() {
       })),
       {
         columns: isMobile ? 2 : 4,
+        colGap: isMobile ? MOBILE_COL_GAP : LANE_COL_GAP,
         expandedLanes,
         collapsedLanes,
         showAll: showAllLanes,
@@ -705,7 +716,8 @@ function MapInner() {
                   y: n.position.y,
                 })),
                 isMobile ? 2 : 4,
-                'met'
+                'met',
+                isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
               );
               const pos = new Map(
                 laid.map((p) => [p.id, { x: p.x, y: p.y }])
@@ -847,7 +859,8 @@ function MapInner() {
                     y: n.position.y,
                   })),
                   isMobile ? 2 : 4,
-                  'met'
+                  'met',
+                  isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
                 );
                 const pos = new Map(
                   laid.map((p) => [p.id, { x: p.x, y: p.y }])
@@ -884,6 +897,15 @@ function MapInner() {
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
     });
+    // Land new cards below the chart's left edge — viewport center almost
+    // always overlaps someone on a busy map.
+    const spot =
+      nodes.length === 0
+        ? center
+        : {
+            x: Math.min(...nodes.map((n) => n.position.x)),
+            y: Math.max(...nodes.map((n) => n.position.y)) + 160,
+          };
     const person: Person = {
       id: crypto.randomUUID(),
       name: draft?.name ?? 'New person',
@@ -900,8 +922,8 @@ function MapInner() {
       notes: '',
       email: null,
       linkedin: null,
-      x: center.x,
-      y: center.y,
+      x: spot.x,
+      y: spot.y,
     };
     setNodes((ns) => {
       const next = [
@@ -909,7 +931,7 @@ function MapInner() {
         {
           id: person.id,
           type: 'person' as const,
-          position: { x: center.x, y: center.y },
+          position: { x: spot.x, y: spot.y },
           data: { person, readOnly: false },
           style: { width: 250 },
         },
@@ -921,7 +943,13 @@ function MapInner() {
       return next;
     });
     setSelectedId(person.id);
-  }, [rf, setNodes, setEdges, markDirty, recordHistory]);
+    window.setTimeout(() => {
+      void rf.setCenter(spot.x + 125, spot.y + 45, {
+        zoom: rf.getZoom(),
+        duration: 300,
+      });
+    }, 60);
+  }, [rf, nodes, setNodes, setEdges, markDirty, recordHistory]);
 
   const focusPeople = useCallback(
     (matches: Person[]) => {
@@ -987,7 +1015,7 @@ function MapInner() {
       const laid =
         mode === 'hierarchy'
           ? applyLayout(currentPeople, currentEdges)
-          : applyLanes(currentPeople, isMobile ? 2 : 4, mode);
+          : applyLanes(currentPeople, isMobile ? 2 : 4, mode, isMobile ? MOBILE_COL_GAP : LANE_COL_GAP);
       if (mode !== 'hierarchy') setLaneGrouping(mode);
       const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
       setNodes((ns) => {
@@ -1488,7 +1516,13 @@ function MapInner() {
         )
       ) {
         setSelectedId(null);
-        void rf.fitView({ padding: 0.2, duration: 450 });
+        setShowAllLanes(true);
+        setExpandedLanes(new Set());
+        setCollapsedLanes(new Set());
+        window.setTimeout(
+          () => void rf.fitView({ padding: 0.2, duration: 450 }),
+          80
+        );
         return say('Showing the whole account.');
       }
       if (/\b(research|enrich|find more people)\b/.test(lower)) {
