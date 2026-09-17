@@ -192,6 +192,34 @@ export function applyLanes(
 }
 
 /**
+ * True when saved positions no longer read as lane bands: some lane's
+ * vertical extent overlaps another's, so headers would stack and cards
+ * would collide. Happens when people are appended in an ad-hoc grid or
+ * change department after layout.
+ */
+export function lanesInterleave(
+  people: Person[],
+  keyOf: (person: Person) => string = personLane
+): boolean {
+  const bands = new Map<string, { minY: number; maxY: number }>();
+  for (const person of people) {
+    const name = keyOf(person);
+    const band = bands.get(name);
+    if (band) {
+      band.minY = Math.min(band.minY, person.y);
+      band.maxY = Math.max(band.maxY, person.y);
+    } else {
+      bands.set(name, { minY: person.y, maxY: person.y });
+    }
+  }
+  const ordered = [...bands.values()].sort((a, b) => a.minY - b.minY);
+  for (let i = 1; i < ordered.length; i++) {
+    if (ordered[i].minY - ordered[i - 1].maxY < LANE_ROW_GAP / 2) return true;
+  }
+  return false;
+}
+
+/**
  * Title-seniority ladder used when research finds people but no reporting
  * lines. Lower number = more senior; the CEO/founder anchors the tree and each
  * person attaches to the most senior person above them — same department when
