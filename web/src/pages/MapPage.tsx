@@ -2130,7 +2130,7 @@ function MapInner() {
   }
 
   return (
-    <div className="flex h-full bg-[#f6f7f2]">
+    <div className="flex h-full overflow-hidden bg-[#f6f7f2]">
       <nav
         aria-label="Map tools"
         className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-56 sm:items-stretch sm:px-3"
@@ -2277,7 +2277,7 @@ function MapInner() {
         )}
       </nav>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-2 backdrop-blur sm:gap-3 sm:px-4">
           <input
             className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-slate-900 outline-none hover:border-slate-300 focus:border-[#5b4cf0] sm:w-56 sm:flex-none"
@@ -2342,7 +2342,7 @@ function MapInner() {
           </div>
         </header>
 
-      <div className="relative flex-1 bg-[#f6f7f2]">
+      <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
         {viewMode === 'roster' ? (
           <RosterView
             people={people}

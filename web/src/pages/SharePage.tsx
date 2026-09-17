@@ -222,7 +222,7 @@ function ShareInner() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#f6f7f2]">
+    <div className="flex h-full flex-col overflow-hidden bg-[#f6f7f2]">
       <header className="flex flex-wrap items-center gap-3 border-b border-white/10 bg-[#101828] px-4 py-2.5 text-white">
         <Wordmark size="sm" inverse />
         <span className="text-sm font-semibold text-white">
@@ -250,7 +250,7 @@ function ShareInner() {
         </Link>
       </header>
 
-      <div className="relative flex-1 bg-[#f6f7f2]">
+      <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
         <ReactFlow
           nodes={laneView.nodes}
           edges={edges}

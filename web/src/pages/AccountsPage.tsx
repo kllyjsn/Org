@@ -257,7 +257,7 @@ export default function AccountsPage() {
   };
 
   return (
-    <div className="flex h-full bg-[#f6f7f2]">
+    <div className="flex h-full overflow-hidden bg-[#f6f7f2]">
       <nav
         aria-label="Workspace tools"
         className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-56 sm:items-stretch sm:px-3"
@@ -346,7 +346,7 @@ export default function AccountsPage() {
         />
       </nav>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-6">
           <select
             className="min-w-0 max-w-48 flex-1 truncate rounded-lg border-0 bg-slate-100 px-2.5 py-1.5 text-sm font-medium sm:flex-none"
@@ -381,7 +381,7 @@ export default function AccountsPage() {
           <span className="hidden text-sm text-slate-500 lg:inline">{user?.name}</span>
         </header>
 
-      <main className="flex-1 overflow-auto px-3 py-6 sm:px-6 sm:py-10">
+      <main className="min-h-0 flex-1 overflow-auto px-3 py-6 sm:px-6 sm:py-10">
         <div className="mx-auto max-w-7xl">
         <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
