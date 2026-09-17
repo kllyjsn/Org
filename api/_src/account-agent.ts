@@ -219,7 +219,7 @@ Only return actions that directly help with the answer. Use at most three action
       },
       ...conversation,
     ],
-    { maxTokens: 1_500, json: true }
+    { maxTokens: 6_000, json: true }
   );
 
   const parsed = parseModelAnswer(result.content);
