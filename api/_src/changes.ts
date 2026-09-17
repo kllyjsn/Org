@@ -28,8 +28,8 @@ export function compareMapStates(
   baseline: MapState,
   current: MapState
 ): MapChangeAlert[] {
-  const previousPeople = peopleByName(baseline.people);
-  const currentPeople = peopleByName(current.people);
+  const previousPeople = peopleByName(baseline.people ?? []);
+  const currentPeople = peopleByName(current.people ?? []);
   const changes: MapChangeAlert[] = [];
 
   for (const [name, person] of currentPeople) {

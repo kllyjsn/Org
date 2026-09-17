@@ -141,7 +141,7 @@ export function buildAccountBriefing(
       (item.salesAngles ?? []).length > 0 && (item.evidence ?? []).length > 0
   );
   if (initiative) {
-    const relevantPeople = findPeople(state.people, initiative);
+    const relevantPeople = findPeople(state.people ?? [], initiative);
     actions.push({
       id: `initiative-${normalized(initiative.name).replace(/\s+/g, '-')}`,
       title: (initiative.salesAngles ?? [])[0] ?? `Review ${initiative.name ?? 'initiative'}`,
@@ -154,7 +154,7 @@ export function buildAccountBriefing(
     });
   }
 
-  const researchGap = state.people
+  const researchGap = (state.people ?? [])
     .filter(
       (person) =>
         person.researchStatus === 'conflicting' ||
@@ -321,7 +321,7 @@ function fallbackValueCase(
       : ('hypothesis' as const),
     evidence: evidenceFor(initiative),
   }));
-  const relevantPeople = state.people
+  const relevantPeople = (state.people ?? [])
     .filter((person) =>
       initiatives.some((initiative) =>
         (initiative.relevantPeople ?? []).some(
@@ -349,7 +349,7 @@ function fallbackValueCase(
     decisionCriteria: [],
     differentiation: [
       sellerProfile.positioning,
-      ...sellerProfile.proofPoints,
+      ...(sellerProfile.proofPoints ?? []),
     ]
       .filter(Boolean)
       .slice(0, 4)
@@ -403,20 +403,20 @@ export async function deepenAccountBriefing(
       ),
     ])
   ).slice(0, 30);
-  const account = state.meta.companyName || state.meta.domain;
+  const account = state.meta?.companyName || state.meta?.domain;
   const prompt = `Research and build a rigorous enterprise account value case for a seller.
 
 TARGET ACCOUNT
-${account} (${state.meta.domain})
+${account} (${state.meta?.domain ?? ''})
 
 SELLER
 ${sellerProfile.companyName} (${sellerProfile.domain})
 Products: ${(sellerProfile.products ?? []).join('; ') || 'unknown'}
 Use cases: ${(sellerProfile.useCases ?? []).join('; ') || 'unknown'}
-Target customers: ${sellerProfile.targetCustomers.join('; ') || 'unknown'}
+Target customers: ${(sellerProfile.targetCustomers ?? []).join('; ') || 'unknown'}
 Positioning: ${sellerProfile.positioning || sellerProfile.summary || 'unknown'}
-Proof points: ${sellerProfile.proofPoints.join('; ') || 'none supplied'}
-Competitors: ${sellerProfile.competitors.join('; ') || 'unknown'}
+Proof points: ${(sellerProfile.proofPoints ?? []).join('; ') || 'none supplied'}
+Competitors: ${(sellerProfile.competitors ?? []).join('; ') || 'unknown'}
 
 KNOWN ACCOUNT INITIATIVES
 ${JSON.stringify(state.meta?.initiatives ?? [])}
