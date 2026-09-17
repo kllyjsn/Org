@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Copy, Link2, Trash2, X } from 'lucide-react';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import type { ShareLink } from '../types';
 import { useFocusTrap } from '../lib/useFocusTrap';
 
@@ -51,8 +51,12 @@ export default function ShareModal({
       setPasscode('');
       setEmails('');
       void refresh();
-    } catch {
-      setError('Could not create the link — try again.');
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Could not create the link — try again.'
+      );
     } finally {
       setBusy(false);
     }
@@ -83,12 +87,7 @@ export default function ShareModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div
         ref={trapRef}
         role="dialog"
