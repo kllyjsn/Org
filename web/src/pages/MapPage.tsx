@@ -2011,15 +2011,18 @@ function MapInner() {
     <div className="flex h-full bg-[#f6f7f2]">
       <nav
         aria-label="Map tools"
-        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-14"
+        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-56 sm:items-stretch sm:px-3"
       >
         <Link
           to="/app"
           title="Back to accounts"
           aria-label="Back to accounts"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-white sm:h-10 sm:w-10"
+          className="flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-white sm:h-9 sm:w-full sm:justify-start sm:px-3"
         >
-          <ArrowLeft size={17} />
+          <ArrowLeft size={17} className="shrink-0" />
+          <span className="hidden truncate text-[13px] font-medium sm:block">
+            Accounts
+          </span>
         </Link>
         <RailSeparator />
         <RailButton
@@ -2030,7 +2033,7 @@ function MapInner() {
         />
         <RailButton
           icon={<Rows3 size={16} />}
-          label="Roster — searchable list of every person"
+          label="Roster"
           active={viewMode === 'roster'}
           onClick={() => setViewMode('roster')}
         />
@@ -2060,19 +2063,19 @@ function MapInner() {
             />
             <RailButton
               icon={<UserCheck size={16} />}
-              label="Meetings — import who you've met"
+              label="Meetings"
               onClick={() => setShowMeetings(true)}
             />
             <RailSeparator />
             <RailButton
               icon={<Undo2 size={16} />}
-              label="Undo (⌘Z)"
+              label="Undo"
               onClick={undo}
               disabled={past.length === 0}
             />
             <RailButton
               icon={<Redo2 size={16} />}
-              label="Redo (⇧⌘Z)"
+              label="Redo"
               onClick={redo}
               disabled={future.length === 0}
             />
@@ -2088,7 +2091,7 @@ function MapInner() {
             />
             <RailButton
               icon={<FileUp size={16} />}
-              label="Import CRM CSV"
+              label="Import CRM"
               onClick={() => crmInput.current?.click()}
             />
             <input

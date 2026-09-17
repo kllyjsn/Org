@@ -260,10 +260,10 @@ export default function AccountsPage() {
     <div className="flex h-full bg-[#f6f7f2]">
       <nav
         aria-label="Workspace tools"
-        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-14"
+        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-56 sm:items-stretch sm:px-3"
       >
         <div
-          className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[.06]"
+          className="mb-1 flex h-10 w-10 items-center justify-center gap-2.5 rounded-xl bg-white/[.06] sm:w-full sm:justify-start sm:px-3"
           title="TopDown"
         >
           <svg width={22} height={22} viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -282,6 +282,9 @@ export default function AccountsPage() {
               strokeLinejoin="round"
             />
           </svg>
+          <span className="hidden text-sm font-semibold tracking-tight text-white sm:block">
+            TopDown
+          </span>
         </div>
         <RailSeparator />
         <RailButton
@@ -299,17 +302,17 @@ export default function AccountsPage() {
             <RailSeparator />
             <RailButton
               icon={<Sparkles size={16} />}
-              label="Your company — seller profile"
+              label="Your company"
               onClick={() => setShowSellerProfile(true)}
             />
             <RailButton
               icon={<BarChart3 size={16} />}
-              label="Value dashboard"
+              label="Value"
               onClick={() => setShowValue(true)}
             />
             <RailButton
               icon={<Users size={16} />}
-              label="Workspace members"
+              label="Members"
               onClick={() => setShowMembers(true)}
             />
           </>
@@ -331,7 +334,7 @@ export default function AccountsPage() {
         {workspace?.plan === 'free' && (
           <RailButton
             icon={<Zap size={16} />}
-            label="Upgrade · $10/mo"
+            label="Upgrade"
             accent
             onClick={() => setShowPricing(true)}
           />
