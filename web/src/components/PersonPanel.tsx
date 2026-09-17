@@ -143,6 +143,23 @@ export default function PersonPanel({
       </div>
 
       <div className="flex-1 space-y-5 overflow-auto p-5">
+        <label
+          className={`flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 shadow-sm ${
+            readOnly ? 'pointer-events-none' : 'cursor-pointer'
+          }`}
+        >
+          <span className="text-xs font-semibold text-slate-700">
+            Met with
+          </span>
+          <input
+            type="checkbox"
+            checked={!!person.metWith}
+            onChange={(e) => set({ metWith: e.target.checked })}
+            disabled={readOnly}
+            className="h-4 w-4 accent-emerald-600"
+          />
+        </label>
+
         <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">

@@ -60,6 +60,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Rows3,
+  UserCheck,
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
@@ -89,6 +90,7 @@ import type { LaneHeaderData } from '../components/LaneHeaderNode';
 import MoreNode from '../components/MoreNode';
 import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
+import MeetingsImportModal from '../components/MeetingsImportModal';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
 import {
@@ -237,6 +239,7 @@ function MapInner() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<EdgeData>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'canvas' | 'roster'>('canvas');
+  const [showMeetings, setShowMeetings] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -726,6 +729,94 @@ function MapInner() {
       });
     },
     [setEdges, markDirty, nodes, recordHistory]
+  );
+
+  // Meeting import: flag matched people as Met (adopting captured titles
+  // only when the map has no real title yet) and append unmatched names as
+  // new Met nodes in a fresh row below the map.
+  const applyMeetings = useCallback(
+    (
+      matched: { person: Person; title: string | null }[],
+      unmatched: { name: string; title: string | null }[]
+    ) => {
+      if (readOnly) return;
+      recordHistory();
+      const titleById = new Map(
+        matched.map((entry) => [entry.person.id, entry.title] as const)
+      );
+      const center = rf.screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const bounds =
+        nodes.length > 0
+          ? {
+              minX: Math.min(...nodes.map((n) => n.position.x)),
+              maxY: Math.max(...nodes.map((n) => n.position.y)),
+            }
+          : null;
+      const startX = bounds ? bounds.minX : center.x;
+      const startY = bounds ? bounds.maxY + 240 : center.y;
+      const additions = unmatched.map((entry, index) => {
+        const x = startX + (index % 6) * 300;
+        const y = startY + Math.floor(index / 6) * 260;
+        const person: Person = {
+          id: crypto.randomUUID(),
+          name: entry.name,
+          title: entry.title ?? '',
+          department: null,
+          team: null,
+          productLine: null,
+          teamEvidence: null,
+          role: 'none',
+          confidence: 'low',
+          sources: [],
+          notes: '',
+          email: null,
+          linkedin: null,
+          metWith: true,
+          x,
+          y,
+        };
+        return {
+          id: person.id,
+          type: 'person' as const,
+          position: { x, y },
+          data: { person, readOnly: false },
+          style: { width: 250 },
+        };
+      });
+      setNodes((ns) => {
+        const next = [
+          ...ns.map((node) => {
+            const capturedTitle = titleById.get(node.id);
+            if (capturedTitle === undefined) return node;
+            const person = node.data.person;
+            const adoptTitle =
+              !!capturedTitle &&
+              (!person.title || person.title.trim().toLowerCase() === 'employee');
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                person: {
+                  ...person,
+                  metWith: true,
+                  ...(adoptTitle ? { title: capturedTitle } : {}),
+                },
+              },
+            };
+          }),
+          ...additions,
+        ];
+        setEdges((es) => {
+          markDirty(next, es);
+          return es;
+        });
+        return next;
+      });
+    },
+    [markDirty, nodes, readOnly, recordHistory, rf, setEdges, setNodes]
   );
 
   const addPerson = useCallback((draft?: Partial<Person>) => {
@@ -2091,6 +2182,13 @@ function MapInner() {
                 <LayoutGrid size={15} /> Departments
               </button>
               <button
+                onClick={() => setShowMeetings(true)}
+                title="Import who you've met with (Granola export)"
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+              >
+                <UserCheck size={15} /> Meetings
+              </button>
+              <button
                 onClick={() => crmInput.current?.click()}
                 className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
               >
@@ -2404,6 +2502,12 @@ function MapInner() {
 
       {showShare && mapId && (
         <ShareModal mapId={mapId} onClose={() => setShowShare(false)} />
+      )}
+      {showMeetings && (
+        <MeetingsImportModal
+          people={people}
+          onApply={applyMeetings}
+          onClose={() => setShowMeetings(false)} />
       )}
       {showDeepResearch && (
         <DeepResearchModal

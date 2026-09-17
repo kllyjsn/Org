@@ -56,7 +56,7 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
         </div>
         {p.notes && <StickyNote size={13} className="mt-0.5 shrink-0 text-amber-500" />}
       </div>
-      {(role.label || p.department || unverified) && (
+      {(role.label || p.department || unverified || p.metWith) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-1 pl-1">
           {role.label && (
             <span
@@ -64,6 +64,12 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
             >
               <span className={`h-1.5 w-1.5 rounded-full ${role.dot}`} />
               {role.label}
+            </span>
+          )}
+          {p.metWith && (
+            <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Met
             </span>
           )}
           {p.team && (

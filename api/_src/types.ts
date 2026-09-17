@@ -44,6 +44,8 @@ export interface Person {
   conflictingTitles?: string[];
   researchStatus?: 'verified' | 'possibly_stale' | 'conflicting';
   notes: string;
+  /** Marked when the user has met this person (meeting import / panel). */
+  metWith?: boolean;
   email: string | null;
   linkedin: string | null;
   x: number;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownWideNarrow, Search } from 'lucide-react';
+import { ArrowDownWideNarrow, Search, UserCheck } from 'lucide-react';
 import { deptColor, initials, ROLE_META } from '../lib/colors';
 import { matchesAllTokens } from '../lib/searchText';
 import { personLane, seniorityRank } from '../lib/layout';
@@ -47,7 +47,35 @@ export default function RosterView({
 }) {
   const [query, setQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState<Set<string>>(new Set());
+  const [metFilter, setMetFilter] = useState<'all' | 'met' | 'unmet'>('all');
   const [sortKey, setSortKey] = useState<SortKey>('org');
+
+  const metCount = useMemo(
+    () => people.filter((person) => person.metWith).length,
+    [people]
+  );
+
+  // Coverage gaps: unmet people per lane, plus buying roles nobody met with.
+  const gaps = useMemo(() => {
+    if (metCount === 0) return null;
+    const unmetByLane = new Map<string, number>();
+    for (const person of people) {
+      if (person.metWith) continue;
+      const lane = personLane(person);
+      unmetByLane.set(lane, (unmetByLane.get(lane) ?? 0) + 1);
+    }
+    const biggest = [...unmetByLane.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+    const roles = (
+      ['champion', 'economic_buyer', 'decision_maker', 'technical_buyer'] as const
+    ).filter(
+      (role) =>
+        people.some((person) => person.role === role) &&
+        !people.some((person) => person.role === role && person.metWith)
+    );
+    return { biggest, roles };
+  }, [people, metCount]);
 
   const departments = useMemo(() => {
     const counts = new Map<string, number>();
@@ -68,6 +96,8 @@ export default function RosterView({
       if (deptFilter.size > 0 && !deptFilter.has(personLane(person))) {
         return false;
       }
+      if (metFilter === 'met' && !person.metWith) return false;
+      if (metFilter === 'unmet' && person.metWith) return false;
       return !query.trim() || matchesAllTokens(searchText(person), query);
     });
     const rank = (person: Person) => seniorityRank(person);
@@ -95,7 +125,7 @@ export default function RosterView({
       return result !== 0 ? result : a.name.localeCompare(b.name);
     });
     return sorted;
-  }, [people, departments, deptFilter, query, sortKey]);
+  }, [people, departments, deptFilter, metFilter, query, sortKey]);
 
   const toggleDept = (lane: string) => {
     setDeptFilter((prev) => {
@@ -133,10 +163,58 @@ export default function RosterView({
             <ArrowDownWideNarrow size={14} />
             <span className="hidden sm:inline">{SORT_LABEL[sortKey]}</span>
           </button>
+          <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {(['all', 'met', 'unmet'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setMetFilter(value)}
+                className={`px-2.5 py-2 text-xs font-semibold capitalize ${
+                  metFilter === value
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {value === 'met' ? (
+                  <span className="flex items-center gap-1">
+                    <UserCheck size={12} /> Met
+                  </span>
+                ) : value === 'unmet' ? (
+                  'Not met'
+                ) : (
+                  'All'
+                )}
+              </button>
+            ))}
+          </div>
           <span className="hidden shrink-0 text-xs font-medium text-slate-400 sm:inline">
             {rows.length} of {people.length}
           </span>
         </div>
+        {gaps && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+            <span className="font-semibold text-emerald-700">
+              Met {metCount} of {people.length}
+            </span>
+            {gaps.biggest.length > 0 && (
+              <span>
+                Biggest gaps:{" "}
+                {gaps.biggest
+                  .map(([lane, count]) => `${lane} ${count}`)
+                  .join(" · ")}
+              </span>
+            )}
+            {gaps.roles.length > 0 && (
+              <span className="text-amber-700">
+                No{" "}
+                {gaps.roles
+                  .map((role) => ROLE_META[role].label ?? role)
+                  .join(", ")}
+                {" "}met yet
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {departments.map(([lane, count]) => {
             const active = deptFilter.has(lane);
@@ -189,6 +267,7 @@ export default function RosterView({
                 <th className="hidden px-3 py-2 lg:table-cell">Team</th>
                 <th className="hidden px-3 py-2 xl:table-cell">Reports to</th>
                 <th className="hidden px-3 py-2 sm:table-cell">Role</th>
+                <th className="px-3 py-2 text-center">Met</th>
               </tr>
             </thead>
             <tbody>
@@ -264,6 +343,15 @@ export default function RosterView({
                         </span>
                       ) : (
                         <span className="text-[11px] text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {person.metWith ? (
+                        <span title="Met with" className="inline-flex">
+                          <UserCheck size={15} className="text-emerald-600" />
+                        </span>
+                      ) : (
+                        <span className="text-slate-200">—</span>
                       )}
                     </td>
                   </tr>

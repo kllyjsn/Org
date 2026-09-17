@@ -46,6 +46,8 @@ export interface Person {
   /** Structured seniority from enrichment (CXO/VP/Director/…) when known. */
   jobLevel?: string | null;
   notes: string;
+  /** Marked when the user has met this person (meeting import / panel). */
+  metWith?: boolean;
   email: string | null;
   linkedin: string | null;
   x: number;
