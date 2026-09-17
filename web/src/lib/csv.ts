@@ -1,18 +1,26 @@
 export function parseCsv(text: string): Record<string, string>[] {
+  const source = text.replace(/^\uFEFF/, '');
+  // Delimiter sniffing on the header line — Excel exports are semicolon- or
+  // tab-delimited in many locales and CRM exports vary.
+  const headerLine = source.split(/\r?\n/, 1)[0] ?? '';
+  const delimiter = [',', ';', '\t'].sort(
+    (a, b) => headerLine.split(b).length - headerLine.split(a).length
+  )[0];
+
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
   let quoted = false;
 
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const next = text[index + 1];
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
     if (char === '"' && quoted && next === '"') {
       field += '"';
       index += 1;
     } else if (char === '"') {
       quoted = !quoted;
-    } else if (char === ',' && !quoted) {
+    } else if (char === delimiter && !quoted) {
       row.push(field.trim());
       field = '';
     } else if ((char === '\n' || char === '\r') && !quoted) {

@@ -1762,19 +1762,81 @@ function MapInner() {
       recordHistory();
       let updated = 0;
       let added = 0;
+      let skipped = 0;
       const center = rf.screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
       });
+      const pick = (
+        row: Record<string, string>,
+        ...keys: string[]
+      ): string => {
+        for (const key of keys) {
+          const value = row[key]?.trim();
+          if (value) return value;
+        }
+        return '';
+      };
       setNodes((items) => {
         const next = [...items];
+        const baseX = items.length
+          ? Math.min(...items.map((n) => n.position.x))
+          : center.x;
+        const baseY = items.length
+          ? Math.max(...items.map((n) => n.position.y)) + 240
+          : center.y;
         for (const row of rows) {
           const name =
-            row.name ||
-            row.fullname ||
-            [row.firstname, row.lastname].filter(Boolean).join(' ');
-          const email = row.email || row.emailaddress;
-          if (!name && !email) continue;
+            pick(
+              row,
+              'name',
+              'fullname',
+              'contactname',
+              'contact',
+              'employeename',
+              'person',
+              'displayname'
+            ) ||
+            [
+              pick(row, 'firstname', 'givenname'),
+              pick(row, 'lastname', 'surname', 'familyname'),
+            ]
+              .filter(Boolean)
+              .join(' ');
+          const email = pick(row, 'email', 'emailaddress', 'mail');
+          if (!name && !email) {
+            skipped += 1;
+            continue;
+          }
+          const title = pick(
+            row,
+            'title',
+            'jobtitle',
+            'position',
+            'role',
+            'jobrole',
+            'designation'
+          );
+          const department = pick(
+            row,
+            'department',
+            'dept',
+            'function',
+            'division',
+            'businessunit',
+            'bu'
+          );
+          const team = pick(row, 'team', 'subteam', 'squad');
+          const productLine = pick(row, 'productline', 'product', 'segment');
+          const linkedin = pick(
+            row,
+            'linkedin',
+            'linkedinurl',
+            'linkedinprofile',
+            'profile',
+            'url'
+          );
+          const notes = pick(row, 'notes', 'note', 'comments', 'description');
           const matchIndex = next.findIndex((node) => {
             const person = node.data.person;
             return (
@@ -1785,18 +1847,12 @@ function MapInner() {
             );
           });
           const enrichment = {
-            ...(row.title || row.jobtitle
-              ? { title: row.title || row.jobtitle }
-              : {}),
-            ...(row.department ? { department: row.department } : {}),
-            ...(row.team ? { team: row.team, teamEvidence: 'sourced' as const } : {}),
-            ...(row.productline || row.product
-              ? { productLine: row.productline || row.product }
-              : {}),
+            ...(title ? { title } : {}),
+            ...(department ? { department } : {}),
+            ...(team ? { team, teamEvidence: 'sourced' as const } : {}),
+            ...(productLine ? { productLine } : {}),
             ...(email ? { email } : {}),
-            ...(row.linkedin || row.linkedinurl
-              ? { linkedin: row.linkedin || row.linkedinurl }
-              : {}),
+            ...(linkedin ? { linkedin } : {}),
           };
           if (matchIndex >= 0) {
             const node = next[matchIndex];
@@ -1808,7 +1864,7 @@ function MapInner() {
                 person: {
                   ...person,
                   ...enrichment,
-                  notes: [person.notes, row.notes].filter(Boolean).join('\n'),
+                  notes: [person.notes, notes].filter(Boolean).join('\n'),
                   sources: Array.from(new Set([...person.sources, 'CRM CSV'])),
                 },
               },
@@ -1816,28 +1872,30 @@ function MapInner() {
             updated += 1;
             continue;
           }
+          const x = baseX + (added % 6) * 300;
+          const y = baseY + Math.floor(added / 6) * 260;
           const person: Person = {
             id: crypto.randomUUID(),
             name: name || email,
-            title: row.title || row.jobtitle || 'CRM contact',
-            department: row.department || null,
-            team: row.team || null,
-            productLine: row.productline || row.product || null,
-            teamEvidence: row.team ? 'sourced' : null,
+            title: title || 'CRM contact',
+            department: department || null,
+            team: team || null,
+            productLine: productLine || null,
+            teamEvidence: team ? 'sourced' : null,
             role: 'none',
             confidence: 'high',
             sources: ['CRM CSV'],
             researchStatus: 'verified',
-            notes: row.notes || '',
+            notes,
             email: email || null,
-            linkedin: row.linkedin || row.linkedinurl || null,
-            x: center.x + (added % 4) * 280,
-            y: center.y + Math.floor(added / 4) * 130,
+            linkedin: linkedin || null,
+            x,
+            y,
           };
           next.push({
             id: person.id,
             type: 'person',
-            position: { x: person.x, y: person.y },
+            position: { x, y },
             data: { person, readOnly: false },
             style: { width: 250 },
           });
@@ -1846,7 +1904,11 @@ function MapInner() {
         markDirty(next, edges);
         return next;
       });
-      setImportNotice(`CRM import: ${updated} enriched, ${added} added.`);
+      setImportNotice(
+        updated + added === 0
+          ? 'No usable contacts — the CSV needs a Name or Email column.'
+          : `CRM import: ${updated} enriched, ${added} added${skipped ? `, ${skipped} skipped` : ''}.`
+      );
       window.setTimeout(() => setImportNotice(''), 5_000);
     },
     [readOnly, recordHistory, rf, setNodes, markDirty, edges]
@@ -2343,6 +2405,11 @@ function MapInner() {
         </header>
 
       <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
+        {importNotice && (
+          <div className="absolute right-3 top-3 z-40 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
+            {importNotice}
+          </div>
+        )}
         {viewMode === 'roster' ? (
           <RosterView
             people={people}
@@ -2367,11 +2434,6 @@ function MapInner() {
             ⌘K
           </kbd>
         </button>
-        {importNotice && (
-          <div className="absolute right-3 top-3 z-30 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
-            {importNotice}
-          </div>
-        )}
         <ReactFlow
           nodes={displayNodes}
           edges={edges}
