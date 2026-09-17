@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
@@ -34,6 +34,7 @@ interface Props {
   onAddInfluence: (fromId: string, toId: string, label: string) => void;
   onDelete: (personId: string) => void;
   onClose: () => void;
+  onNavigate?: (personId: string) => void;
 }
 
 export default function PersonPanel({
@@ -48,6 +49,7 @@ export default function PersonPanel({
   onAddInfluence,
   onDelete,
   onClose,
+  onNavigate,
 }: Props) {
   const [comments, setComments] = useState<MapComment[]>([]);
   const [draft, setDraft] = useState('');
@@ -56,13 +58,42 @@ export default function PersonPanel({
 
   const managerId =
     edges.find((e) => e.kind === 'reports' && e.to === person.id)?.from ?? '';
+
+  // Reporting structure: the chain of managers up to the top of the chart,
+  // then this person's direct reports — each row navigates the panel to
+  // that person so the hierarchy can be walked without leaving the profile.
+  const { chainUp, directReports } = useMemo(() => {
+    const byId = new Map(people.map((p) => [p.id, p]));
+    const reports = edges.filter((e) => e.kind === 'reports');
+    const up: { person: Person; inferred: boolean }[] = [];
+    const seen = new Set([person.id]);
+    let cursor = person.id;
+    while (up.length < 8) {
+      const edge = reports.find((e) => e.to === cursor);
+      if (!edge || seen.has(edge.from)) break;
+      const manager = byId.get(edge.from);
+      if (!manager) break;
+      up.push({ person: manager, inferred: !!edge.inferred });
+      seen.add(edge.from);
+      cursor = edge.from;
+    }
+    const down = reports
+      .filter((e) => e.from === person.id)
+      .map((e) => ({ person: byId.get(e.to), inferred: !!e.inferred }))
+      .filter((e): e is { person: Person; inferred: boolean } => !!e.person);
+    return { chainUp: up, directReports: down };
+  }, [edges, people, person.id]);
+  const [showAllReports, setShowAllReports] = useState(false);
+  const reportsToShow = showAllReports
+    ? directReports
+    : directReports.slice(0, 6);
   const influenceEdges = edges.filter(
     (e) => e.kind === 'influence' && (e.from === person.id || e.to === person.id)
   );
   const sourceDetails =
     person.sourceDetails && person.sourceDetails.length > 0
       ? person.sourceDetails
-      : person.sources.map((url) => ({
+      : (person.sources ?? []).map((url) => ({
           url,
           title: null,
           publisher: null,
@@ -72,10 +103,10 @@ export default function PersonPanel({
         }));
   const relevantInitiatives = initiatives.filter(
     (initiative) =>
-      initiative.relevantPeople.some(
-        (name) => name.toLowerCase() === person.name.toLowerCase()
+      (initiative.relevantPeople ?? []).some(
+        (name) => name.toLowerCase() === (person.name ?? '').toLowerCase()
       ) ||
-      initiative.relevantTeams.some((team) =>
+      (initiative.relevantTeams ?? []).some((team) =>
         [person.team, person.department].some(
           (value) =>
             !!value &&
@@ -160,6 +191,109 @@ export default function PersonPanel({
           />
         </label>
 
+        {(chainUp.length > 0 || directReports.length > 0) && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Reporting structure
+            </span>
+            <div className="space-y-0.5">
+              {chainUp.length > 5 && (
+                <p className="px-2 py-0.5 text-[10px] text-slate-400">
+                  ↑ {chainUp.length - 5} more level
+                  {chainUp.length - 5 === 1 ? '' : 's'} to the top
+                </p>
+              )}
+              {[...chainUp]
+                .slice(0, 5)
+                .reverse()
+                .map((entry, index, visible) => (
+                  <button
+                    key={entry.person.id}
+                    type="button"
+                    disabled={!onNavigate}
+                    onClick={() => onNavigate?.(entry.person.id)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left ${
+                      onNavigate ? 'hover:bg-slate-50' : 'cursor-default'
+                    }`}
+                    style={{ paddingLeft: `${8 + index * 12}px` }}
+                  >
+                    <span className="text-[10px] text-slate-300">└</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold text-slate-800">
+                        {entry.person.name}
+                      </span>
+                      <span className="block truncate text-[10px] text-slate-400">
+                        {entry.person.title}
+                        {entry.inferred ? ' · inferred' : ''}
+                      </span>
+                    </span>
+                    {index === visible.length - 1 && (
+                      <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
+                        manager
+                      </span>
+                    )}
+                  </button>
+                ))}
+              <div
+                className="flex items-center gap-2 rounded-lg bg-[#eeecff] px-2 py-1.5"
+                style={{
+                  paddingLeft: `${8 + Math.min(chainUp.length, 5) * 12}px`,
+                }}
+              >
+                <span className="truncate text-xs font-semibold text-[#5b4cf0]">
+                  {person.name}
+                </span>
+              </div>
+              {directReports.length > 0 && (
+                <div
+                  className="pt-1"
+                  style={{
+                    paddingLeft: `${8 + Math.min(chainUp.length, 5) * 12 + 12}px`,
+                  }}
+                >
+                  <p className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    {directReports.length} direct report
+                    {directReports.length === 1 ? '' : 's'}
+                  </p>
+                  {reportsToShow.map((entry) => (
+                    <button
+                      key={entry.person.id}
+                      type="button"
+                      disabled={!onNavigate}
+                      onClick={() => onNavigate?.(entry.person.id)}
+                      className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left ${
+                        onNavigate ? 'hover:bg-slate-50' : 'cursor-default'
+                      }`}
+                    >
+                      <span className="text-[10px] text-slate-300">└</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium text-slate-700">
+                          {entry.person.name}
+                        </span>
+                        <span className="block truncate text-[10px] text-slate-400">
+                          {entry.person.title}
+                          {entry.inferred ? ' · inferred' : ''}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                  {directReports.length > 6 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllReports((v) => !v)}
+                      className="w-full rounded-lg px-2 py-1 text-left text-[10px] font-semibold text-[#5b4cf0] hover:bg-slate-50"
+                    >
+                      {showAllReports
+                        ? 'Show fewer'
+                        : `+${directReports.length - 6} more`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -178,7 +312,7 @@ export default function PersonPanel({
             </span>
           </div>
           <div className="text-xs text-slate-500">
-            {person.sources.length} source{person.sources.length === 1 ? '' : 's'}
+            {(person.sources ?? []).length} source{(person.sources ?? []).length === 1 ? '' : 's'}
             {person.teamEvidence ? ` · ${person.teamEvidence} team` : ''}
           </div>
         </div>
@@ -279,7 +413,7 @@ export default function PersonPanel({
                     {initiative.name}
                   </p>
                   <p className="mt-1 text-xs text-indigo-800">
-                    {initiative.salesAngles[0] || initiative.summary}
+                    {(initiative.salesAngles ?? [])[0] || initiative.summary}
                   </p>
                 </div>
               ))}

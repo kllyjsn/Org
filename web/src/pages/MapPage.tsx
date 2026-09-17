@@ -2661,6 +2661,7 @@ function MapInner() {
               onAddInfluence={addInfluence}
               onDelete={deletePerson}
               onClose={() => setSelectedId(null)}
+              onNavigate={(id) => setSelectedId(id)}
             />
           )}
         </AnimatePresence>

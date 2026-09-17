@@ -320,6 +320,7 @@ function ShareInner() {
               onAddInfluence={() => {}}
               onDelete={() => {}}
               onClose={() => setSelectedId(null)}
+              onNavigate={(id) => setSelectedId(id)}
             />
           )}
         </AnimatePresence>
