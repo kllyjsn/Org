@@ -186,8 +186,8 @@ export default function RosterView({
   return (
     <div className="flex h-full flex-col bg-[#f6f7f2]">
       <div className="shrink-0 space-y-2 border-b border-slate-200/80 bg-white/80 px-3 py-2.5 backdrop-blur-xl sm:px-4">
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
             <Search size={14} className="shrink-0 text-slate-400" />
             <input
               value={query}

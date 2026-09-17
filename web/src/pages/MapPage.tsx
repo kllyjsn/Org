@@ -893,7 +893,9 @@ function MapInner() {
       productLine: draft?.productLine ?? null,
       teamEvidence: draft?.team ? 'inferred' : null,
       role: 'none',
-      confidence: 'high',
+      // Manually added people carry no evidence — mark unverified rather
+      // than impersonating researched confidence.
+      confidence: 'low',
       sources: [],
       notes: '',
       email: null,
@@ -2589,7 +2591,7 @@ function MapInner() {
 
         {/* density control — collapse/expand every lane at once */}
         {(laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) && (
-          <div className="pointer-events-auto absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+          <div className={`pointer-events-auto absolute left-1/2 z-10 -translate-x-1/2 ${!readOnly && selectedNodes.length > 1 ? 'bottom-16' : 'bottom-3'}`}>
             <button
               type="button"
               onClick={() => {
@@ -2613,7 +2615,7 @@ function MapInner() {
 
         {/* buying-committee coverage strip */}
         {people.length > 0 && (
-          <div className="pointer-events-none absolute bottom-2 right-2 z-10 max-w-[calc(100%-1rem)] rounded-full border border-white/80 bg-white/85 px-2 py-1 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:bottom-auto sm:left-4 sm:right-auto sm:top-20 sm:rounded-2xl sm:px-3.5 sm:py-2.5">
+          <div className={`pointer-events-none absolute right-2 z-10 max-w-[calc(100%-1rem)] rounded-full border border-white/80 bg-white/85 px-2 py-1 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:bottom-auto sm:left-4 sm:right-auto sm:top-20 sm:rounded-2xl sm:px-3.5 sm:py-2.5 ${!readOnly && selectedNodes.length > 1 ? 'bottom-28' : (laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) ? 'bottom-14' : 'bottom-2'}`}>
             <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.08em] text-slate-400 sm:mb-1.5 sm:gap-2 sm:text-[10px] sm:tracking-[.12em]">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
               <span className="sm:hidden">Committee · {people.length}</span>

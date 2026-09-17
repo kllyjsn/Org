@@ -520,7 +520,7 @@ export default function AccountsPage() {
                       <Clock3 size={13} /> {new Date(m.updated_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {workspace?.role !== 'viewer' && (
                       <button
                         onClick={(event) => {
@@ -534,7 +534,9 @@ export default function AccountsPage() {
                         }`}
                       >
                         <BriefcaseBusiness size={12} />
-                        {m.is_live_opportunity ? 'Live deal' : 'Mark live'}
+                        <span className="hidden sm:inline">
+                          {m.is_live_opportunity ? 'Live deal' : 'Mark live'}
+                        </span>
                       </button>
                     )}
                     <button
