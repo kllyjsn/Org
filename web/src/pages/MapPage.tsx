@@ -56,9 +56,9 @@ import {
   Sparkles,
   Ungroup,
   Undo2,
+  Waypoints,
   Group,
   MessageSquare,
-  MoreHorizontal,
   Rows3,
   UserCheck,
   UserPlus,
@@ -91,6 +91,7 @@ import MoreNode from '../components/MoreNode';
 import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
 import MeetingsImportModal from '../components/MeetingsImportModal';
+import RailButton, { RailSeparator } from '../components/RailButton';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
 import {
@@ -258,7 +259,6 @@ function MapInner() {
   const [presence, setPresence] = useState<MapPresence[]>([]);
   const [selfId, setSelfId] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState('');
-  const [showAllTools, setShowAllTools] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [past, setPast] = useState<CanvasSnapshot[]>([]);
@@ -2008,236 +2008,201 @@ function MapInner() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#f6f7f2]">
-      <header className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#101828] px-3 py-2.5 text-white shadow-lg sm:gap-3 sm:px-4">
+    <div className="flex h-full bg-[#f6f7f2]">
+      <nav
+        aria-label="Map tools"
+        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-14"
+      >
         <Link
           to="/app"
-          className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+          title="Back to accounts"
+          aria-label="Back to accounts"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-white sm:h-10 sm:w-10"
         >
           <ArrowLeft size={17} />
         </Link>
-        <input
-          className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-white outline-none hover:border-white/15 focus:border-[#8c82ff] sm:w-56 sm:flex-none"
-          value={mapName}
-          onChange={(e) => setMapName(e.target.value)}
-          onBlur={saveName}
-          disabled={readOnly}
+        <RailSeparator />
+        <RailButton
+          icon={<Waypoints size={16} />}
+          label="Canvas"
+          active={viewMode === 'canvas'}
+          onClick={() => setViewMode('canvas')}
         />
-        <span className="hidden rounded-full border border-white/10 bg-white/[.07] px-2.5 py-1 text-[10px] font-medium text-slate-300 sm:inline">
-          {domain}
-        </span>
-        {meta?.provider && (
-          <span className="hidden rounded-full bg-[#c9f04b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-950 md:inline">
-            {meta.tier} · {meta.provider}
-          </span>
-        )}
-        {meta?.researchedAt && (
-          <button
-            onClick={() => {
-              if (readOnly) return;
-              setDeepResearchFocus('');
-              setShowDeepResearch(true);
-            }}
-            disabled={readOnly}
-            title={
-              meta.nextRefreshAt
-                ? `Next research check ${new Date(meta.nextRefreshAt).toLocaleDateString()}`
-                : 'Refresh research'
-            }
-            className={`hidden rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide md:inline ${
-              researchDue
-                ? 'bg-amber-100 text-amber-800'
-                : 'bg-white/10 text-slate-300'
-            }`}
-          >
-            {researchDue ? 'Refresh due' : 'Research current'}
-          </button>
-        )}
-        <div className="hidden flex-1 sm:block" />
-        <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-500 sm:inline">
-          {saveState === 'saving'
-            ? 'Saving…'
-            : saveState === 'dirty'
-              ? 'Unsaved changes'
-              : 'Saved'}
-        </span>
-        <div className="flex -space-x-1">
-          {presence.slice(0, 4).map((person) => (
-            <span
-              key={person.id}
-              title={`${person.name} is viewing`}
-              className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#101828] bg-[#5b4cf0] text-[10px] font-semibold text-white"
-            >
-              {person.name
-                .split(' ')
-                .map((part) => part[0])
-                .join('')
-                .slice(0, 2)
-                .toUpperCase()}
-            </span>
-          ))}
-        </div>
-        <div className="order-last flex w-full flex-wrap items-center gap-2 border-t border-white/10 pt-2 sm:order-none sm:w-auto sm:flex-nowrap sm:overflow-x-auto sm:border-0 sm:pt-0">
-          <div className="flex shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[.06]">
-            <button
-              onClick={() => setViewMode('canvas')}
-              title="Canvas view"
-              className={`flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-medium sm:min-h-0 ${
-                viewMode === 'canvas'
-                  ? 'bg-white text-slate-950'
-                  : 'text-slate-300 hover:bg-white/10'
-              }`}
-            >
-              <LayoutGrid size={15} /> Canvas
-            </button>
-            <button
-              onClick={() => setViewMode('roster')}
-              title="Roster — every person as a searchable list"
-              className={`flex min-h-11 items-center gap-1.5 border-l border-white/10 px-3 py-1.5 text-sm font-medium sm:min-h-0 ${
-                viewMode === 'roster'
-                  ? 'bg-white text-slate-950'
-                  : 'text-slate-300 hover:bg-white/10'
-              }`}
-            >
-              <Rows3 size={15} /> Roster
-            </button>
-          </div>
-          {!readOnly && (
-            <>
-            <button
+        <RailButton
+          icon={<Rows3 size={16} />}
+          label="Roster — searchable list of every person"
+          active={viewMode === 'roster'}
+          onClick={() => setViewMode('roster')}
+        />
+        {!readOnly && (
+          <>
+            <RailSeparator />
+            <RailButton
+              icon={<Sparkles size={16} />}
+              label="Deep research"
               onClick={() => {
                 setDeepResearchFocus('');
                 setShowDeepResearch(true);
               }}
-              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20 sm:min-h-0"
-            >
-              <Sparkles size={15} /> Deep research
-            </button>
-            <button
+            />
+            <RailButton
+              icon={<Radar size={16} />}
+              label="Briefing"
               onClick={() => {
                 setBriefingEntry('toolbar');
                 setShowBriefing(true);
               }}
-              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[#c9f04b]/40 bg-[#c9f04b]/10 px-3 py-1.5 text-sm font-semibold text-[#e4ff85] hover:bg-[#c9f04b]/20 sm:min-h-0"
-            >
-              <Radar size={15} /> Briefing
-            </button>
-            <button
+            />
+            <RailButton
+              icon={<Compass size={16} />}
+              label="Strategy"
               onClick={() => setShowStrategy(true)}
-              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-slate-100 sm:min-h-0"
-            >
-              <Compass size={15} /> Strategy
-            </button>
-            <button
-              onClick={() => setShowShare(true)}
-              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#6b5cf8] sm:min-h-0"
-            >
-              <Share2 size={15} /> Share
-            </button>
-            </>
-          )}
-          <button
-            onClick={() => setShowAllTools((open) => !open)}
-            aria-expanded={showAllTools}
-            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:hidden"
-          >
-            <MoreHorizontal size={15} /> {showAllTools ? 'Fewer tools' : 'More tools'}
-          </button>
-          <div
-            className={`${showAllTools ? 'flex' : 'hidden'} w-full flex-wrap items-center gap-2 sm:flex sm:w-auto sm:flex-nowrap`}
-          >
-            {!readOnly && (
-              <>
-              <div className="flex overflow-hidden rounded-lg border border-white/10 bg-white/[.06]">
-                <button
-                  onClick={undo}
-                  disabled={past.length === 0}
-                  title="Undo (⌘Z)"
-                  aria-label="Undo"
-                  className="min-h-11 border-r border-white/10 px-3 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-600 sm:min-h-0 sm:p-2"
-                >
-                  <Undo2 size={15} />
-                </button>
-                <button
-                  onClick={redo}
-                  disabled={future.length === 0}
-                  title="Redo (⇧⌘Z)"
-                  aria-label="Redo"
-                  className="min-h-11 px-3 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-600 sm:min-h-0 sm:p-2"
-                >
-                  <Redo2 size={15} />
-                </button>
-              </div>
-              <button
-                onClick={() => addPerson()}
-                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
-              >
-                <UserPlus size={15} /> Person
-              </button>
-              <button
-                onClick={() => autoLayout('department')}
-                title="Arrange people into department lanes"
-                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
-              >
-                <LayoutGrid size={15} /> Departments
-              </button>
-              <button
-                onClick={() => setShowMeetings(true)}
-                title="Import who you've met with (Granola export)"
-                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
-              >
-                <UserCheck size={15} /> Meetings
-              </button>
-              <button
-                onClick={() => crmInput.current?.click()}
-                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
-              >
-                <FileUp size={15} /> CRM CSV
-              </button>
-              <input
-                ref={crmInput}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(event) => void importCrmCsv(event)}
+            />
+            <RailButton
+              icon={<UserCheck size={16} />}
+              label="Meetings — import who you've met"
+              onClick={() => setShowMeetings(true)}
+            />
+            <RailSeparator />
+            <RailButton
+              icon={<Undo2 size={16} />}
+              label="Undo (⌘Z)"
+              onClick={undo}
+              disabled={past.length === 0}
+            />
+            <RailButton
+              icon={<Redo2 size={16} />}
+              label="Redo (⇧⌘Z)"
+              onClick={redo}
+              disabled={future.length === 0}
+            />
+            <RailButton
+              icon={<UserPlus size={16} />}
+              label="Add person"
+              onClick={() => addPerson()}
+            />
+            <RailButton
+              icon={<LayoutGrid size={16} />}
+              label="Arrange by department"
+              onClick={() => autoLayout('department')}
+            />
+            <RailButton
+              icon={<FileUp size={16} />}
+              label="Import CRM CSV"
+              onClick={() => crmInput.current?.click()}
+            />
+            <input
+              ref={crmInput}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => void importCrmCsv(event)}
+            />
+            <RailButton
+              icon={<History size={16} />}
+              label="History"
+              onClick={openHistory}
+            />
+            <RailButton
+              icon={<BellRing size={16} />}
+              label="Changes"
+              onClick={() => setShowChanges(true)}
+            />
+            {(meta?.initiatives?.length ?? 0) > 0 && (
+              <RailButton
+                icon={<Lightbulb size={16} />}
+                label="Initiatives"
+                onClick={() => setShowInitiatives(true)}
               />
-              <button
-                onClick={openHistory}
-                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
-              >
-                <History size={15} /> History
-              </button>
-              <button
-                onClick={() => setShowChanges(true)}
-                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
-              >
-                <BellRing size={15} /> Changes
-              </button>
-              {(meta?.initiatives?.length ?? 0) > 0 && (
-                <button
-                  onClick={() => setShowInitiatives(true)}
-                  className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-[#c9f04b] px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-[#d5f66c] sm:min-h-0"
-                >
-                  <Lightbulb size={15} /> Initiatives
-                </button>
-              )}
-              </>
             )}
+          </>
+        )}
+        <RailSeparator />
+        <RailButton
+          icon={<Download size={16} />}
+          label="Export PNG"
+          onClick={() => void exportPng()}
+        />
+        <RailButton
+          icon={<MessageSquare size={16} />}
+          label="Send feedback"
+          onClick={() => setShowFeedback(true)}
+        />
+        <div className="flex-1" />
+        {!readOnly && (
+          <RailButton
+            icon={<Share2 size={16} />}
+            label="Share"
+            accent
+            onClick={() => setShowShare(true)}
+          />
+        )}
+      </nav>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-2 backdrop-blur sm:gap-3 sm:px-4">
+          <input
+            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-slate-900 outline-none hover:border-slate-300 focus:border-[#5b4cf0] sm:w-56 sm:flex-none"
+            value={mapName}
+            onChange={(e) => setMapName(e.target.value)}
+            onBlur={saveName}
+            disabled={readOnly}
+          />
+          <span className="hidden rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-500 sm:inline">
+            {domain}
+          </span>
+          {meta?.provider && (
+            <span className="hidden rounded-full bg-[#c9f04b] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-950 md:inline">
+              {meta.tier} · {meta.provider}
+            </span>
+          )}
+          {meta?.researchedAt && (
             <button
-              onClick={() => void exportPng()}
-              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
+              onClick={() => {
+                if (readOnly) return;
+                setDeepResearchFocus('');
+                setShowDeepResearch(true);
+              }}
+              disabled={readOnly}
+              title={
+                meta.nextRefreshAt
+                  ? `Next research check ${new Date(meta.nextRefreshAt).toLocaleDateString()}`
+                  : 'Refresh research'
+              }
+              className={`hidden rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide md:inline ${
+                researchDue
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-slate-100 text-slate-500'
+              }`}
             >
-              <Download size={15} /> PNG
+              {researchDue ? 'Refresh due' : 'Research current'}
             </button>
-            <button
-              onClick={() => setShowFeedback(true)}
-              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.06] px-3 py-1.5 text-sm text-slate-200 hover:bg-white/10 sm:min-h-0"
-            >
-              <MessageSquare size={15} /> Feedback
-            </button>
+          )}
+          <div className="hidden flex-1 sm:block" />
+          <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
+            {saveState === 'saving'
+              ? 'Saving…'
+              : saveState === 'dirty'
+                ? 'Unsaved changes'
+                : 'Saved'}
+          </span>
+          <div className="flex -space-x-1">
+            {presence.slice(0, 4).map((person) => (
+              <span
+                key={person.id}
+                title={`${person.name} is viewing`}
+                className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#5b4cf0] text-[10px] font-semibold text-white"
+              >
+                {person.name
+                  .split(' ')
+                  .map((part) => part[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </span>
+            ))}
           </div>
-        </div>
-      </header>
+        </header>
 
       <div className="relative flex-1 bg-[#f6f7f2]">
         {viewMode === 'roster' ? (
@@ -2498,6 +2463,7 @@ function MapInner() {
             />
           )}
         </AnimatePresence>
+      </div>
       </div>
 
       {showShare && mapId && (

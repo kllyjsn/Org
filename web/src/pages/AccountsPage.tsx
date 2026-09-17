@@ -8,6 +8,7 @@ import {
   Building2,
   Clock3,
   Inbox,
+  LayoutDashboard,
   Loader2,
   LogOut,
   MessageSquare,
@@ -27,7 +28,7 @@ import FeedbackInboxModal from '../components/FeedbackInboxModal';
 import FeedbackModal from '../components/FeedbackModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
 import SellerProfileModal from '../components/SellerProfileModal';
-import { Wordmark } from '../components/Wordmark';
+import RailButton, { RailSeparator } from '../components/RailButton';
 
 function MembersModal({
   workspaceId,
@@ -256,14 +257,99 @@ export default function AccountsPage() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-[#f6f7f2]">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-3 backdrop-blur-xl sm:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
-          <Wordmark size="md" />
+    <div className="flex h-full bg-[#f6f7f2]">
+      <nav
+        aria-label="Workspace tools"
+        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-14"
+      >
+        <div
+          className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[.06]"
+          title="TopDown"
+        >
+          <svg width={22} height={22} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <path
+              d="M10 26V6m0 0L4.5 11.5M10 6l5.5 5.5"
+              stroke="#8c82ff"
+              strokeWidth={3.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M22 6v20m0 0 5.5-5.5M22 26l-5.5-5.5"
+              stroke="#c9f04b"
+              strokeWidth={3.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <RailSeparator />
+        <RailButton
+          icon={<LayoutDashboard size={16} />}
+          label="Account maps"
+          active
+        />
+        <RailButton
+          icon={<Plus size={16} />}
+          label="New workspace"
+          onClick={() => setCreatingWorkspace(true)}
+        />
+        {workspaceId && (
+          <>
+            <RailSeparator />
+            <RailButton
+              icon={<Sparkles size={16} />}
+              label="Your company — seller profile"
+              onClick={() => setShowSellerProfile(true)}
+            />
+            <RailButton
+              icon={<BarChart3 size={16} />}
+              label="Value dashboard"
+              onClick={() => setShowValue(true)}
+            />
+            <RailButton
+              icon={<Users size={16} />}
+              label="Workspace members"
+              onClick={() => setShowMembers(true)}
+            />
+          </>
+        )}
+        <RailSeparator />
+        <RailButton
+          icon={<MessageSquare size={16} />}
+          label="Send feedback"
+          onClick={() => setShowFeedback(true)}
+        />
+        {user?.isAdmin && (
+          <RailButton
+            icon={<Inbox size={16} />}
+            label="Feedback inbox"
+            onClick={() => setShowFeedbackInbox(true)}
+          />
+        )}
+        <div className="flex-1" />
+        {workspace?.plan === 'free' && (
+          <RailButton
+            icon={<Zap size={16} />}
+            label="Upgrade · $10/mo"
+            accent
+            onClick={() => setShowPricing(true)}
+          />
+        )}
+        <RailButton
+          icon={<LogOut size={16} />}
+          label="Sign out"
+          onClick={() => void logout()}
+        />
+      </nav>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-6">
           <select
             className="min-w-0 max-w-48 flex-1 truncate rounded-lg border-0 bg-slate-100 px-2.5 py-1.5 text-sm font-medium sm:flex-none"
             value={workspaceId ?? ''}
             onChange={(e) => selectWorkspace(e.target.value)}
+            aria-label="Select workspace"
           >
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
@@ -271,7 +357,7 @@ export default function AccountsPage() {
               </option>
             ))}
           </select>
-          {creatingWorkspace ? (
+          {creatingWorkspace && (
             <form onSubmit={createWorkspace} className="flex gap-2">
               <input
                 autoFocus
@@ -287,73 +373,10 @@ export default function AccountsPage() {
                 Create
               </button>
             </form>
-          ) : (
-            <button
-              onClick={() => setCreatingWorkspace(true)}
-              className="hidden text-sm text-slate-500 hover:text-slate-700 sm:block"
-            >
-              + Workspace
-            </button>
           )}
-        </div>
-        <div className="flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto sm:flex-nowrap sm:gap-3">
-          {workspaceId && (
-            <button
-              onClick={() => setShowSellerProfile(true)}
-              className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
-            >
-              <Sparkles size={15} /> Your company
-            </button>
-          )}
-          {workspaceId && (
-            <button
-              onClick={() => setShowValue(true)}
-              className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
-            >
-              <BarChart3 size={15} /> Value
-            </button>
-          )}
-          {workspaceId && (
-            <button
-              onClick={() => setShowMembers(true)}
-              className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
-            >
-              <Users size={15} /> Members
-            </button>
-          )}
-          {workspace?.plan === 'free' && (
-            <button
-              onClick={() => setShowPricing(true)}
-              className="min-h-11 rounded-lg bg-[#eeecff] px-3 text-sm font-semibold text-[#5b4cf0] hover:bg-[#e3dfff] sm:min-h-0 sm:py-1.5"
-            >
-              Upgrade <span className="hidden sm:inline">· $10/mo</span>
-            </button>
-          )}
-          <button
-            onClick={() => setShowFeedback(true)}
-            className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
-          >
-            <MessageSquare size={15} /> Feedback
-          </button>
-          {user?.isAdmin && (
-            <button
-              onClick={() => setShowFeedbackInbox(true)}
-              className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:min-h-0 sm:px-3 sm:py-1.5"
-            >
-              <Inbox size={15} /> Inbox
-            </button>
-          )}
+          <div className="flex-1" />
           <span className="hidden text-sm text-slate-500 lg:inline">{user?.name}</span>
-          <button
-            onClick={() => void logout()}
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 sm:min-h-0 sm:min-w-0 sm:p-2"
-            title="Sign out"
-            aria-label="Sign out"
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
-      </header>
+        </header>
 
       <main className="flex-1 overflow-auto px-3 py-6 sm:px-6 sm:py-10">
         <div className="mx-auto max-w-7xl">
@@ -562,6 +585,7 @@ export default function AccountsPage() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }
