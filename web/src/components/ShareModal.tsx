@@ -13,6 +13,8 @@ export default function ShareModal({
   const [links, setLinks] = useState<ShareLink[]>([]);
   const [expiry, setExpiry] = useState<string>('never');
   const [copied, setCopied] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   const refresh = useCallback(
     () => api.listShares(mapId).then((r) => setLinks(r.links)),
@@ -24,19 +26,41 @@ export default function ShareModal({
 
   const create = async () => {
     const days = expiry === 'never' ? undefined : Number(expiry);
-    await api.createShare(mapId, days);
-    void refresh();
+    setBusy(true);
+    setError('');
+    try {
+      await api.createShare(mapId, days);
+      void refresh();
+    } catch {
+      setError('Could not create the link — try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const revoke = async (token: string) => {
-    await api.deleteShare(mapId, token);
-    void refresh();
+    if (!window.confirm('Revoke this share link? Anyone holding it loses access.')) {
+      return;
+    }
+    setError('');
+    try {
+      await api.deleteShare(mapId, token);
+      void refresh();
+    } catch {
+      setError('Could not revoke the link — try again.');
+    }
   };
 
   const copy = async (token: string) => {
-    await navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
-    setCopied(token);
-    window.setTimeout(() => setCopied(null), 1500);
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/s/${token}`
+      );
+      setCopied(token);
+      window.setTimeout(() => setCopied(null), 1500);
+    } catch {
+      setError('Copy failed — select the link text manually.');
+    }
   };
 
   return (
@@ -47,6 +71,7 @@ export default function ShareModal({
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600"
+            aria-label="Close"
           >
             ✕
           </button>
@@ -68,11 +93,13 @@ export default function ShareModal({
           </select>
           <button
             onClick={() => void create()}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            disabled={busy}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
           >
-            <Link2 size={15} /> Create link
+            <Link2 size={15} /> {busy ? 'Creating…' : 'Create link'}
           </button>
         </div>
+        {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
 
         <ul className="mt-4 space-y-2">
           {links.map((l) => (

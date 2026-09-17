@@ -5,9 +5,9 @@ import ReactFlow, {
   Controls,
   getNodesBounds,
   getViewportForBounds,
-  MarkerType,
   MiniMap,
   ReactFlowProvider,
+  useReactFlow,
 } from 'reactflow';
 import type { Edge, Node } from 'reactflow';
 import { toPng } from 'html-to-image';
@@ -15,6 +15,7 @@ import { AnimatePresence } from 'framer-motion';
 import { Download, Loader2 } from 'lucide-react';
 import { Wordmark } from '../components/Wordmark';
 import { api, ApiError } from '../api';
+import { influenceEdge, reportsEdge } from '../lib/flowEdges';
 import PersonNode from '../components/PersonNode';
 import type { PersonNodeData } from '../components/PersonNode';
 import LaneHeaderNode from '../components/LaneHeaderNode';
@@ -44,6 +45,7 @@ function ShareInner() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const isMobile = useIsMobile();
+  const rf = useReactFlow();
   const openingFitOptions = isMobile
     ? { padding: 0.1, minZoom: 0.62, maxZoom: 0.9 }
     : { padding: 0.2, minZoom: 0.45 };
@@ -55,47 +57,49 @@ function ShareInner() {
       .then(({ map }) => {
         setShared(map);
         setNodes(
-          map.state.people.map((p) => ({
+          (map.state.people ?? []).map((p) => ({
             id: p.id,
             type: 'person',
             position: { x: p.x, y: p.y },
-            data: { person: p },
+            data: { person: p, readOnly: true },
           }))
         );
         setEdges(
-          map.state.edges.map((e) =>
+          (map.state.edges ?? []).map((e) =>
             e.kind === 'reports'
-              ? {
-                  id: e.id,
-                  source: e.from,
-                  target: e.to,
-                  type: 'smoothstep',
-                  data: { kind: 'reports' },
-                  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' },
-                  style: { stroke: '#94a3b8', strokeWidth: 1.5 },
-                }
-              : {
-                  id: e.id,
-                  source: e.from,
-                  target: e.to,
-                  data: { kind: 'influence', label: e.label },
-                  label: e.label ?? undefined,
-                  labelStyle: { fontSize: 10, fill: '#7c3aed' },
-                  style: {
-                    stroke: '#8b5cf6',
-                    strokeWidth: 1.5,
-                    strokeDasharray: '6 4',
-                  },
-                }
+              ? reportsEdge(e.from, e.to, e.id, e.inferred)
+              : influenceEdge(e.from, e.to, e.label, e.id)
           )
         );
+        // Tall maps center on nothing useful when fit to bounds — anchor
+        // the top of the chart at a readable zoom instead.
+        const people = map.state.people ?? [];
+        window.setTimeout(() => {
+          if (people.length === 0) return;
+          const tallEnough =
+            Math.max(...people.map((p) => p.y)) -
+              Math.min(...people.map((p) => p.y)) >
+            window.innerHeight / 0.8;
+          if (!tallEnough) return;
+          const minX = Math.min(...people.map((p) => p.x));
+          const minY = Math.min(...people.map((p) => p.y));
+          const zoom = isMobile ? 0.62 : 0.8;
+          void rf.setViewport(
+            {
+              x: 32 - minX * zoom,
+              y: (isMobile ? 170 : 200) - minY * zoom,
+              zoom,
+            },
+            { duration: 450 }
+          );
+        }, 50);
       })
       .catch((err) =>
         setError(
           err instanceof ApiError ? err.message : 'could not load shared map'
         )
       );
-  }, [token]);
+  }, [token, isMobile, rf]);
 
   const selected =
     nodes.find((n) => n.id === selectedId)?.data.person ?? null;
@@ -322,7 +326,7 @@ function ShareInner() {
                 kind: (e.data?.kind ?? 'reports') as 'reports' | 'influence',
                 label: e.data?.label ?? null,
               }))}
-              initiatives={shared.state.meta.initiatives}
+              initiatives={shared.state.meta?.initiatives ?? []}
               readOnly
               onChange={() => {}}
               onSetManager={() => {}}

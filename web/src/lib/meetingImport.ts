@@ -23,7 +23,7 @@ const NOT_NAME_WORDS = new Set([
   'everybody', 'people', 'person', 'who', 'whom', 'the', 'and', 'or', 'of',
   'in', 'on', 'at', 'for', 'from', 'list', 'lists', 'below', 'above',
   'attendees', 'participant', 'participants', 'names', 'name', 'mapped',
-  'unmatched', 'unmatched', 'no', 'unknown', 'n/a', 'none', 'here',
+  'unmatched', 'no', 'unknown', 'n/a', 'none', 'here',
 ]);
 
 function tokens(value: string): string[] {

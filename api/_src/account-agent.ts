@@ -56,7 +56,7 @@ export function buildAccountContext(state: MapState) {
     return id;
   };
 
-  const people = state.people.slice(0, 120).map((person) => ({
+  const people = (state.people ?? []).slice(0, 120).map((person) => ({
     id: person.id,
     name: person.name,
     title: person.title,
@@ -68,13 +68,13 @@ export function buildAccountContext(state: MapState) {
     confidence: person.confidence,
     researchStatus: person.researchStatus ?? null,
     notes: (person.notes ?? '').slice(0, 500),
-    reportsFrom: state.edges
+    reportsFrom: (state.edges ?? [])
       .filter((edge) => edge.to === person.id && edge.kind === 'reports')
       .map((edge) => ({
         personId: edge.from,
         inferred: Boolean(edge.inferred),
       })),
-    influences: state.edges
+    influences: (state.edges ?? [])
       .filter((edge) => edge.from === person.id && edge.kind === 'influence')
       .map((edge) => ({
         personId: edge.to,
@@ -85,7 +85,7 @@ export function buildAccountContext(state: MapState) {
     ),
   }));
 
-  const initiatives = (state.meta.initiatives ?? []).slice(0, 20).map((initiative) => ({
+  const initiatives = (state.meta?.initiatives ?? []).slice(0, 20).map((initiative) => ({
     name: initiative.name,
     summary: initiative.summary,
     category: initiative.category,
@@ -182,7 +182,7 @@ export async function answerAccountQuestion(
 ): Promise<AccountAgentAnswer> {
   const { context, citations } = buildAccountContext(state);
   const allowedCitationIds = new Set(citations.map((citation) => citation.id));
-  const personIds = new Set(state.people.map((person) => person.id));
+  const personIds = new Set((state.people ?? []).map((person) => person.id));
   const conversation = history
     .slice(-10)
     .map((message) => ({

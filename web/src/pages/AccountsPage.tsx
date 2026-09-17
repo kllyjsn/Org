@@ -20,6 +20,7 @@ import {
   Workflow,
   Zap,
 } from 'lucide-react';
+import { Wordmark } from '../components/Wordmark';
 import { api, ApiError } from '../api';
 import { useSession } from '../store';
 import type { MapListItem } from '../types';
@@ -68,10 +69,8 @@ function MembersModal({
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Workspace members</h2>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600"
-          >
+          <button            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600" aria-label="Close">
             ✕
           </button>
         </div>
@@ -147,10 +146,8 @@ function PricingModal({
               Unlimited account maps
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600"
-          >
+          <button            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600" aria-label="Close">
             ✕
           </button>
         </div>
@@ -229,6 +226,38 @@ export default function AccountsPage() {
     }
   }, [workspaceId, workspace]);
 
+  // Escape closes the topmost open modal.
+  useEffect(() => {
+    const closers: [boolean, () => void][] = [
+      [showFeedback, () => setShowFeedback(false)],
+      [showFeedbackInbox, () => setShowFeedbackInbox(false)],
+      [showSellerProfile, () => setShowSellerProfile(false)],
+      [showValue, () => setShowValue(false)],
+      [showPricing, () => setShowPricing(false)],
+      [showMembers, () => setShowMembers(false)],
+      [showCreate, () => setShowCreate(false)],
+    ];
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      for (const [open, close] of closers) {
+        if (open) {
+          close();
+          return;
+        }
+      }
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [
+    showFeedback,
+    showFeedbackInbox,
+    showSellerProfile,
+    showValue,
+    showPricing,
+    showMembers,
+    showCreate,
+  ]);
+
   const createWorkspace = async (e: FormEvent) => {
     e.preventDefault();
     if (!newWorkspaceName.trim()) return;
@@ -263,27 +292,14 @@ export default function AccountsPage() {
         className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-56 sm:items-stretch sm:px-3"
       >
         <div
-          className="mb-1 flex h-10 w-10 items-center justify-center gap-2.5 rounded-xl bg-white/[.06] sm:w-full sm:justify-start sm:px-3"
+          className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[.06] sm:w-full sm:justify-start sm:px-3"
           title="TopDown"
         >
-          <svg width={22} height={22} viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <path
-              d="M10 26V6m0 0L4.5 11.5M10 6l5.5 5.5"
-              stroke="#8c82ff"
-              strokeWidth={3.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M22 6v20m0 0 5.5-5.5M22 26l-5.5-5.5"
-              stroke="#c9f04b"
-              strokeWidth={3.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <span className="hidden text-sm font-semibold tracking-tight text-white sm:block">
-            TopDown
+          <span className="hidden sm:block">
+            <Wordmark size="sm" inverse />
+          </span>
+          <span className="sm:hidden">
+            <Wordmark size="sm" inverse markOnly />
           </span>
         </div>
         <RailSeparator />

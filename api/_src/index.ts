@@ -171,9 +171,11 @@ async function recordAnalytics(
 }
 
 function mapRefinementCounts(previous: MapState, next: MapState) {
-  const nextPeople = new Map(next.people.map((person) => [person.id, person]));
+  const nextPeople = new Map(
+    (next.people ?? []).map((person) => [person.id, person])
+  );
   let fieldChanges = 0;
-  for (const person of previous.people) {
+  for (const person of previous.people ?? []) {
     const updated = nextPeople.get(person.id);
     if (!updated) continue;
     for (const field of [
@@ -191,8 +193,8 @@ function mapRefinementCounts(previous: MapState, next: MapState) {
     [edge.from, edge.to, edge.kind, edge.inferred ? 'inferred' : 'sourced'].join(
       ':'
     );
-  const previousEdges = new Set(previous.edges.map(edgeKey));
-  const nextEdges = new Set(next.edges.map(edgeKey));
+  const previousEdges = new Set((previous.edges ?? []).map(edgeKey));
+  const nextEdges = new Set((next.edges ?? []).map(edgeKey));
   const relationshipChanges =
     [...previousEdges].filter((key) => !nextEdges.has(key)).length +
     [...nextEdges].filter((key) => !previousEdges.has(key)).length;
@@ -201,7 +203,21 @@ function mapRefinementCounts(previous: MapState, next: MapState) {
 
 function sanitizeState(input: unknown): MapState {
   const s = (input ?? {}) as Partial<MapState>;
-  const people = Array.isArray(s.people) ? s.people.slice(0, 500) : [];
+  // Normalize sub-fields too — stored states are read by every surface
+  // (canvas, share links, analysis) and missing person/initiative fields
+  // crash them.
+  const people = (Array.isArray(s.people) ? s.people.slice(0, 500) : []).map(
+    (person) => ({
+      ...person,
+      name: person.name ?? '',
+      title: person.title ?? '',
+      role: person.role ?? 'none',
+      notes: person.notes ?? '',
+      sources: Array.isArray(person.sources) ? person.sources : [],
+      metWith: person.metWith === true,
+      confidence: person.confidence ?? 'low',
+    })
+  ) as MapState['people'];
   const edges = Array.isArray(s.edges) ? s.edges.slice(0, 2000) : [];
   const meta = (s.meta ?? {}) as MapState['meta'];
   return {
@@ -219,9 +235,24 @@ function sanitizeState(input: unknown): MapState {
           : 'weekly',
       nextRefreshAt:
         typeof meta.nextRefreshAt === 'string' ? meta.nextRefreshAt : null,
-      initiatives: Array.isArray(meta.initiatives)
+      initiatives: (Array.isArray(meta.initiatives)
         ? meta.initiatives.slice(0, 20)
-        : [],
+        : []
+      ).map((initiative) => ({
+        ...initiative,
+        name: initiative.name ?? 'Unnamed',
+        summary: initiative.summary ?? '',
+        evidence: Array.isArray(initiative.evidence) ? initiative.evidence : [],
+        relevantPeople: Array.isArray(initiative.relevantPeople)
+          ? initiative.relevantPeople
+          : [],
+        relevantTeams: Array.isArray(initiative.relevantTeams)
+          ? initiative.relevantTeams
+          : [],
+        salesAngles: Array.isArray(initiative.salesAngles)
+          ? initiative.salesAngles
+          : [],
+      })),
     },
   };
 }
@@ -612,7 +643,7 @@ app.get('/api/maps', requireAuth, async (c) => {
       ...m,
       peopleCount: (state as MapState).people?.length ?? 0,
       initiativeCount:
-        (state as MapState).meta.initiatives?.length ?? 0,
+        (state as MapState).meta?.initiatives?.length ?? 0,
     })),
   });
 });
@@ -770,16 +801,20 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
     body?.state !== undefined
       ? mapRefinementCounts(map.state as MapState, state)
       : { fieldChanges: 0, relationshipChanges: 0 };
-  await query(
-    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
-    [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
-  );
+  // Version snapshots only on real state changes — name-only PATCHes and
+  // autosave heartbeats would otherwise drown meaningful checkpoints.
+  if (body?.state !== undefined) {
+    await query(
+      'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+      [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
+    );
+  }
   await query(
     'UPDATE maps SET name = $1, state = $2, company_name = $3, updated_at = $4 WHERE id = $5',
     [
       name,
       JSON.stringify(state),
-      state.meta.companyName ?? map.company_name,
+      state.meta?.companyName ?? map.company_name,
       now(),
       map.id,
     ]
@@ -1007,6 +1042,7 @@ app.post('/api/maps/:id/comments', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot comment', 403);
   const body = await c.req.json().catch(() => null);
   const text = typeof body?.body === 'string' ? body.body.trim() : '';
   if (!text) return bad(c, 'comment body required');

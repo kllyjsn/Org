@@ -12,7 +12,7 @@ export interface PersonNodeData {
 
 function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
   const p = data.person;
-  const role = ROLE_META[p.role];
+  const role = ROLE_META[p.role] ?? ROLE_META.none;
   const unverified = p.confidence === 'low';
   const needsReview =
     p.researchStatus === 'conflicting' ||
@@ -97,9 +97,9 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
               unverified
             </span>
           )}
-          {p.sources.length > 0 && !needsReview && !unverified && (
+          {(p.sources ?? []).length > 0 && !needsReview && !unverified && (
             <span className="ml-auto flex items-center gap-1 text-[9px] font-medium text-slate-400">
-              <BookOpen size={10} /> {p.sources.length}
+              <BookOpen size={10} /> {(p.sources ?? []).length}
             </span>
           )}
         </div>

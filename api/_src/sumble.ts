@@ -193,6 +193,15 @@ export function sumblePeopleToRaw(
  * Build person-name → team-name membership from teams' related_people. Keys are
  * lowercase trimmed names; callers canonicalize the same way.
  */
+/** "breadcrumbs" may be strings or {name} objects; leaf-most entry wins. */
+function breadcrumbLeaf(value: unknown): string | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const names = value
+    .map(textOf)
+    .filter((entry): entry is string => !!entry);
+  return names.at(-1) ?? null;
+}
+
 export function sumbleTeamMemberships(teams: unknown[]): Map<string, string> {
   const memberships = new Map<string, string>();
   for (const row of teams) {
@@ -203,7 +212,9 @@ export function sumbleTeamMemberships(teams: unknown[]): Map<string, string> {
         ? rowRecord.attributes
         : rowRecord
     ) as Record<string, unknown>;
-    const teamName = textOf(team.name ?? rowRecord.name);
+    const teamName =
+      textOf(team.name ?? rowRecord.name) ??
+      breadcrumbLeaf(team.breadcrumbs ?? rowRecord.breadcrumbs);
     if (!teamName) continue;
     const relatedSource = team.related_people ?? rowRecord.related_people;
     const related = Array.isArray(relatedSource) ? relatedSource : [];

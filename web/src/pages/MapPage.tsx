@@ -6,7 +6,6 @@ import ReactFlow, {
   Controls,
   getNodesBounds,
   getViewportForBounds,
-  MarkerType,
   MiniMap,
   ReactFlowProvider,
   useEdgesState,
@@ -14,15 +13,9 @@ import ReactFlow, {
   useReactFlow,
   useViewport,
 } from 'reactflow';
-import type { Connection, Edge, EdgeChange, Node, NodeChange } from 'reactflow';
-
-type EdgeData = {
-  kind: 'reports' | 'influence';
-  label?: string | null;
-  inferred?: boolean;
-  hidden?: boolean;
-};
-type FlowEdge = Edge<EdgeData>;
+import type { Connection, EdgeChange, Node, NodeChange } from 'reactflow';
+import { influenceEdge, reportsEdge } from '../lib/flowEdges';
+import type { EdgeData, FlowEdge } from '../lib/flowEdges';
 
 function edgeToMap(e: FlowEdge): MapEdge {
   return {
@@ -123,52 +116,18 @@ import type {
 
 const nodeTypes = { person: PersonNode, lane: LaneHeaderNode, more: MoreNode };
 
-function reportsEdge(
-  from: string,
-  to: string,
-  id?: string,
-  inferred?: boolean
-): FlowEdge {
-  const stroke = inferred ? '#c7d2fe' : '#94a3b8';
-  return {
-    id: id ?? crypto.randomUUID(),
-    source: from,
-    target: to,
-    type: 'smoothstep',
-    data: { kind: 'reports', inferred },
-    markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
-    style: {
-      stroke,
-      strokeWidth: 1.5,
-      ...(inferred ? { strokeDasharray: '5 4' } : {}),
-    },
-  };
-}
-
-function influenceEdge(from: string, to: string, label: string | null, id?: string): FlowEdge {
-  return {
-    id: id ?? crypto.randomUUID(),
-    source: from,
-    target: to,
-    data: { kind: 'influence', label },
-    label: label ?? undefined,
-    labelStyle: { fontSize: 10, fill: '#7c3aed' },
-    style: { stroke: '#8b5cf6', strokeWidth: 1.5, strokeDasharray: '6 4' },
-  };
-}
-
 function toFlow(
   state: MapState,
   readOnly = false
 ): { nodes: Node<PersonNodeData>[]; edges: FlowEdge[] } {
-  const nodes: Node<PersonNodeData>[] = state.people.map((p) => ({
+  const nodes: Node<PersonNodeData>[] = (state.people ?? []).map((p) => ({
     id: p.id,
     type: 'person',
     position: { x: p.x, y: p.y },
     data: { person: p, readOnly },
     style: { width: p.width ?? 250, height: p.height },
   }));
-  const edges: FlowEdge[] = state.edges.map((e) =>
+  const edges: FlowEdge[] = (state.edges ?? []).map((e) =>
     e.kind === 'reports'
       ? reportsEdge(e.from, e.to, e.id, e.inferred)
       : influenceEdge(e.from, e.to, e.label, e.id)
@@ -324,7 +283,7 @@ function MapInner() {
         // Default view for accounts with meeting coverage: met/unmet lanes
         // segmented by team. Pure arrangement — nothing marked dirty.
         let anchorPeople = map.state.people;
-        if (map.state.people.some((person) => person.metWith)) {
+        if ((map.state.people ?? []).some((person) => person.metWith)) {
           setLaneGrouping('met');
           anchorPeople = applyLanes(
             map.state.people,
@@ -356,7 +315,14 @@ function MapInner() {
           })
           .catch(() => undefined);
         window.setTimeout(() => {
-          if (isMobile) anchorTopLeft(anchorPeople);
+          // Tall maps center on nothing useful when fit to bounds — anchor
+          // the top of the chart at a readable zoom instead.
+          const tallEnough =
+            anchorPeople.length > 0 &&
+            Math.max(...anchorPeople.map((p) => p.y)) -
+              Math.min(...anchorPeople.map((p) => p.y)) >
+              window.innerHeight / 0.8;
+          if (isMobile || tallEnough) anchorTopLeft(anchorPeople);
           else rf.fitView(openingFitOptions);
         }, 50);
       })
@@ -1366,6 +1332,44 @@ function MapInner() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [undo, redo, copySelection, pasteSelection]);
 
+  // Escape closes the topmost open surface — every modal and the person panel.
+  useEffect(() => {
+    const closers: [boolean, () => void][] = [
+      [showFeedback, () => setShowFeedback(false)],
+      [showDeepResearch, () => setShowDeepResearch(false)],
+      [showMeetings, () => setShowMeetings(false)],
+      [showShare, () => setShowShare(false)],
+      [showHistory, () => setShowHistory(false)],
+      [showInitiatives, () => setShowInitiatives(false)],
+      [showStrategy, () => setShowStrategy(false)],
+      [showBriefing, () => setShowBriefing(false)],
+      [showChanges, () => setShowChanges(false)],
+      [selectedId !== null, () => setSelectedId(null)],
+    ];
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      for (const [open, close] of closers) {
+        if (open) {
+          close();
+          return;
+        }
+      }
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [
+    showFeedback,
+    showDeepResearch,
+    showMeetings,
+    showShare,
+    showHistory,
+    showInitiatives,
+    showStrategy,
+    showBriefing,
+    showChanges,
+    selectedId,
+  ]);
+
   const runPaletteAction = useCallback(
     (action: PaletteAction) => {
       if (action === 'layout') autoLayout();
@@ -1733,24 +1737,28 @@ function MapInner() {
     // lane headers, +N tiles, and the active grouping — so the PNG is 1:1
     // with the canvas instead of the raw saved positions.
     if (!el || displayNodes.length === 0) return;
-    const bounds = getNodesBounds(displayNodes);
-    const W = 1920;
-    const H = Math.max(1080, Math.ceil((bounds.height * 1920) / Math.max(bounds.width, 1)) + 200);
-    const vp = getViewportForBounds(bounds, W, H, 0.4, 1.5, 0.08);
-    const url = await toPng(el, {
-      backgroundColor: '#f8fafc',
-      width: W,
-      height: H,
-      style: {
-        width: `${W}px`,
-        height: `${H}px`,
-        transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`,
-      },
-    });
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${mapName || 'org-map'}.png`;
-    a.click();
+    try {
+      const bounds = getNodesBounds(displayNodes);
+      const W = 1920;
+      const H = Math.max(1080, Math.ceil((bounds.height * 1920) / Math.max(bounds.width, 1)) + 200);
+      const vp = getViewportForBounds(bounds, W, H, 0.4, 1.5, 0.08);
+      const url = await toPng(el, {
+        backgroundColor: '#f8fafc',
+        width: W,
+        height: H,
+        style: {
+          width: `${W}px`,
+          height: `${H}px`,
+          transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`,
+        },
+      });
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${mapName || 'org-map'}.png`;
+      a.click();
+    } catch {
+      setImportNotice('PNG export failed — try again.');
+    }
   }, [displayNodes, mapName]);
 
   const saveName = useCallback(() => {
@@ -1874,7 +1882,7 @@ function MapInner() {
                   ...person,
                   ...enrichment,
                   notes: [person.notes, notes].filter(Boolean).join('\n'),
-                  sources: Array.from(new Set([...person.sources, 'CRM CSV'])),
+                  sources: Array.from(new Set([...(person.sources ?? []), 'CRM CSV'])),
                 },
               },
             };
@@ -1974,7 +1982,7 @@ function MapInner() {
               person: {
                 ...person,
                 title:
-                  !person.title || person.sources.length === 0
+                  !person.title || (person.sources ?? []).length === 0
                     ? researched.title
                     : person.title,
                 department: person.department ?? researched.department,
@@ -1985,8 +1993,8 @@ function MapInner() {
                 confidence: researched.confidence,
                 sources: Array.from(
                   new Set([
-                    ...person.sources,
-                    ...researched.sources,
+                    ...(person.sources ?? []),
+                    ...(researched.sources ?? []),
                     ...(researched.source ? [researched.source] : []),
                   ])
                 ).filter((url) => !dead.has(url)),
@@ -2026,8 +2034,8 @@ function MapInner() {
           role: 'none',
           confidence: researched.confidence,
           sources:
-            researched.sources.length > 0
-              ? researched.sources
+            (researched.sources ?? []).length > 0
+              ? (researched.sources ?? [])
               : researched.source
                 ? [researched.source]
                 : [],
@@ -2110,10 +2118,10 @@ function MapInner() {
         const sourceDetails = (person.sourceDetails ?? []).filter(
           (s) => !dead.has(s.url)
         );
-        const sources = person.sources.filter((url) => !dead.has(url));
+        const sources = (person.sources ?? []).filter((url) => !dead.has(url));
         const removed =
           sourceDetails.length !== (person.sourceDetails?.length ?? 0) ||
-          sources.length !== person.sources.length;
+          sources.length !== (person.sources ?? []).length;
         const needsClamp =
           sources.length === 0 &&
           (person.researchStatus === 'verified' ||
@@ -2792,31 +2800,31 @@ function MapInner() {
                     </span>
                   </div>
                   <p className="text-sm text-slate-600">{initiative.summary}</p>
-                  {(initiative.relevantTeams.length > 0 ||
-                    initiative.relevantPeople.length > 0) && (
+                  {((initiative.relevantTeams ?? []).length > 0 ||
+                    (initiative.relevantPeople ?? []).length > 0) && (
                     <p className="mt-2 text-xs text-slate-500">
                       <b>Relevant:</b>{' '}
                       {[
-                        ...initiative.relevantTeams,
-                        ...initiative.relevantPeople,
+                        ...(initiative.relevantTeams ?? []),
+                        ...(initiative.relevantPeople ?? []),
                       ].join(' · ')}
                     </p>
                   )}
-                  {initiative.salesAngles.length > 0 && (
+                  {(initiative.salesAngles ?? []).length > 0 && (
                     <div className="mt-3 rounded-xl bg-slate-950 p-3 text-white">
                       <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[.14em] text-[#c9f04b]">
                         Conversation opening
                       </div>
                       <ul className="space-y-1.5 text-xs leading-5 text-slate-200">
-                        {initiative.salesAngles.map((angle) => (
+                        {(initiative.salesAngles ?? []).map((angle) => (
                           <li key={angle}>• {angle}</li>
                         ))}
                       </ul>
                     </div>
                   )}
-                  {initiative.evidence.length > 0 && (
+                  {(initiative.evidence ?? []).length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                      {initiative.evidence.map((source) =>
+                      {(initiative.evidence ?? []).map((source) =>
                         source.startsWith('http') ? (
                           <a
                             key={source}

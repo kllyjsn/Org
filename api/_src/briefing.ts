@@ -99,9 +99,9 @@ export function buildAccountBriefing(
   changes: MapChangeAlert[],
   baselineAt: string | null
 ): AccountBriefing {
-  const initiatives = state.meta.initiatives ?? [];
+  const initiatives = state.meta?.initiatives ?? [];
   const actions: BriefingAction[] = [];
-  const peopleById = new Map(state.people.map((person) => [person.id, person]));
+  const peopleById = new Map((state.people ?? []).map((person) => [person.id, person]));
   const meaningfulChange = changes.find((change) =>
     [
       'initiative_added',
@@ -185,7 +185,7 @@ export function buildAccountBriefing(
     });
   }
 
-  const inferredEdges = state.edges.filter((edge) => edge.inferred).length;
+  const inferredEdges = (state.edges ?? []).filter((edge) => edge.inferred).length;
   if (inferredEdges > 0) {
     actions.push({
       id: 'review-inferred-path',
@@ -311,7 +311,7 @@ function fallbackValueCase(
   state: MapState,
   sellerProfile: SellerProfile
 ): AccountValueCase {
-  const initiatives = state.meta.initiatives ?? [];
+  const initiatives = state.meta?.initiatives ?? [];
   const evidenceFor = (initiative: StrategicInitiative) =>
     (initiative.evidence ?? []).filter((url) => /^https?:\/\//i.test(url)).slice(0, 3);
   const currentState = initiatives.slice(0, 3).map((initiative) => ({
@@ -336,12 +336,12 @@ function fallbackValueCase(
     currentState,
     businessProblems: [],
     businessImpact: [],
-    desiredOutcomes: sellerProfile.useCases.slice(0, 4).map((statement) => ({
+    desiredOutcomes: (sellerProfile.useCases ?? []).slice(0, 4).map((statement) => ({
       statement: `Validate whether ${statement} is a priority for this account.`,
       provenance: 'hypothesis',
       evidence: [],
     })),
-    requiredCapabilities: sellerProfile.products.slice(0, 4).map((statement) => ({
+    requiredCapabilities: (sellerProfile.products ?? []).slice(0, 4).map((statement) => ({
       statement,
       provenance: 'hypothesis',
       evidence: [],
@@ -397,8 +397,8 @@ export async function deepenAccountBriefing(
   const fallback = fallbackValueCase(state, sellerProfile);
   const sources = Array.from(
     new Set([
-      ...state.people.flatMap((person) => person.sources ?? []),
-      ...(state.meta.initiatives ?? []).flatMap((initiative) =>
+      ...(state.people ?? []).flatMap((person) => person.sources ?? []),
+      ...(state.meta?.initiatives ?? []).flatMap((initiative) =>
         (initiative.evidence ?? []).filter((url) => /^https?:\/\//i.test(url))
       ),
     ])
@@ -411,19 +411,19 @@ ${account} (${state.meta.domain})
 
 SELLER
 ${sellerProfile.companyName} (${sellerProfile.domain})
-Products: ${sellerProfile.products.join('; ') || 'unknown'}
-Use cases: ${sellerProfile.useCases.join('; ') || 'unknown'}
+Products: ${(sellerProfile.products ?? []).join('; ') || 'unknown'}
+Use cases: ${(sellerProfile.useCases ?? []).join('; ') || 'unknown'}
 Target customers: ${sellerProfile.targetCustomers.join('; ') || 'unknown'}
 Positioning: ${sellerProfile.positioning || sellerProfile.summary || 'unknown'}
 Proof points: ${sellerProfile.proofPoints.join('; ') || 'none supplied'}
 Competitors: ${sellerProfile.competitors.join('; ') || 'unknown'}
 
 KNOWN ACCOUNT INITIATIVES
-${JSON.stringify(state.meta.initiatives ?? [])}
+${JSON.stringify(state.meta?.initiatives ?? [])}
 
 KNOWN STAKEHOLDERS
 ${JSON.stringify(
-  state.people.slice(0, 60).map((person) => ({
+  (state.people ?? []).slice(0, 60).map((person) => ({
     id: person.id,
     name: person.name,
     title: person.title,
@@ -485,7 +485,7 @@ Return JSON only:
             const personName = cleanText(row.personName, 120);
             if (!statement || !personName) return null;
             const evidence = directUrls(row.evidence);
-            const person = state.people.find(
+            const person = (state.people ?? []).find(
               (candidate) =>
                 candidate.id === row.personId ||
                 normalized(candidate.name) === normalized(personName)

@@ -79,10 +79,8 @@ export default function ValueDashboardModal({
               source text, and private deal content never enter these metrics.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
-          >
+          <button            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700" aria-label="Close">
             <X size={16} />
           </button>
         </div>

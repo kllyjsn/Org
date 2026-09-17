@@ -53,6 +53,8 @@ export default function PersonPanel({
 }: Props) {
   const [comments, setComments] = useState<MapComment[]>([]);
   const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [commentError, setCommentError] = useState('');
   const [influenceTarget, setInfluenceTarget] = useState('');
   const [influenceLabel, setInfluenceLabel] = useState('');
 
@@ -131,11 +133,18 @@ export default function PersonPanel({
 
   const postComment = async (e: FormEvent) => {
     e.preventDefault();
-    if (!draft.trim()) return;
-    await api.addComment(mapId, draft.trim(), person.id);
-    setDraft('');
-    const r = await api.listComments(mapId);
-    setComments(r.comments.filter((cm) => cm.person_id === person.id));
+    if (!draft.trim() || posting) return;
+    setPosting(true);
+    try {
+      await api.addComment(mapId, draft.trim(), person.id);
+      setDraft('');
+      const r = await api.listComments(mapId);
+      setComments(r.comments.filter((cm) => cm.person_id === person.id));
+    } catch {
+      setCommentError('Could not post — try again.');
+    } finally {
+      setPosting(false);
+    }
   };
 
   const field =
@@ -637,11 +646,15 @@ export default function PersonPanel({
                 <li className="text-xs text-slate-400">No comments yet.</li>
               )}
             </ul>
+            {commentError && (
+              <p className="mb-2 text-xs text-rose-600">{commentError}</p>
+            )}
             <form onSubmit={postComment} className="flex gap-2">
               <input
                 className={field}
                 placeholder="Add a comment…"
                 value={draft}
+                disabled={posting}
                 onChange={(e) => setDraft(e.target.value)}
               />
               <button
@@ -658,7 +671,11 @@ export default function PersonPanel({
       {!readOnly && (
         <div className="flex justify-end border-t border-slate-100 px-3 py-2">
           <button
-            onClick={() => onDelete(person.id)}
+            onClick={() => {
+              if (window.confirm(`Remove ${person.name} from this map?`)) {
+                onDelete(person.id);
+              }
+            }}
             className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 sm:min-h-0 sm:py-2"
           >
             <Trash2 size={13} /> Remove from map

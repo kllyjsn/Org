@@ -94,13 +94,13 @@ export function compareMapStates(
   }
 
   const previousInitiatives = new Map(
-    (baseline.meta.initiatives ?? []).map((initiative) => [
+    (baseline.meta?.initiatives ?? []).map((initiative) => [
       normalized(initiative.name),
       initiative,
     ])
   );
   const currentInitiatives = new Map(
-    (current.meta.initiatives ?? []).map((initiative) => [
+    (current.meta?.initiatives ?? []).map((initiative) => [
       normalized(initiative.name),
       initiative,
     ])

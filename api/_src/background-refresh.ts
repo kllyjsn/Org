@@ -23,7 +23,7 @@ function mergedSources(existing: Person, researched: ResearchResult['people'][nu
   return {
     sources: Array.from(
       new Set([
-        ...existing.sources,
+        ...(existing.sources ?? []),
         ...researched.sources,
         ...(researched.source ? [researched.source] : []),
       ])
@@ -36,7 +36,7 @@ export function mergeBackgroundResearch(
   state: MapState,
   result: ResearchResult
 ): MapState {
-  const people = state.people.map((person) => ({ ...person }));
+  const people = (state.people ?? []).map((person) => ({ ...person }));
   const byName = new Map(
     people.map((person, index) => [canonicalPersonName(person.name), index])
   );
@@ -50,7 +50,7 @@ export function mergeBackgroundResearch(
       const existing = people[index];
       const evidence = mergedSources(existing, researched);
       const titleChanged =
-        existing.title.trim().toLowerCase() !== researched.title.trim().toLowerCase();
+        (existing.title ?? '').trim().toLowerCase() !== (researched.title ?? '').trim().toLowerCase();
       people[index] = {
         ...existing,
         // Background research may only replace a user's title when direct
@@ -121,7 +121,7 @@ export function mergeBackgroundResearch(
 
   return {
     people,
-    edges: state.edges,
+    edges: state.edges ?? [],
     meta: {
       ...state.meta,
       companyName: result.companyName ?? state.meta.companyName,
@@ -131,7 +131,7 @@ export function mergeBackgroundResearch(
       initiatives:
         result.initiatives.length > 0
           ? result.initiatives
-          : (state.meta.initiatives ?? []),
+          : (state.meta?.initiatives ?? []),
     },
   };
 }

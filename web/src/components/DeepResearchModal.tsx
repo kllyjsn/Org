@@ -104,10 +104,8 @@ export default function DeepResearchModal({
               into this map without rebuilding it.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
-          >
+          <button            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700" aria-label="Close">
             <X size={16} />
           </button>
         </div>
@@ -204,8 +202,8 @@ export default function DeepResearchModal({
               </span>
             </div>
             <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
-              {result.people.map((person) => (
-                <div key={person.name} className="flex items-start gap-3 px-4 py-3">
+              {result.people.map((person, index) => (
+                <div key={`${person.name}-${index}`} className="flex items-start gap-3 px-4 py-3">
                   <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eeecff] text-[#5b4cf0]">
                     <UsersRound size={15} />
                   </span>

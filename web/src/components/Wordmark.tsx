@@ -7,9 +7,12 @@ const SIZES = {
 export function Wordmark({
   size = 'md',
   inverse = false,
+  markOnly = false,
 }: {
   size?: keyof typeof SIZES;
   inverse?: boolean;
+  /** Renders the arrow mark alone — used in narrow icon rails. */
+  markOnly?: boolean;
 }) {
   const s = SIZES[size];
   return (
@@ -38,13 +41,15 @@ export function Wordmark({
           className={inverse ? 'text-[#c9f04b]' : 'text-slate-950'}
         />
       </svg>
-      <span
-        className={`${s.text} font-bold tracking-[-0.04em] ${
-          inverse ? 'text-white' : 'text-slate-950'
-        }`}
-      >
-        TopDown
-      </span>
+      {!markOnly && (
+        <span
+          className={`${s.text} font-bold tracking-[-0.04em] ${
+            inverse ? 'text-white' : 'text-slate-950'
+          }`}
+        >
+          TopDown
+        </span>
+      )}
     </span>
   );
 }

@@ -112,7 +112,7 @@ function personSearchText(person: Person) {
     person.department,
     person.team,
     person.productLine,
-    person.role.replaceAll('_', ' '),
+    (person.role ?? '').replaceAll('_', ' '),
   ]
     .filter(Boolean)
     .join(' ')

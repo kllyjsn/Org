@@ -168,10 +168,8 @@ export default function CreateMapModal({
             <Sparkles size={14} />
             New intelligence map
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
-          >
+          <button            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700" aria-label="Close">
             ✕
           </button>
         </div>
@@ -266,8 +264,8 @@ export default function CreateMapModal({
             )}
             {result.people.length > 0 && (
               <ul className="mt-3 max-h-32 space-y-1 overflow-auto text-xs text-slate-600">
-                {result.people.slice(0, 8).map((p) => (
-                  <li key={p.name}>
+                {result.people.slice(0, 8).map((p, index) => (
+                  <li key={`${p.name}-${index}`}>
                     <span className="font-semibold text-slate-800">{p.name}</span>
                     <span className="text-slate-400"> · </span>{p.title}
                   </li>
