@@ -5,6 +5,7 @@ import type {
   MapState,
   Person,
   ResearchSource,
+  StakeholderPlanEntry,
   StrategicInitiative,
 } from './types.js';
 
@@ -86,6 +87,22 @@ const contactHeaders = [
   'Notes',
 ];
 
+const peopleHeaders = [
+  'Account',
+  'Name',
+  'Title',
+  'Function (Department)',
+  'Business Unit / Team',
+  'Product Line',
+  'Level',
+  'Buying Role',
+  'Engagement',
+  'Confidence',
+  'LinkedIn',
+  'Email',
+  'Notes',
+];
+
 const headingFill = 'FFA4C2F4';
 const contactsFill = 'FFC9DAF8';
 
@@ -93,8 +110,49 @@ function safeText(value: string): string {
   return /^[=+\-@]/.test(value) ? `'${value}` : value;
 }
 
+function optionalText(value: string | null | undefined): string | null {
+  return value ? safeText(value) : null;
+}
+
 function normalized(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
+}
+
+function accountDisplayName(account: ExportAccount): string {
+  const profile = account.state.meta?.companyProfile ?? null;
+  return account.companyName ?? profile?.companyName ?? account.name;
+}
+
+function engagementLabel(
+  person: Person,
+  stakeholder?: StakeholderPlanEntry
+): string {
+  return person.role === 'champion'
+    ? 'Champ'
+    : person.role === 'economic_buyer'
+      ? 'EB'
+      : person.role === 'blocker'
+        ? 'Blocker'
+        : stakeholder?.stance === 'advocate'
+          ? 'Coach'
+          : person.metWith
+            ? 'Met & Unknown'
+            : 'Not Met';
+}
+
+function humanizeBuyingRole(role: Person['role']): string {
+  return role
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function sortedPeople(account: ExportAccount): Person[] {
+  return [...(account.state.people ?? [])].sort(
+    (a, b) =>
+      normalized(a.department).localeCompare(normalized(b.department)) ||
+      a.name.localeCompare(b.name)
+  );
 }
 
 function sourceDetailsFor(
@@ -178,7 +236,7 @@ function addTerritorySheet(
     const annualReport = (profile?.annualReportUrl ?? filingUrl(account)) || null;
     const description = profile?.description ?? account.briefing?.summary ?? '';
     const row = sheet.addRow([
-      safeText(account.companyName ?? profile?.companyName ?? account.name),
+      safeText(accountDisplayName(account)),
       '',
       safeText(account.domain),
       account.isLiveOpportunity ? 'Live Opportunity' : 'Prospect',
@@ -221,7 +279,7 @@ function addAccountSheet(
 ): void {
   const profile = account.state.meta?.companyProfile ?? null;
   const sheet = workbook.addWorksheet(
-    accountSheetName(account.companyName ?? profile?.companyName ?? account.name, taken)
+    accountSheetName(accountDisplayName(account), taken)
   );
   const widths = [19.25, 26.63, 23.75, 23.38, 21.5, 29.88, 20, 13.25];
   for (const [index, width] of widths.entries()) {
@@ -334,6 +392,9 @@ function addAccountSheet(
   const buHeaderRow = sheet.getRow(21);
   buHeaderRow.font = { bold: true };
   buHeaderRow.height = 17.25;
+  const peopleColumn = buHeaders.findIndex((header) =>
+    /people|contact/i.test(header)
+  );
   departments.forEach((department) => {
     const relevant = initiatives
       .filter((initiative) =>
@@ -343,7 +404,7 @@ function addAccountSheet(
       )
       .map((initiative) => initiative.name)
       .join('; ');
-    const row = sheet.addRow([
+    const values: (string | null)[] = [
       department ? safeText(department) : '',
       '',
       '',
@@ -353,7 +414,16 @@ function addAccountSheet(
       '',
       '',
       safeText(relevant),
-    ]);
+    ];
+    if (peopleColumn >= 0 && department) {
+      values[peopleColumn] = safeText(
+        people
+          .filter((person) => normalized(person.department) === normalized(department))
+          .map((person) => person.name)
+          .join(', ')
+      );
+    }
+    const row = sheet.addRow(values);
     row.getCell(1).font = { bold: true };
   });
 
@@ -373,25 +443,10 @@ function addAccountSheet(
   sheet.getCell(legendRow, 5).value =
     'Mole, Coach, Champ, EB, Blocker, Not Met, Met & Unknown';
 
-  const sortedPeople = [...people].sort(
-    (a, b) =>
-      normalized(a.department).localeCompare(normalized(b.department)) ||
-      a.name.localeCompare(b.name)
-  );
-  sortedPeople.forEach((person) => {
+  const accountPeople = sortedPeople(account);
+  accountPeople.forEach((person) => {
     const stakeholder = account.state.meta?.strategy?.stakeholders?.[person.id];
-    const engagement =
-      person.role === 'champion'
-        ? 'Champ'
-        : person.role === 'economic_buyer'
-          ? 'EB'
-          : person.role === 'blocker'
-            ? 'Blocker'
-            : stakeholder?.stance === 'advocate'
-              ? 'Coach'
-              : person.metWith
-                ? 'Met & Unknown'
-                : 'Not Met';
+    const engagement = engagementLabel(person, stakeholder);
     const notes = [
       person.notes,
       stakeholder?.nextStep && `Next: ${stakeholder.nextStep}`,
@@ -413,7 +468,7 @@ function addAccountSheet(
     if (person.linkedin) setHyperlink(row.getCell(6), 'Link', person.linkedin);
   });
 
-  const otherHeading = contactsHeaderRow + 2 + sortedPeople.length;
+  const otherHeading = contactsHeaderRow + 2 + accountPeople.length;
   sheet.mergeCells(`A${otherHeading}:I${otherHeading}`);
   sheet.getCell(otherHeading, 1).value = 'OTHER INFORMATION';
   styleHeading(sheet.getRow(otherHeading));
@@ -430,6 +485,56 @@ function addAccountSheet(
   };
 }
 
+function addPeopleSheet(
+  workbook: ExcelJS.Workbook,
+  accounts: ExportAccount[]
+): void {
+  const sheet = workbook.addWorksheet('People');
+  sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+  sheet.addRow(peopleHeaders);
+  sheet.getRow(1).font = { bold: true };
+  sheet.autoFilter = { from: 'A1', to: 'M1' };
+  [
+    22, 24, 28, 22, 24, 20, 14, 18, 18, 14, 36, 28, 42,
+  ].forEach((width, index) => {
+    sheet.getColumn(index + 1).width = width;
+  });
+
+  const rows = accounts.flatMap((account) => {
+    const accountName = accountDisplayName(account);
+    return (account.state.people ?? []).map((person) => ({
+      accountName,
+      person,
+      stakeholder: account.state.meta?.strategy?.stakeholders?.[person.id],
+    }));
+  });
+  rows.sort(
+    (a, b) =>
+      a.accountName.localeCompare(b.accountName) ||
+      normalized(a.person.department).localeCompare(normalized(b.person.department)) ||
+      a.person.name.localeCompare(b.person.name)
+  );
+
+  for (const { accountName, person, stakeholder } of rows) {
+    const row = sheet.addRow([
+      safeText(accountName),
+      safeText(person.name),
+      safeText(person.title),
+      optionalText(person.department),
+      optionalText(person.team),
+      optionalText(person.productLine),
+      optionalText(person.jobLevel),
+      safeText(humanizeBuyingRole(person.role)),
+      safeText(engagementLabel(person, stakeholder)),
+      safeText(person.confidence),
+      null,
+      optionalText(person.email),
+      optionalText(person.notes),
+    ]);
+    if (person.linkedin) setHyperlink(row.getCell(11), 'Link', person.linkedin);
+  }
+}
+
 export async function buildTerritoryWorkbook(
   accounts: ExportAccount[],
   opts: { includeTerritorySheet: boolean }
@@ -438,6 +543,7 @@ export async function buildTerritoryWorkbook(
   workbook.creator = 'TopDown';
   workbook.created = new Date();
   if (opts.includeTerritorySheet) addTerritorySheet(workbook, accounts);
+  addPeopleSheet(workbook, accounts);
   const taken = new Set<string>();
   for (const account of accounts) addAccountSheet(workbook, account, taken);
   return Buffer.from(await workbook.xlsx.writeBuffer()) as unknown as Buffer;

@@ -33,6 +33,9 @@ function person(overrides: Partial<Person>): Person {
     metWith: false,
     email: 'alex@example.com',
     linkedin: 'https://linkedin.com/in/alex',
+    team: 'Platform',
+    productLine: 'Developer Tools',
+    jobLevel: 'VP',
     x: 0,
     y: 0,
     ...overrides,
@@ -211,6 +214,7 @@ test('builds the territory and account plan workbook layout', async () => {
 
   assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), [
     'Territory',
+    'People',
     'Example, Inc.',
     'Second Account',
   ]);
@@ -231,6 +235,46 @@ test('builds the territory and account plan workbook layout', async () => {
     hyperlink: 'https://linkedin.com/company/example',
   });
   assert.equal(territory.getCell('T2').value, 'A profile description');
+
+  const peopleSheet = workbook.getWorksheet('People')!;
+  [
+    'Account',
+    'Name',
+    'Title',
+    'Function (Department)',
+    'Business Unit / Team',
+    'Product Line',
+    'Level',
+    'Buying Role',
+    'Engagement',
+    'Confidence',
+    'LinkedIn',
+    'Email',
+    'Notes',
+  ].forEach((header, index) => {
+    assert.equal(peopleSheet.getCell(1, index + 1).value, header);
+  });
+  const peopleView = peopleSheet.views[0] as {
+    xSplit?: number;
+    ySplit?: number;
+  };
+  assert.equal(peopleView.xSplit, 1);
+  assert.equal(peopleView.ySplit, 1);
+  assert.equal(peopleSheet.autoFilter, 'A1:M1');
+  const alexPeopleRow = [2, 3, 4].find(
+    (row) => peopleSheet.getCell(row, 2).value === 'Alex Champion'
+  )!;
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 1).value, 'Example, Inc.');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 4).value, 'Engineering');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 5).value, 'Platform');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 6).value, 'Developer Tools');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 7).value, 'VP');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 8).value, 'Champion');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 9).value, 'Champ');
+  assert.deepEqual(peopleSheet.getCell(alexPeopleRow, 11).value, {
+    text: 'Link',
+    hyperlink: 'https://linkedin.com/in/alex',
+  });
 
   const accountSheet = workbook.getWorksheet('Example, Inc.')!;
   assert.equal(accountSheet.getCell('B2').value, '$2.0B');
