@@ -255,7 +255,7 @@ export async function setRosterStatus(
   onlyFromDismissed = false
 ) {
   const domain = domainInput.trim().toLowerCase();
-  for (const id of ids.slice(0, 200)) {
+  for (const id of ids.slice(0, 2000)) {
     await query(
       `UPDATE roster_people
        SET status = $1, map_person_id = COALESCE($2, map_person_id), last_seen_at = $3

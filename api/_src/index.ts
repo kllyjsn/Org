@@ -78,6 +78,7 @@ import type {
   WorkspaceRow,
   SellerProfile,
   AccountStrategyPlan,
+  MapGroup,
 } from './types.js';
 import {
   classifyTitle,
@@ -94,6 +95,13 @@ import {
   setRosterStatus,
   upsertRosterPeople,
 } from './roster.js';
+import {
+  buildChartSuggestion,
+  refineWithLlm,
+  type Confidence,
+} from './suggest-chart.js';
+import { listPersonas } from './personas.js';
+import { isFn, isSeniority } from './taxonomy.js';
 import {
   createRosterSyncJob,
   getRosterSyncJob,
@@ -422,7 +430,7 @@ function sanitizeState(input: unknown): MapState {
   // Normalize sub-fields too — stored states are read by every surface
   // (canvas, share links, analysis) and missing person/initiative fields
   // crash them.
-  const people = (Array.isArray(s.people) ? s.people.slice(0, 500) : []).map(
+  const people = (Array.isArray(s.people) ? s.people.slice(0, 1500) : []).map(
     (p) => {
       const person = (p ?? {}) as Partial<Person>;
       return {
@@ -441,7 +449,7 @@ function sanitizeState(input: unknown): MapState {
       } as Person;
     }
   );
-  const edges = (Array.isArray(s.edges) ? s.edges.slice(0, 2000) : []).map(
+  const edges = (Array.isArray(s.edges) ? s.edges.slice(0, 5000) : []).map(
     (e) => {
       const edge = (e ?? {}) as Partial<MapEdge>;
       return {
@@ -453,9 +461,28 @@ function sanitizeState(input: unknown): MapState {
   );
   const meta = (s.meta ?? {}) as MapState['meta'];
   const strategy = sanitizeStrategyPlan(meta.strategy);
+  const groups = (Array.isArray(s.groups) ? s.groups.slice(0, 200) : [])
+    .flatMap((item): MapGroup[] => {
+      const group = (item ?? {}) as Partial<MapGroup>;
+      if (typeof group.id !== 'string' || typeof group.name !== 'string') {
+        return [];
+      }
+      return [{
+        id: group.id,
+        name: group.name,
+        parentGroupId:
+          typeof group.parentGroupId === 'string' || group.parentGroupId === null
+            ? group.parentGroupId
+            : null,
+        ...(typeof group.function === 'string' || group.function === null
+          ? { function: group.function }
+          : {}),
+      }];
+    });
   return {
     people,
     edges,
+    ...(Array.isArray(s.groups) ? { groups } : {}),
     meta: {
       domain: typeof meta.domain === 'string' ? meta.domain : '',
       companyName: meta.companyName ?? null,
@@ -1719,23 +1746,20 @@ app.post('/api/maps/:id/roster/import', requireAuth, async (c) => {
   });
 });
 
-app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
-  const user = c.get('user');
-  const [map, role] = await mapForUser(user, param(c, 'id'));
-  if (!map || !role) return bad(c, 'not found', 404);
-  if (!canWrite(role)) return bad(c, 'viewers cannot add roster people', 403);
-  const body = await c.req.json().catch(() => null);
-  const ids = Array.isArray(body?.ids)
-    ? body.ids
-        .filter((id: unknown): id is string => typeof id === 'string')
-        .slice(0, 200)
-    : [];
-  const rows = await query<RosterPersonRow>(
-    `SELECT * FROM roster_people WHERE workspace_id = $1 AND domain = $2 AND id = ANY($3::text[])`,
-    [map.workspace_id, map.domain.trim().toLowerCase(), ids]
-  );
+async function materializeRosterRows(
+  map: MapRow,
+  userId: string,
+  rows: RosterPersonRow[],
+  opts: {
+    groupIdByRosterId?: Map<string, string>;
+    reportsToRosterIdByRosterId?: Map<string, string>;
+    reportsToPersonIdByRosterId?: Map<string, string>;
+    confidenceByRosterId?: Map<string, Confidence>;
+    groups?: MapGroup[];
+  } = {}
+): Promise<{ state: MapState; added: number }> {
   const pending = rows.filter((row) => row.status !== 'added');
-  if (pending.length === 0) return c.json({ map: { ...map, role }, added: 0 });
+  if (pending.length === 0) return { state: map.state as MapState, added: 0 };
   const state = map.state as MapState;
   const existing = state.people;
   const baseX = existing.length ? Math.min(...existing.map((person) => person.x)) : 0;
@@ -1750,7 +1774,7 @@ app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
       department: functionToDepartment(fn),
       team: null,
       role: 'none' as const,
-      confidence: row.confidence,
+      confidence: opts.confidenceByRosterId?.get(row.id) ?? row.confidence,
       sources: row.source_url
         ? [row.source_url]
         : row.linkedin
@@ -1762,6 +1786,9 @@ app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
       jobLevel: seniorityToJobLevel(
         (row.seniority || classified.seniority) as Seniority
       ),
+      ...(opts.groupIdByRosterId?.get(row.id)
+        ? { groupId: opts.groupIdByRosterId.get(row.id) }
+        : {}),
       x: baseX + (index % 4) * 260,
       y: baseY + Math.floor(index / 4) * 140,
     };
@@ -1789,19 +1816,55 @@ app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
     if (linkedinKey) keyToId.set(linkedinKey, person.id);
   }
   const edges = [...state.edges];
+  const edgeKeys = new Set(edges.map((edge) => `${edge.from}:${edge.to}:${edge.kind}`));
   for (let index = 0; index < pending.length; index += 1) {
     const manager = pending[index].manager_key ? keyToId.get(pending[index].manager_key!) : undefined;
-    if (manager && manager !== additions[index].id) {
+    const explicitManagerRosterId = opts.reportsToRosterIdByRosterId?.get(pending[index].id);
+    const explicitManagerPersonId = opts.reportsToPersonIdByRosterId?.get(pending[index].id);
+    const explicitManager = explicitManagerRosterId
+      ? additions[pending.findIndex((row) => row.id === explicitManagerRosterId)]?.id
+      : explicitManagerPersonId;
+    const target = explicitManager ?? manager;
+    if (target && target !== additions[index].id &&
+        !edgeKeys.has(`${target}:${additions[index].id}:reports`)) {
       edges.push({
         id: randomUUID(),
-        from: manager,
+        from: target,
         to: additions[index].id,
         kind: 'reports',
         label: null,
       });
+      edgeKeys.add(`${target}:${additions[index].id}:reports`);
     }
   }
-  const updated = await saveMapState(map, { ...state, people: [...existing, ...additions], edges }, user.id);
+  let nextGroups = state.groups ? [...state.groups] : [];
+  if (opts.groups?.length) {
+    const byId = new Map(opts.groups.map((group) => [group.id, group]));
+    const referenced = new Set(
+      pending
+        .map((row) => opts.groupIdByRosterId?.get(row.id))
+        .filter((id): id is string => Boolean(id))
+    );
+    for (const id of [...referenced]) {
+      let cursor = byId.get(id);
+      while (cursor) {
+        referenced.add(cursor.id);
+        cursor = cursor.parentGroupId ? byId.get(cursor.parentGroupId) : undefined;
+      }
+    }
+    const existingById = new Map(nextGroups.map((group) => [group.id, group]));
+    for (const group of opts.groups) {
+      if (referenced.has(group.id)) existingById.set(group.id, group);
+    }
+    nextGroups = [...existingById.values()];
+  }
+  const nextState: MapState = {
+    ...state,
+    people: [...existing, ...additions],
+    edges,
+    ...(nextGroups.length ? { groups: nextGroups } : {}),
+  };
+  await saveMapState(map, nextState, userId);
   await setRosterStatus(
     map.workspace_id,
     map.domain,
@@ -1811,7 +1874,212 @@ app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
       pending.map((row, index) => [row.id, additions[index].id])
     )
   );
-  return c.json({ map: { ...updated, role }, added: additions.length });
+  return { state: nextState, added: additions.length };
+}
+
+app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot add roster people', 403);
+  const body = await c.req.json().catch(() => null);
+  const ids = Array.isArray(body?.ids)
+    ? body.ids
+        .filter((id: unknown): id is string => typeof id === 'string')
+        .slice(0, 200)
+    : [];
+  const rows = await query<RosterPersonRow>(
+    `SELECT * FROM roster_people WHERE workspace_id = $1 AND domain = $2 AND id = ANY($3::text[])`,
+    [map.workspace_id, map.domain.trim().toLowerCase(), ids]
+  );
+  const pending = rows.filter((row) => row.status !== 'added');
+  if (pending.length === 0) return c.json({ map: { ...map, role }, added: 0 });
+  const materialized = await materializeRosterRows(map, user.id, pending);
+  return c.json({ map: { ...map, state: materialized.state, role }, added: materialized.added });
+});
+
+async function allSuggestionRoster(
+  workspaceId: string,
+  domain: string
+): Promise<RosterPersonRow[]> {
+  const statuses = await Promise.all(
+    (['suggested', 'added'] as const).map(async (status) => {
+      const rows: RosterPersonRow[] = [];
+      for (let page = 0; ; page += 1) {
+        const result = await listRoster(workspaceId, domain, {
+          status,
+          page,
+          pageSize: 200,
+        });
+        rows.push(...result.people);
+        if (result.people.length < 200) break;
+      }
+      return rows;
+    })
+  );
+  return [...statuses[0], ...statuses[1]];
+}
+
+app.post('/api/maps/:id/suggest-chart', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const body = await c.req.json().catch(() => null);
+  if (body?.guidance !== undefined &&
+      (typeof body.guidance !== 'string' || body.guidance.length > 2000)) {
+    return bad(c, 'guidance must be a string of at most 2000 characters');
+  }
+  if (body?.excludeRosterIds !== undefined &&
+      (!Array.isArray(body.excludeRosterIds) ||
+        body.excludeRosterIds.length > 2000 ||
+        body.excludeRosterIds.some((id: unknown) => typeof id !== 'string'))) {
+    return bad(c, 'excludeRosterIds must contain at most 2000 strings');
+  }
+  if (body?.limit !== undefined &&
+      (typeof body.limit !== 'number' || !Number.isFinite(body.limit))) {
+    return bad(c, 'limit must be a number');
+  }
+  const functions = Array.isArray(body?.functions)
+    ? body.functions.filter(isFn)
+    : undefined;
+  const minSeniority = isSeniority(body?.minSeniority)
+    ? body.minSeniority
+    : undefined;
+  const started = Date.now();
+  const roster = await allSuggestionRoster(map.workspace_id, map.domain);
+  const personas = body?.personasOnly
+    ? await listPersonas(map.workspace_id)
+    : undefined;
+  let suggestion = buildChartSuggestion({
+    roster,
+    mapPeople: (map.state as MapState).people ?? [],
+    mapEdges: (map.state as MapState).edges ?? [],
+    personas,
+    options: {
+      functions,
+      minSeniority,
+      limit: typeof body?.limit === 'number' ? body.limit : undefined,
+      personasOnly: body?.personasOnly === true,
+      guidance: typeof body?.guidance === 'string' ? body.guidance : undefined,
+      excludeRosterIds: body?.excludeRosterIds,
+    },
+  });
+  const guidance = typeof body?.guidance === 'string' ? body.guidance.trim() : '';
+  if (guidance && activeProvider() !== 'fixture') {
+    suggestion = await refineWithLlm(suggestion, guidance);
+  }
+  return c.json({ suggestion, tookMs: Date.now() - started });
+});
+
+app.post('/api/maps/:id/suggest-chart/apply', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot apply chart suggestions', 403);
+  const body = await c.req.json().catch(() => null);
+  const accept = body?.accept;
+  if (
+    body?.decline?.rosterIds !== undefined &&
+    (!Array.isArray(body.decline.rosterIds) ||
+      body.decline.rosterIds.length > 2000 ||
+      body.decline.rosterIds.some((id: unknown) => typeof id !== 'string'))
+  ) {
+    return bad(c, 'decline.rosterIds must contain at most 2000 strings');
+  }
+  const declineIds = Array.isArray(body?.decline?.rosterIds)
+    ? body.decline.rosterIds as string[]
+    : [];
+  if (!accept || !Array.isArray(accept.people) || !Array.isArray(accept.groups)) {
+    return bad(c, 'accept groups and people are required');
+  }
+  if (accept.people.length > 1000 || accept.groups.length > 200) {
+    return bad(c, 'too many accepted people or groups');
+  }
+  const groups: MapGroup[] = accept.groups.flatMap((item: unknown): MapGroup[] => {
+    if (!item || typeof item !== 'object') return [];
+    const value = item as Record<string, unknown>;
+    if (typeof value.id !== 'string' || typeof value.name !== 'string') return [];
+    return [{
+      id: value.id,
+      name: value.name,
+      parentGroupId:
+        typeof value.parentGroupId === 'string' || value.parentGroupId === null
+          ? value.parentGroupId
+          : null,
+      ...(typeof value.function === 'string' || value.function === null
+        ? { function: value.function }
+        : {}),
+    }];
+  });
+  const acceptedPeople: {
+    rosterId: string;
+    groupId: string;
+    reportsToRosterId: string | null;
+    reportsToPersonId: string | null;
+    confidence: Confidence;
+  }[] = accept.people.flatMap((item: unknown) => {
+    if (!item || typeof item !== 'object') return [];
+    const value = item as Record<string, unknown>;
+    if (typeof value.rosterId !== 'string' || typeof value.groupId !== 'string') return [];
+    const confidence: Confidence =
+      value.confidence === 'high' || value.confidence === 'medium' || value.confidence === 'low'
+        ? value.confidence
+        : 'low';
+    return [{
+      rosterId: value.rosterId,
+      groupId: value.groupId,
+      reportsToRosterId:
+        typeof value.reportsToRosterId === 'string' ? value.reportsToRosterId : null,
+      reportsToPersonId:
+        typeof value.reportsToPersonId === 'string' ? value.reportsToPersonId : null,
+      confidence,
+    }];
+  });
+  let added = 0;
+  let responseMap: MapState = map.state as MapState;
+  if (acceptedPeople.length > 0) {
+    const acceptedIds = acceptedPeople.map((person) => person.rosterId);
+    const rows = await query<RosterPersonRow>(
+      `SELECT * FROM roster_people
+       WHERE workspace_id = $1 AND domain = $2 AND id = ANY($3::text[]) AND status = 'suggested'`,
+      [map.workspace_id, map.domain.trim().toLowerCase(), acceptedIds]
+    );
+    const materialized = await materializeRosterRows(map, user.id, rows, {
+      groupIdByRosterId: new Map(acceptedPeople.map((person) => [person.rosterId, person.groupId])),
+      reportsToRosterIdByRosterId: new Map(
+        acceptedPeople
+          .filter((person) => person.reportsToRosterId)
+          .map((person) => [person.rosterId, person.reportsToRosterId!])
+      ),
+      reportsToPersonIdByRosterId: new Map(
+        acceptedPeople
+          .filter((person) => person.reportsToPersonId)
+          .map((person) => [person.rosterId, person.reportsToPersonId!])
+      ),
+      confidenceByRosterId: new Map(acceptedPeople.map((person) => [person.rosterId, person.confidence])),
+      groups,
+    });
+    responseMap = materialized.state;
+    added = materialized.added;
+  }
+  const declineRows = await query<{ id: string }>(
+    `SELECT id FROM roster_people
+     WHERE workspace_id = $1 AND domain = $2 AND status = 'suggested' AND id = ANY($3::text[])`,
+    [map.workspace_id, map.domain.trim().toLowerCase(), declineIds]
+  );
+  if (declineRows.length > 0) {
+    await setRosterStatus(
+      map.workspace_id,
+      map.domain,
+      declineRows.map((row) => row.id),
+      'dismissed'
+    );
+  }
+  return c.json({
+    map: { ...map, state: responseMap, role },
+    added,
+    declined: declineRows.length,
+  });
 });
 
 for (const action of ['dismiss', 'restore'] as const) {
