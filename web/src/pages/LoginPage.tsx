@@ -64,7 +64,10 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const login = useSession((s) => s.login);
   const register = useSession((s) => s.register);
-  const [mode, setMode] = useState<'login' | 'register'>('register');
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState<'login' | 'register'>(
+    searchParams.get('next') ? 'login' : 'register'
+  );
   const [name, setName] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
   const [email, setEmail] = useState('');
@@ -72,7 +75,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   useDocumentTitle('Sign in — TopDown');
   const [busy, setBusy] = useState(false);
-  const [searchParams] = useSearchParams();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
