@@ -193,6 +193,7 @@ export default function RosterView({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search names, titles, teams…"
+              aria-label="Search roster"
               className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
             />
           </div>
@@ -200,6 +201,7 @@ export default function RosterView({
             type="button"
             onClick={cycleSort}
             title="Change sort"
+            aria-label={`Sort by ${SORT_LABEL[sortKey]}`}
             className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:text-[#5b4cf0]"
           >
             <ArrowDownWideNarrow size={14} />
@@ -231,6 +233,7 @@ export default function RosterView({
                 key={value}
                 type="button"
                 onClick={() => setMetFilter(value)}
+                aria-pressed={metFilter === value}
                 className={`px-2.5 py-2 text-xs font-semibold capitalize ${
                   metFilter === value
                     ? 'bg-slate-900 text-white'
@@ -285,6 +288,7 @@ export default function RosterView({
                 key={lane}
                 type="button"
                 onClick={() => toggleDept(lane)}
+                aria-pressed={active}
                 className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                   active
                     ? 'border-[#5b4cf0] bg-[#eeecff] text-[#5b4cf0]'
@@ -315,21 +319,51 @@ export default function RosterView({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Roster table"
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
         {rows.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-slate-400">
             No one matches this view.
           </div>
         ) : (
           <table className="w-full border-collapse">
+            <caption className="sr-only">Stakeholder roster</caption>
             <thead className="sticky top-0 z-10 bg-[#f6f7f2]/95 backdrop-blur">
               <tr className="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
-                <th className="px-3 py-2 sm:px-4">Person</th>
-                <th className="hidden px-3 py-2 md:table-cell">Department</th>
-                <th className="hidden px-3 py-2 lg:table-cell">Team</th>
-                <th className="hidden px-3 py-2 xl:table-cell">Reports to</th>
-                <th className="hidden px-3 py-2 sm:table-cell">Role</th>
-                <th className="px-3 py-2 text-center">Met</th>
+                <th
+                  scope="col"
+                  aria-sort={sortKey === 'name' ? 'ascending' : undefined}
+                  className="px-3 py-2 sm:px-4"
+                >
+                  Person
+                </th>
+                <th
+                  scope="col"
+                  aria-sort={sortKey === 'department' ? 'ascending' : undefined}
+                  className="hidden px-3 py-2 md:table-cell"
+                >
+                  Department
+                </th>
+                <th
+                  scope="col"
+                  aria-sort={sortKey === 'team' ? 'ascending' : undefined}
+                  className="hidden px-3 py-2 lg:table-cell"
+                >
+                  Team
+                </th>
+                <th scope="col" className="hidden px-3 py-2 xl:table-cell">
+                  Reports to
+                </th>
+                <th scope="col" className="hidden px-3 py-2 sm:table-cell">
+                  Role
+                </th>
+                <th scope="col" className="px-3 py-2 text-center">
+                  Met
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -359,9 +393,16 @@ export default function RosterView({
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="truncate text-[13px] font-semibold text-slate-900">
+                            <button
+                              type="button"
+                              className="truncate text-left text-[13px] font-semibold text-slate-900"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelect(person);
+                              }}
+                            >
                               {person.name}
-                            </span>
+                            </button>
                             {needsReview && (
                               <span
                                 title="Needs review"

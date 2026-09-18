@@ -154,6 +154,7 @@ export default function PersonPanel({
 
   return (
     <motion.aside
+      aria-label="Stakeholder details"
       initial={{ x: 340, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 340, opacity: 0 }}
@@ -439,6 +440,7 @@ export default function PersonPanel({
             value={person.name}
             onChange={(e) => set({ name: e.target.value })}
             placeholder="Name"
+            aria-label="Name"
             disabled={readOnly}
           />
           <input
@@ -446,6 +448,7 @@ export default function PersonPanel({
             value={person.title}
             onChange={(e) => set({ title: e.target.value })}
             placeholder="Title"
+            aria-label="Title"
             disabled={readOnly}
           />
           <input
@@ -453,6 +456,7 @@ export default function PersonPanel({
             value={person.department ?? ''}
             onChange={(e) => set({ department: e.target.value || null })}
             placeholder="Department"
+            aria-label="Department"
             disabled={readOnly}
           />
           <div className="grid grid-cols-2 gap-2">
@@ -461,6 +465,7 @@ export default function PersonPanel({
               value={person.team ?? ''}
               onChange={(e) => set({ team: e.target.value || null })}
               placeholder="Team"
+              aria-label="Team"
               disabled={readOnly}
             />
             <input
@@ -468,6 +473,7 @@ export default function PersonPanel({
               value={person.productLine ?? ''}
               onChange={(e) => set({ productLine: e.target.value || null })}
               placeholder="Product line"
+              aria-label="Product line"
               disabled={readOnly}
             />
           </div>
@@ -479,6 +485,7 @@ export default function PersonPanel({
             value={person.email ?? ''}
             onChange={(e) => set({ email: e.target.value || null })}
             placeholder="Email"
+            aria-label="Email"
             disabled={readOnly}
           />
           <input
@@ -486,15 +493,20 @@ export default function PersonPanel({
             value={person.linkedin ?? ''}
             onChange={(e) => set({ linkedin: e.target.value || null })}
             placeholder="LinkedIn URL"
+            aria-label="LinkedIn URL"
             disabled={readOnly}
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <label
+            id="person-role-label"
+            className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+          >
             Buying role
           </label>
           <select
+            aria-labelledby="person-role-label"
             className={field}
             value={person.role}
             onChange={(e) => set({ role: e.target.value as BuyingRole })}
@@ -509,10 +521,14 @@ export default function PersonPanel({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <label
+            id="person-manager-label"
+            className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+          >
             Reports to
           </label>
           <select
+            aria-labelledby="person-manager-label"
             className={field}
             value={managerId}
             onChange={(e) => onSetManager(person.id, e.target.value || null)}
@@ -540,10 +556,14 @@ export default function PersonPanel({
           </div>
         ) : (
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label
+              id="person-confidence-label"
+              className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+            >
               Confidence
             </label>
             <select
+              aria-labelledby="person-confidence-label"
               className={field}
               value={person.confidence}
               onChange={(e) =>
@@ -566,6 +586,7 @@ export default function PersonPanel({
             value={person.notes}
             onChange={(e) => set({ notes: e.target.value })}
             placeholder="Met at SKO — cares about SOC 2…"
+            aria-label="Notes"
             disabled={readOnly}
           />
         </div>
@@ -592,6 +613,7 @@ export default function PersonPanel({
             )}
             <div className="flex gap-2">
               <select
+                aria-label="Person to influence"
                 className={field}
                 value={influenceTarget}
                 onChange={(e) => setInfluenceTarget(e.target.value)}
@@ -608,6 +630,7 @@ export default function PersonPanel({
               <input
                 className={`${field} w-24`}
                 placeholder="label"
+                aria-label="Influence label"
                 value={influenceLabel}
                 onChange={(e) => setInfluenceLabel(e.target.value)}
               />
@@ -653,6 +676,7 @@ export default function PersonPanel({
               <input
                 className={field}
                 placeholder="Add a comment…"
+                aria-label="Add a comment"
                 value={draft}
                 disabled={posting}
                 onChange={(e) => setDraft(e.target.value)}

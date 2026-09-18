@@ -12,11 +12,15 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const previouslyFocused = document.activeElement;
     const items = () =>
       Array.from(el.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
         (node) => !node.hasAttribute('disabled')
       );
-    items()[0]?.focus();
+    const initial =
+      el.querySelector<HTMLElement>('[autofocus], [data-autofocus]') ??
+      items()[0];
+    initial?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
       const focusable = items();
@@ -32,6 +36,14 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>) {
       }
     };
     el.addEventListener('keydown', onKeyDown);
-    return () => el.removeEventListener('keydown', onKeyDown);
+    return () => {
+      el.removeEventListener('keydown', onKeyDown);
+      if (
+        previouslyFocused instanceof HTMLElement &&
+        document.contains(previouslyFocused)
+      ) {
+        previouslyFocused.focus();
+      }
+    };
   }, [ref]);
 }

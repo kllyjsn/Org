@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2, CircleAlert, Users, X } from 'lucide-react';
 import {
@@ -6,6 +6,7 @@ import {
   parseMeetingText,
 } from '../lib/meetingImport';
 import type { MeetingMatch } from '../lib/meetingImport';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type { Person } from '../types';
 
 const CONFIDENCE_STYLE: Record<string, string> = {
@@ -36,6 +37,8 @@ export default function MeetingsImportModal({
   const [parsed, setParsed] = useState<MeetingMatch[] | null>(null);
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [addUnmatched, setAddUnmatched] = useState(true);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   const entries = useMemo(() => parseMeetingText(raw), [raw]);
   const matchedCount = useMemo(
@@ -92,6 +95,10 @@ export default function MeetingsImportModal({
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-6"
     >
       <motion.div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="meetings-import-modal-title"
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
@@ -103,7 +110,10 @@ export default function MeetingsImportModal({
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
               Meetings import
             </div>
-            <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+            <h3
+              id="meetings-import-modal-title"
+              className="text-lg font-semibold tracking-tight text-slate-950"
+            >
               Who have you met with?
             </h3>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -127,6 +137,7 @@ export default function MeetingsImportModal({
                 value={raw}
                 onChange={(event) => setRaw(event.target.value)}
                 rows={12}
+                aria-label="Meeting attendees export"
                 placeholder={
                   '- Yi Gu — Head of Talent Experience Engineering\n- Jonathan Carter — Principal Security Engineer\n\nAbhishek Kottamasu; Alex Kreidler; Rahul Chalamala…'
                 }

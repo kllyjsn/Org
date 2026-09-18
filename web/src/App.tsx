@@ -26,6 +26,13 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
+    <>
+    <a
+      href="#main"
+      className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-900 focus:shadow-lg"
+    >
+      Skip to main content
+    </a>
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/s/:token" element={<SharePage />} />
@@ -47,5 +54,6 @@ export default function App() {
       />
       <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>
+    </>
   );
 }

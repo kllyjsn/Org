@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Building2, Loader2, Sparkles, X } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type { SellerProfile } from '../types';
 
 function list(value: string): string[] {
@@ -51,6 +52,8 @@ export default function SellerProfileModal({
   const [profile, setProfile] = useState<SellerProfile | null>(initialProfile);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   const research = async () => {
     if (!domain.trim()) return;
@@ -83,13 +86,22 @@ export default function SellerProfileModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm">
-      <div className="max-h-[94vh] w-full max-w-4xl overflow-auto rounded-3xl bg-white shadow-2xl">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="seller-profile-modal-title"
+        className="max-h-[94vh] w-full max-w-4xl overflow-auto rounded-3xl bg-white shadow-2xl"
+      >
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-100 bg-white/95 px-5 py-5 backdrop-blur sm:px-7">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
               <Sparkles size={14} /> Your selling context
             </div>
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+            <h2
+              id="seller-profile-modal-title"
+              className="text-2xl font-semibold tracking-tight text-slate-950"
+            >
               Teach TopDown what you sell
             </h2>
             <p className="mt-1 max-w-xl text-sm text-slate-500">
@@ -119,6 +131,7 @@ export default function SellerProfileModal({
                     autoFocus
                     className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-[#796df5]"
                     placeholder="stripe.com"
+                    aria-label="Company domain"
                     value={domain}
                     onChange={(event) => setDomain(event.target.value)}
                     onKeyDown={(event) => {
@@ -224,7 +237,7 @@ export default function SellerProfileModal({
               </div>
             </div>
           )}
-          {error && <p className="mt-4 text-sm text-rose-600">{error}</p>}
+          {error && <p role="alert" className="mt-4 text-sm text-rose-600">{error}</p>}
         </div>
 
         {profile && (

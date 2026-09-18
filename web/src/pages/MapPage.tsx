@@ -15,6 +15,8 @@ import ReactFlow, {
 } from 'reactflow';
 import type { Connection, EdgeChange, Node, NodeChange } from 'reactflow';
 import { influenceEdge, reportsEdge } from '../lib/flowEdges';
+import { useFocusTrap } from '../lib/useFocusTrap';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 import type { EdgeData, FlowEdge } from '../lib/flowEdges';
 
 function edgeToMap(e: FlowEdge): MapEdge {
@@ -169,6 +171,197 @@ function snapshot(
   return structuredClone({ nodes, edges });
 }
 
+function HistoryDialog({
+  versions,
+  onClose,
+  onRestore,
+}: {
+  versions: MapVersion[];
+  onClose: () => void;
+  onRestore: (versionId: string) => void;
+}) {
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-modal-title"
+        className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 id="history-modal-title" className="font-semibold text-slate-900">
+              Version history
+            </h2>
+            <p className="text-xs text-slate-500">
+              Restore an earlier collaborative save.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+          >
+            Close
+          </button>
+        </div>
+        <div className="max-h-80 space-y-2 overflow-y-auto">
+          {versions.length === 0 && (
+            <p className="py-8 text-center text-sm text-slate-400">
+              No earlier versions yet.
+            </p>
+          )}
+          {versions.map((version) => (
+            <div
+              key={version.id}
+              className="flex items-center justify-between rounded-xl border border-slate-200 p-3"
+            >
+              <div>
+                <p className="text-sm font-medium text-slate-700">
+                  {version.author_name}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {new Date(version.created_at).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => onRestore(version.id)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Restore
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InitiativesDialog({
+  initiatives,
+  mapId,
+  onClose,
+}: {
+  initiatives: NonNullable<MapState['meta']>['initiatives'];
+  mapId?: string;
+  onClose: () => void;
+}) {
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="initiatives-modal-title"
+        className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-3xl sm:rounded-3xl sm:p-7"
+      >
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+              <Lightbulb size={13} />
+              Why this account changes now
+            </div>
+            <h2
+              id="initiatives-modal-title"
+              className="text-3xl font-semibold tracking-[-0.045em] text-slate-950"
+            >
+              Initiative intelligence
+            </h2>
+            <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">
+              Recent company signals, the people accountable for them, and
+              evidence-backed ways your solution may fit.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+          >
+            Close
+          </button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {initiatives?.map((initiative, index) => (
+            <article
+              key={initiative.name}
+              className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow"
+            >
+              <div className="absolute right-3 top-2 text-4xl font-semibold tracking-tighter text-slate-100">
+                {String(index + 1).padStart(2, '0')}
+              </div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <h3 className="relative pr-10 font-semibold tracking-tight text-slate-900">
+                  {initiative.name}
+                </h3>
+                <span className="rounded-full bg-[#eeecff] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#5144d7]">
+                  {initiative.category}
+                </span>
+              </div>
+              <p className="text-sm text-slate-600">{initiative.summary}</p>
+              {((initiative.relevantTeams ?? []).length > 0 ||
+                (initiative.relevantPeople ?? []).length > 0) && (
+                <p className="mt-2 text-xs text-slate-500">
+                  <b>Relevant:</b>{' '}
+                  {[
+                    ...(initiative.relevantTeams ?? []),
+                    ...(initiative.relevantPeople ?? []),
+                  ].join(' · ')}
+                </p>
+              )}
+              {(initiative.salesAngles ?? []).length > 0 && (
+                <div className="mt-3 rounded-xl bg-slate-950 p-3 text-white">
+                  <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[.14em] text-[#c9f04b]">
+                    Conversation opening
+                  </div>
+                  <ul className="space-y-1.5 text-xs leading-5 text-slate-200">
+                    {(initiative.salesAngles ?? []).map((angle) => (
+                      <li key={angle}>• {angle}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(initiative.evidence ?? []).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  {(initiative.evidence ?? []).map((source) =>
+                    source.startsWith('http') ? (
+                      <a
+                        key={source}
+                        href={source}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => {
+                          if (mapId) {
+                            void api
+                              .trackEvent(mapId, 'source_opened', {
+                                surface: 'initiative',
+                              })
+                              .catch(() => undefined);
+                          }
+                        }}
+                        className="max-w-full truncate text-indigo-600 hover:underline"
+                      >
+                        Source
+                      </a>
+                    ) : (
+                      <span key={source} className="text-slate-400">
+                        {source}
+                      </span>
+                    )
+                  )}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function isTypingTarget(target: EventTarget | null): boolean {
   const element = target as HTMLElement | null;
   return (
@@ -201,6 +394,7 @@ function MapInner() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<EdgeData>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'canvas' | 'roster'>('canvas');
+  useDocumentTitle(`${mapName || 'Map'} — TopDown`);
   const [showMeetings, setShowMeetings] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
@@ -632,6 +826,7 @@ function MapInner() {
       selectable: false,
       connectable: false,
       deletable: false,
+      focusable: false,
       zIndex: -1,
     }));
     const tiles: Node<MoreNodeData>[] = view.tiles.map((tile) => ({
@@ -646,13 +841,16 @@ function MapInner() {
       selectable: false,
       connectable: false,
       deletable: false,
+      focusable: false,
     }));
     const visibleNodes = nodes
       .filter((node) => view.visibleIds.has(node.id))
       .map((node) => {
-        if (node.dragging) return node;
+        const person = node.data.person;
+        const ariaLabel = `${person.name}${person.title ? ', ' + person.title : ''}${person.department ? ', ' + person.department : ''}`;
+        if (node.dragging) return { ...node, ariaLabel };
         const pos = view.posOverride.get(node.id);
-        return pos ? { ...node, position: pos } : node;
+        return pos ? { ...node, position: pos, ariaLabel } : { ...node, ariaLabel };
       });
     return {
       nodes: [...headers, ...tiles, ...visibleNodes],
@@ -662,6 +860,19 @@ function MapInner() {
   }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, laneOf, toggleLane]);
 
   const displayNodes = laneView.nodes;
+
+  const displayEdges = useMemo(() => {
+    const nameById = new Map(people.map((person) => [person.id, person.name]));
+    return edges.map((edge) => {
+      const sourceName = nameById.get(edge.source) ?? edge.source;
+      const targetName = nameById.get(edge.target) ?? edge.target;
+      const ariaLabel =
+        edge.data?.kind === 'reports'
+          ? `${targetName} reports to ${sourceName}`
+          : `${sourceName} influences ${targetName}${edge.data?.label ? ': ' + edge.data.label : ''}`;
+      return { ...edge, ariaLabel };
+    });
+  }, [edges, people]);
 
   const knownSourceUrls = useMemo(() => {
     const urls = new Set<string>();
@@ -2348,6 +2559,7 @@ function MapInner() {
               ref={crmInput}
               type="file"
               accept=".csv,text/csv"
+              aria-label="Import CRM CSV"
               className="hidden"
               onChange={(event) => void importCrmCsv(event)}
             />
@@ -2394,7 +2606,9 @@ function MapInner() {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-2 backdrop-blur sm:gap-3 sm:px-4">
+          <h1 className="sr-only">{mapName || 'Account map'}</h1>
           <input
+            aria-label="Map name"
             className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-slate-900 outline-none hover:border-slate-300 focus:border-[#5b4cf0] sm:w-56 sm:flex-none"
             value={mapName}
             onChange={(e) => setMapName(e.target.value)}
@@ -2432,7 +2646,10 @@ function MapInner() {
             </button>
           )}
           <div className="hidden flex-1 sm:block" />
-          <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
+          <span
+            role="status"
+            className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline"
+          >
             {saveState === 'saving'
               ? 'Saving…'
               : saveState === 'dirty'
@@ -2457,9 +2674,16 @@ function MapInner() {
           </div>
         </header>
 
-      <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="relative min-h-0 flex-1 bg-[#f6f7f2]"
+      >
         {importNotice && (
-          <div className="absolute right-3 top-3 z-40 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
+          <div
+            role="status"
+            className="absolute right-3 top-3 z-40 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"
+          >
             {importNotice}
           </div>
         )}
@@ -2490,7 +2714,9 @@ function MapInner() {
         </button>
         <ReactFlow
           nodes={displayNodes}
-          edges={edges}
+          edges={displayEdges}
+          nodesFocusable
+          edgesFocusable
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={onConnect}
@@ -2718,7 +2944,7 @@ function MapInner() {
             />
           )}
         </AnimatePresence>
-      </div>
+      </main>
       </div>
 
       {showShare && mapId && (
@@ -2747,152 +2973,18 @@ function MapInner() {
         />
       )}
       {showHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="font-semibold text-slate-900">Version history</h2>
-                <p className="text-xs text-slate-500">
-                  Restore an earlier collaborative save.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowHistory(false)}
-                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
-              >
-                Close
-              </button>
-            </div>
-            <div className="max-h-80 space-y-2 overflow-y-auto">
-              {versions.length === 0 && (
-                <p className="py-8 text-center text-sm text-slate-400">
-                  No earlier versions yet.
-                </p>
-              )}
-              {versions.map((version) => (
-                <div
-                  key={version.id}
-                  className="flex items-center justify-between rounded-xl border border-slate-200 p-3"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">
-                      {version.author_name}
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      {new Date(version.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => void restoreVersion(version.id)}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    Restore
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <HistoryDialog
+          versions={versions}
+          onClose={() => setShowHistory(false)}
+          onRestore={(versionId) => void restoreVersion(versionId)}
+        />
       )}
       {showInitiatives && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-3xl sm:rounded-3xl sm:p-7">
-            <div className="mb-6 flex items-start justify-between gap-4">
-              <div>
-                <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
-                  <Lightbulb size={13} />
-                  Why this account changes now
-                </div>
-                <h2 className="text-3xl font-semibold tracking-[-0.045em] text-slate-950">
-                  Initiative intelligence
-                </h2>
-                <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">
-                  Recent company signals, the people accountable for them, and
-                  evidence-backed ways your solution may fit.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowInitiatives(false)}
-                className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
-              >
-                Close
-              </button>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {meta?.initiatives?.map((initiative, index) => (
-                <article
-                  key={initiative.name}
-                  className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow"
-                >
-                  <div className="absolute right-3 top-2 text-4xl font-semibold tracking-tighter text-slate-100">
-                    {String(index + 1).padStart(2, '0')}
-                  </div>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <h3 className="relative pr-10 font-semibold tracking-tight text-slate-900">
-                      {initiative.name}
-                    </h3>
-                    <span className="rounded-full bg-[#eeecff] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#5144d7]">
-                      {initiative.category}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-600">{initiative.summary}</p>
-                  {((initiative.relevantTeams ?? []).length > 0 ||
-                    (initiative.relevantPeople ?? []).length > 0) && (
-                    <p className="mt-2 text-xs text-slate-500">
-                      <b>Relevant:</b>{' '}
-                      {[
-                        ...(initiative.relevantTeams ?? []),
-                        ...(initiative.relevantPeople ?? []),
-                      ].join(' · ')}
-                    </p>
-                  )}
-                  {(initiative.salesAngles ?? []).length > 0 && (
-                    <div className="mt-3 rounded-xl bg-slate-950 p-3 text-white">
-                      <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[.14em] text-[#c9f04b]">
-                        Conversation opening
-                      </div>
-                      <ul className="space-y-1.5 text-xs leading-5 text-slate-200">
-                        {(initiative.salesAngles ?? []).map((angle) => (
-                          <li key={angle}>• {angle}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {(initiative.evidence ?? []).length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                      {(initiative.evidence ?? []).map((source) =>
-                        source.startsWith('http') ? (
-                          <a
-                            key={source}
-                            href={source}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={() => {
-                              if (mapId) {
-                                void api
-                                  .trackEvent(mapId, 'source_opened', {
-                                    surface: 'initiative',
-                                  })
-                                  .catch(() => undefined);
-                              }
-                            }}
-                            className="max-w-full truncate text-indigo-600 hover:underline"
-                          >
-                            Source
-                          </a>
-                        ) : (
-                          <span key={source} className="text-slate-400">
-                            {source}
-                          </span>
-                        )
-                      )}
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          </div>
-        </div>
+        <InitiativesDialog
+          initiatives={meta?.initiatives}
+          mapId={mapId}
+          onClose={() => setShowInitiatives(false)}
+        />
       )}
       {showStrategy && meta && (
         <AccountStrategyModal

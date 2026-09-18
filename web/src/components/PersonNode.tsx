@@ -54,7 +54,13 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
           </div>
           <div className="mt-0.5 truncate text-[11px] text-slate-500">{p.title}</div>
         </div>
-        {p.notes && <StickyNote size={13} className="mt-0.5 shrink-0 text-amber-500" />}
+        {p.notes && (
+          <StickyNote
+            size={13}
+            aria-hidden="true"
+            className="mt-0.5 shrink-0 text-amber-500"
+          />
+        )}
       </div>
       {(role.label || p.department || unverified || p.metWith) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-1 pl-1">
@@ -99,7 +105,7 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
           )}
           {(p.sources ?? []).length > 0 && !needsReview && !unverified && (
             <span className="ml-auto flex items-center gap-1 text-[9px] font-medium text-slate-400">
-              <BookOpen size={10} /> {(p.sources ?? []).length}
+              <BookOpen size={10} aria-hidden="true" /> {(p.sources ?? []).length}
             </span>
           )}
         </div>

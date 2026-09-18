@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Copy, Link2, Trash2 } from 'lucide-react';
 import { api } from '../api';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type { ShareLink } from '../types';
 
 export default function ShareModal({
@@ -15,6 +16,8 @@ export default function ShareModal({
   const [copied, setCopied] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   const refresh = useCallback(
     () => api.listShares(mapId).then((r) => setLinks(r.links)),
@@ -65,9 +68,17 @@ export default function ShareModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-modal-title"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+      >
         <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Share this map</h2>
+          <h2 id="share-modal-title" className="text-lg font-semibold">
+            Share this map
+          </h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600"
@@ -83,6 +94,7 @@ export default function ShareModal({
 
         <div className="flex gap-2">
           <select
+            aria-label="Link expiry"
             className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
             value={expiry}
             onChange={(e) => setExpiry(e.target.value)}

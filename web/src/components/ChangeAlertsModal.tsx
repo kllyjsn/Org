@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BellRing,
   BriefcaseBusiness,
@@ -8,6 +8,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type { MapChangeAlert, Person } from '../types';
 
 function AlertIcon({ type }: { type: MapChangeAlert['type'] }) {
@@ -34,6 +35,8 @@ export default function ChangeAlertsModal({
   const [baselineAt, setBaselineAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   useEffect(() => {
     api
@@ -48,14 +51,23 @@ export default function ChangeAlertsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-7">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="change-alerts-modal-title"
+        className="max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-7"
+      >
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
               <BellRing size={13} />
               Account movement
             </div>
-            <h2 className="text-3xl font-semibold tracking-[-0.045em] text-slate-950">
+            <h2
+              id="change-alerts-modal-title"
+              className="text-3xl font-semibold tracking-[-0.045em] text-slate-950"
+            >
               Change alerts
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">

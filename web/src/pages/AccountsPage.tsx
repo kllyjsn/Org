@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -30,6 +30,8 @@ import FeedbackModal from '../components/FeedbackModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
 import SellerProfileModal from '../components/SellerProfileModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
+import { useFocusTrap } from '../lib/useFocusTrap';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 function MembersModal({
   workspaceId,
@@ -43,6 +45,8 @@ function MembersModal({
   >([]);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   const refresh = useCallback(
     () => api.listMembers(workspaceId).then((r) => setMembers(r.members)),
@@ -66,9 +70,17 @@ function MembersModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="members-modal-title"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+      >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Workspace members</h2>
+          <h2 id="members-modal-title" className="text-lg font-semibold">
+            Workspace members
+          </h2>
           <button            onClick={onClose}
             className="text-slate-400 hover:text-slate-600" aria-label="Close">
             ✕
@@ -92,6 +104,8 @@ function MembersModal({
             className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500"
             placeholder="teammate@company.com"
             type="email"
+            aria-label="Teammate email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -103,7 +117,11 @@ function MembersModal({
             Add
           </button>
         </form>
-        {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
+        {error && (
+          <p role="alert" className="mt-2 text-xs text-rose-600">
+            {error}
+          </p>
+        )}
         <p className="mt-3 text-xs text-slate-400">
           Teammates must register an account before you can add them.
         </p>
@@ -121,6 +139,8 @@ function PricingModal({
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   const upgrade = async () => {
     setLoading(true);
@@ -136,13 +156,22 @@ function PricingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pricing-modal-title"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+      >
         <div className="mb-5 flex items-start justify-between">
           <div>
             <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600">
               <Zap size={13} /> TopDown Pro
             </div>
-            <h2 className="text-2xl font-bold text-slate-900">
+            <h2
+              id="pricing-modal-title"
+              className="text-2xl font-bold text-slate-900"
+            >
               Unlimited account maps
             </h2>
           </div>
@@ -169,7 +198,9 @@ function PricingModal({
           {loading ? 'Opening secure checkout…' : 'Upgrade to Pro'}
         </button>
         {error && (
-          <p className="mt-3 text-center text-xs text-rose-600">{error}</p>
+          <p role="alert" className="mt-3 text-center text-xs text-rose-600">
+            {error}
+          </p>
         )}
         <p className="mt-3 text-center text-xs text-slate-400">
           Your first two account maps remain free.
@@ -201,6 +232,7 @@ export default function AccountsPage() {
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const workspace = workspaces.find((item) => item.id === workspaceId);
+  useDocumentTitle('Accounts — TopDown');
   const totalPeople = maps.reduce((sum, map) => sum + map.peopleCount, 0);
   const initiativeCount = maps.reduce(
     (sum, map) => sum + map.initiativeCount,
@@ -384,6 +416,7 @@ export default function AccountsPage() {
             <form onSubmit={createWorkspace} className="flex gap-2">
               <input
                 autoFocus
+                aria-label="New workspace name"
                 className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
                 placeholder="Workspace name"
                 value={newWorkspaceName}
@@ -401,7 +434,11 @@ export default function AccountsPage() {
           <span className="hidden text-sm text-slate-500 lg:inline">{user?.name}</span>
         </header>
 
-      <main className="min-h-0 flex-1 overflow-auto px-3 py-6 sm:px-6 sm:py-10">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="min-h-0 flex-1 overflow-auto px-3 py-6 sm:px-6 sm:py-10"
+      >
         <div className="mx-auto max-w-7xl">
         <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>

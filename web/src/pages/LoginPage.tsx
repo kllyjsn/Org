@@ -17,6 +17,7 @@ import {
   Users,
 } from 'lucide-react';
 import { ApiError } from '../api';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { Wordmark } from '../components/Wordmark';
 import { useSession } from '../store';
 
@@ -69,6 +70,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  useDocumentTitle('Sign in — TopDown');
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: FormEvent) => {
@@ -127,7 +129,7 @@ export default function LoginPage() {
         </div>
       </header>
 
-      <main>
+      <main id="main" tabIndex={-1}>
         <section className="relative overflow-hidden border-b border-slate-200">
           <div className="pointer-events-none absolute -left-32 top-10 h-96 w-96 rounded-full bg-[#5b4cf0]/10 blur-3xl" />
           <div className="pointer-events-none absolute right-0 top-0 h-[34rem] w-[34rem] rounded-full bg-[#c9f04b]/10 blur-3xl" />
@@ -215,6 +217,9 @@ export default function LoginPage() {
                 {mode === 'register' && (
                   <>
                     <input
+                      id="login-name"
+                      aria-label="Your name"
+                      autoComplete="name"
                       className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
                       placeholder="Your name"
                       value={name}
@@ -222,6 +227,9 @@ export default function LoginPage() {
                       required
                     />
                     <input
+                      id="login-workspace"
+                      aria-label="Workspace name"
+                      autoComplete="organization"
                       className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
                       placeholder="Workspace name (e.g. North America sales)"
                       value={workspaceName}
@@ -230,6 +238,9 @@ export default function LoginPage() {
                   </>
                 )}
                 <input
+                  id="login-email"
+                  aria-label="Work email"
+                  autoComplete="email"
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
                   placeholder="Work email"
                   type="email"
@@ -238,6 +249,9 @@ export default function LoginPage() {
                   required
                 />
                 <input
+                  id="login-password"
+                  aria-label="Password"
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
                   placeholder={
                     mode === 'register' ? 'Password (8+ characters)' : 'Password'
@@ -248,7 +262,10 @@ export default function LoginPage() {
                   required
                 />
                 {error && (
-                  <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  <div
+                    role="alert"
+                    className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                  >
                     {error}
                   </div>
                 )}
