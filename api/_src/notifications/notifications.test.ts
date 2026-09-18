@@ -158,7 +158,9 @@ test('composePreMeetingBrief: attendee lines, committee line, attendee tasks fir
       attendees: [attendee],
     },
     {
-      stakeholders: {},
+      stakeholders: {
+        p9: { stance: 'advocate', nextStep: '', note: '' },
+      },
       tasks: [
         { id: 't1', title: 'Other task', done: false, source: 'generated', createdAt: '' },
         { id: 't2', title: 'Prep Jo', done: false, personId: 'p9', source: 'generated', createdAt: '' },
@@ -173,7 +175,7 @@ test('composePreMeetingBrief: attendee lines, committee line, attendee tasks fir
   assert.equal(notice.title, 'Brief: Kickoff in 30 min');
   assert.equal(
     notice.lines[0],
-    'Jo — VP Eng · Decision maker · stance met · last touch 8d ago'
+    'Jo — VP Eng · Decision maker · stance advocate · last touch 8d ago'
   );
   assert.equal(notice.lines[1], 'Committee: 1/3 key roles covered · single-threaded');
   assert.equal(notice.lines[2], '• Prep Jo'); // attendee task preferred

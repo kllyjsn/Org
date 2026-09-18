@@ -110,7 +110,7 @@ export function composePreMeetingBrief(
   );
   const lines = meeting.attendees.map(
     (person) =>
-      `${person.name} — ${person.title} · ${roleLabel(person.role)} · stance ${person.metWith ? 'met' : 'unknown'} · last touch ${touchAgo(person.lastTouchAt, nowMs)}`
+      `${person.name} — ${person.title} · ${roleLabel(person.role)} · stance ${strategy?.stakeholders?.[person.id]?.stance ?? 'unknown'} · last touch ${touchAgo(person.lastTouchAt, nowMs)}`
   );
   lines.push(
     `Committee: ${coverage.coveredCount}/3 key roles covered${coverage.singleThreaded ? ' · single-threaded' : ''}`
