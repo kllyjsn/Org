@@ -29,6 +29,14 @@ import {
   sanitizeSellerProfile,
 } from './seller-profile.js';
 import { activeProvider } from './llm.js';
+import {
+  MAX_PERSONAS,
+  ensureDefaultPersonas,
+  replacePersonas,
+  sanitizePersonas,
+  suggestPersonas,
+} from './personas.js';
+import { computeCoverage } from './coverage.js';
 import { stripePost, verifyStripeSignature } from './billing.js';
 import { sendEmail } from './email.js';
 import {
@@ -1116,6 +1124,60 @@ app.patch('/api/workspaces/:id/seller-profile', requireAuth, async (c) => {
   return c.json({ profile });
 });
 
+// ---------- personas (F3) ----------
+
+async function workspaceSellerProfile(
+  workspaceId: string
+): Promise<SellerProfile | null> {
+  const rows = await query<{ seller_profile: SellerProfile | null }>(
+    'SELECT seller_profile FROM workspaces WHERE id = $1',
+    [workspaceId]
+  );
+  return rows[0]?.seller_profile ?? null;
+}
+
+app.get('/api/workspaces/:id/personas', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!(await workspaceRoleFor(user, workspaceId))) return bad(c, 'not found', 404);
+  return c.json({
+    personas: await ensureDefaultPersonas(
+      workspaceId,
+      await workspaceSellerProfile(workspaceId)
+    ),
+  });
+});
+
+app.put('/api/workspaces/:id/personas', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!canWrite(await workspaceRoleFor(user, workspaceId))) {
+    return bad(c, 'insufficient role', 403);
+  }
+  const body = await c.req.json().catch(() => null);
+  if (!Array.isArray(body?.personas)) return bad(c, 'personas array required');
+  const personas = sanitizePersonas(body.personas);
+  if (personas.length !== body.personas.length) {
+    return bad(c, 'each persona needs a name, valid functions and a seniority');
+  }
+  if (personas.length > MAX_PERSONAS) {
+    return bad(c, `at most ${MAX_PERSONAS} personas`);
+  }
+  return c.json({ personas: await replacePersonas(workspaceId, personas) });
+});
+
+app.post('/api/workspaces/:id/personas/suggest', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!canWrite(await workspaceRoleFor(user, workspaceId))) {
+    return bad(c, 'insufficient role', 403);
+  }
+  const suggestion = await suggestPersonas(
+    await workspaceSellerProfile(workspaceId)
+  );
+  return c.json(suggestion);
+});
+
 // ---------- research (T0) ----------
 
 app.post('/api/research', requireAuth, async (c) => {
@@ -1467,6 +1529,18 @@ app.get('/api/maps/:id', requireAuth, async (c) => {
   const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
   return c.json({ map: { ...map, role } });
+});
+
+app.get('/api/maps/:id/coverage', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const personas = await ensureDefaultPersonas(
+    map.workspace_id,
+    await workspaceSellerProfile(map.workspace_id)
+  );
+  const state = map.state as MapState;
+  return c.json(computeCoverage(personas, state.people ?? []));
 });
 
 app.post('/api/maps/:id/ask', requireAuth, async (c) => {
