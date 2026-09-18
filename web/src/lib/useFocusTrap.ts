@@ -8,8 +8,12 @@ const FOCUSABLE =
  * Keeps Tab focus cycling inside a mounted dialog and focuses its first
  * control on open. Attach the returned ref to the dialog container.
  */
-export function useFocusTrap(ref: RefObject<HTMLElement | null>) {
+export function useFocusTrap(
+  ref: RefObject<HTMLElement | null>,
+  enabled = true
+) {
   useEffect(() => {
+    if (!enabled) return;
     const el = ref.current;
     if (!el) return;
     const previouslyFocused = document.activeElement;
@@ -45,5 +49,5 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>) {
         previouslyFocused.focus();
       }
     };
-  }, [ref]);
+  }, [ref, enabled]);
 }

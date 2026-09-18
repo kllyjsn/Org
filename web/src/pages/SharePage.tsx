@@ -348,8 +348,7 @@ function ShareInner() {
           <MiniMap pannable zoomable className="!bg-slate-50" />
         </ReactFlow>
 
-        {(laneView.hiddenCount > 0
- || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) && (
+        {(laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) && (
           <div className="pointer-events-auto absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
             <button
               type="button"
