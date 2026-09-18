@@ -30,6 +30,7 @@ export function normalizeEmail(
 }
 
 export type IdentityKeys = {
+  crm: string | null;
   linkedin: string | null;
   email: string | null;
   name: string;
@@ -39,8 +40,10 @@ export function personIdentity(person: {
   name: string;
   email?: string | null;
   linkedin?: string | null;
+  crm?: { provider: string; contactId: string } | null;
 }): IdentityKeys {
   return {
+    crm: person.crm ? `${person.crm.provider}:${person.crm.contactId}` : null,
     linkedin: normalizeLinkedin(person.linkedin),
     email: normalizeEmail(person.email),
     name: canonicalPersonName(person.name ?? ''),
@@ -51,10 +54,16 @@ type Identifiable = {
   name: string;
   email?: string | null;
   linkedin?: string | null;
+  crm?: { provider: string; contactId: string } | null;
 };
 
-/** Precedence order: LinkedIn is strongest, then email, then canonical name. */
-const KEY_ORDER: (keyof IdentityKeys)[] = ['linkedin', 'email', 'name'];
+/** Precedence: CRM id is strongest, then LinkedIn, email, canonical name. */
+const KEY_ORDER: (keyof IdentityKeys)[] = [
+  'crm',
+  'linkedin',
+  'email',
+  'name',
+];
 
 /**
  * Two identities match on `key` when the key is equal AND no stronger key

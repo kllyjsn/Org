@@ -46,6 +46,12 @@ export interface Person {
   /** Structured seniority from enrichment (CXO/VP/Director/…) when known. */
   jobLevel?: string | null;
   notes: string;
+  /** Linked CRM contact record. */
+  crm?: {
+    provider: 'hubspot' | 'salesforce';
+    contactId: string;
+    url: string | null;
+  };
   /** Marked when the user has met this person (meeting import / panel). */
   metWith?: boolean;
   /** Latest calendar/email touch from a connected integration. */
@@ -81,6 +87,20 @@ export interface MapMeta {
   nextRefreshAt?: string | null;
   initiatives?: StrategicInitiative[];
   strategy?: AccountStrategyPlan;
+  /** CRM link: which account/opportunity this map tracks. */
+  crm?: {
+    provider: 'hubspot' | 'salesforce';
+    accountId: string;
+    accountName: string;
+    opportunityId: string | null;
+    opportunityName: string | null;
+    stage: string | null;
+    amount: number | null;
+    closeDate: string | null;
+    linkedAt: string;
+    lastPulledAt: string | null;
+    lastPushedAt: string | null;
+  };
 }
 
 export type Stance = 'advocate' | 'neutral' | 'skeptic' | 'unknown';
@@ -479,11 +499,12 @@ export interface ProductValueSummary {
   };
 }
 
-export type IntegrationProvider = 'google' | 'microsoft';
+export type IntegrationProvider = 'google' | 'microsoft' | 'hubspot' | 'salesforce';
 
 export interface IntegrationStatus {
   id: IntegrationProvider;
   label: string;
+  kind: 'calendar' | 'crm';
   configured: boolean;
   connection: {
     id: string;
@@ -572,4 +593,47 @@ export interface CallTranscript {
   appliedAt: string | null;
   createdAt: string;
   transcriptChars: number;
+}
+
+export type CrmProvider = 'hubspot' | 'salesforce';
+
+export interface CrmAccount {
+  id: string;
+  name: string;
+  domain: string | null;
+  url: string | null;
+}
+
+export interface CrmOpportunity {
+  id: string;
+  name: string;
+  stage: string | null;
+  amount: number | null;
+  closeDate: string | null;
+  url: string | null;
+}
+
+export interface CrmConnection {
+  id: string;
+  provider: CrmProvider;
+  label: string;
+  configured: boolean;
+}
+
+export interface CrmStatus {
+  crm: MapState['meta']['crm'] | null;
+  connections: CrmConnection[];
+}
+
+export interface CrmPullResult {
+  state: MapState;
+  matched: number;
+  created: number;
+  updated: number;
+}
+
+export interface CrmPushResult {
+  state: MapState;
+  pushed: number;
+  failed: { personId: string; error: string }[];
 }

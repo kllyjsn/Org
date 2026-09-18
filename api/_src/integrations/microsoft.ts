@@ -153,6 +153,7 @@ async function listThreads(
 
 export const microsoftAdapter: ProviderAdapter = {
   id: 'microsoft',
+  kind: 'calendar',
   label: 'Microsoft',
   configured,
   authUrl(state: string, redirectUri: string): string {

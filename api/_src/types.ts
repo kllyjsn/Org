@@ -44,6 +44,12 @@ export interface Person {
   conflictingTitles?: string[];
   researchStatus?: 'verified' | 'possibly_stale' | 'conflicting';
   notes: string;
+  /** Linked CRM contact record. */
+  crm?: {
+    provider: 'hubspot' | 'salesforce';
+    contactId: string;
+    url: string | null;
+  };
   /** Marked when the user has met this person (meeting import / panel). */
   metWith?: boolean;
   /** Latest calendar/email touch from a connected integration. */
@@ -76,6 +82,20 @@ export interface MapMeta {
   nextRefreshAt?: string | null;
   initiatives?: StrategicInitiative[];
   strategy?: AccountStrategyPlan;
+  /** CRM link: which account/opportunity this map tracks. */
+  crm?: {
+    provider: 'hubspot' | 'salesforce';
+    accountId: string;
+    accountName: string;
+    opportunityId: string | null;
+    opportunityName: string | null;
+    stage: string | null;
+    amount: number | null;
+    closeDate: string | null;
+    linkedAt: string;
+    lastPulledAt: string | null;
+    lastPushedAt: string | null;
+  };
 }
 
 export type Stance = 'advocate' | 'neutral' | 'skeptic' | 'unknown';

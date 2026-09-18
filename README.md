@@ -54,6 +54,14 @@ roll-up are delivered via Slack webhooks and (with `RESEND_API_KEY`) email.
 Slack webhook URLs are encrypted at rest with `INTEGRATION_ENCRYPTION_KEY`;
 a `/api/cron/notify` tick (every 15 min) queues briefs and flushes the outbox.
 
+## CRM sync
+
+Link a map to a HubSpot or Salesforce account (optionally an opportunity)
+to pull contacts in as stakeholders and push buying roles + stance back.
+Salesforce pushes `TopDown_Buying_Role__c`/`TopDown_Stance__c` Contact
+fields only when they exist (create them optionally; the push works
+regardless via OpportunityContactRole).
+
 ## Call transcripts
 
 Paste, upload (.txt/.vtt/.srt), or import Gong calls to infer stakeholder

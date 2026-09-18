@@ -50,3 +50,45 @@ test('matchPerson falls back to email, then canonical name with alias', () => {
     'Robert Komin'
   );
 });
+
+test('matchPerson: crm key outranks linkedin — same crm id matches despite new name', () => {
+  const people = [
+    {
+      name: 'Old Name',
+      linkedin: 'https://linkedin.com/in/other',
+      crm: { provider: 'hubspot', contactId: 'c1' },
+    },
+  ];
+  assert.equal(
+    matchPerson(
+      {
+        name: 'Totally Different',
+        linkedin: 'https://linkedin.com/in/different',
+        crm: { provider: 'hubspot', contactId: 'c1' },
+      },
+      people
+    ),
+    people[0]
+  );
+});
+
+test('matchPerson: different crm id does NOT match even with same linkedin', () => {
+  const people = [
+    {
+      name: 'Jane Doe',
+      linkedin: 'https://linkedin.com/in/jane',
+      crm: { provider: 'hubspot', contactId: 'c1' },
+    },
+  ];
+  assert.equal(
+    matchPerson(
+      {
+        name: 'Jane Doe',
+        linkedin: 'https://linkedin.com/in/jane',
+        crm: { provider: 'hubspot', contactId: 'c2' },
+      },
+      people
+    ),
+    null
+  );
+});

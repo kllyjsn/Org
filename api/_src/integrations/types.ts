@@ -19,16 +19,20 @@ export interface TokenExchange {
   expiresAt: string | null;
   scopes: string | null;
   accountEmail: string | null;
+  /** Salesforce (and similar) return an org-specific API base URL. */
+  instanceUrl?: string | null;
 }
 
 export interface TokenRefresh {
   accessToken: string;
   expiresAt: string | null;
+  instanceUrl?: string | null;
 }
 
 export interface ProviderAdapter {
   id: 'google' | 'microsoft';
   label: string;
+  kind?: 'calendar' | 'crm';
   configured(): boolean;
   authUrl(state: string, redirectUri: string): string;
   exchangeCode(code: string, redirectUri: string): Promise<TokenExchange>;

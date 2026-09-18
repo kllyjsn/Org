@@ -16,6 +16,8 @@ export type ProductEventName =
   | 'transcript_analyzed'
   | 'transcript_applied'
   | 'share_created'
+  | 'crm_pulled'
+  | 'crm_pushed'
   | 'live_opportunity_set';
 
 type EventProperties = Record<string, string | number | boolean | null>;
