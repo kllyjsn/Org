@@ -262,12 +262,13 @@ async function workspaceHasAudience(workspaceId: string): Promise<boolean> {
   return rows[0]?.has === true;
 }
 
-/** Briefs for meetings starting within 45 minutes. */
+/** Briefs for meetings starting within BRIEF_LOOKAHEAD_MINUTES (default 45). */
 export async function enqueuePreMeetingBriefs(
   nowMs = Date.now()
 ): Promise<{ enqueued: number }> {
   const windowStart = new Date(nowMs).toISOString();
-  const windowEnd = new Date(nowMs + 45 * 60_000).toISOString();
+  const windowMinutes = Number(process.env.BRIEF_LOOKAHEAD_MINUTES) || 45;
+  const windowEnd = new Date(nowMs + windowMinutes * 60_000).toISOString();
   const meetings = await query<{
     external_id: string;
     occurred_at: string;
