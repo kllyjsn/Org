@@ -1,4 +1,5 @@
-import type { MapState, Person } from './types.js';
+import { pairPeople } from './identity.js';
+import type { MapState } from './types.js';
 
 export interface MapChangeAlert {
   id: string;
@@ -20,31 +21,30 @@ function normalized(value: string | null | undefined) {
   return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function peopleByName(people: Person[]) {
-  return new Map(people.map((person) => [normalized(person.name), person]));
-}
-
 export function compareMapStates(
   baseline: MapState,
   current: MapState
 ): MapChangeAlert[] {
-  const previousPeople = peopleByName(baseline.people ?? []);
-  const currentPeople = peopleByName(current.people ?? []);
+  // Identity-key pairing: a rename with the same LinkedIn/email is the same
+  // person, not an add+remove pair.
+  const { pairs, removed, added } = pairPeople(
+    baseline.people ?? [],
+    current.people ?? []
+  );
   const changes: MapChangeAlert[] = [];
 
-  for (const [name, person] of currentPeople) {
-    const previous = previousPeople.get(name);
-    if (!previous) {
-      changes.push({
-        id: `person-added-${person.id}`,
-        type: 'person_added',
-        title: `${person.name} was added`,
-        detail: person.title || person.team || person.department || 'New stakeholder',
-        personId: person.id,
-        sources: person.sources ?? [],
-      });
-      continue;
-    }
+  for (const person of added) {
+    changes.push({
+      id: `person-added-${person.id}`,
+      type: 'person_added',
+      title: `${person.name} was added`,
+      detail: person.title || person.team || person.department || 'New stakeholder',
+      personId: person.id,
+      sources: person.sources ?? [],
+    });
+  }
+
+  for (const [previous, person] of pairs) {
     if (normalized(previous.title) !== normalized(person.title)) {
       changes.push({
         id: `title-${person.id}`,
@@ -81,16 +81,14 @@ export function compareMapStates(
     }
   }
 
-  for (const [name, person] of previousPeople) {
-    if (!currentPeople.has(name)) {
-      changes.push({
-        id: `person-removed-${person.id}`,
-        type: 'person_removed',
-        title: `${person.name} was removed`,
-        detail: person.title || person.team || person.department || 'Stakeholder removed',
-        sources: person.sources ?? [],
-      });
-    }
+  for (const person of removed) {
+    changes.push({
+      id: `person-removed-${person.id}`,
+      type: 'person_removed',
+      title: `${person.name} was removed`,
+      detail: person.title || person.team || person.department || 'Stakeholder removed',
+      sources: person.sources ?? [],
+    });
   }
 
   const previousInitiatives = new Map(
