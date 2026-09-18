@@ -200,6 +200,7 @@ export default function AccountsPage() {
   const [showFeedbackInbox, setShowFeedbackInbox] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const [pageError, setPageError] = useState('');
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const totalPeople = maps.reduce((sum, map) => sum + map.peopleCount, 0);
   const initiativeCount = maps.reduce(
@@ -265,28 +266,49 @@ export default function AccountsPage() {
   const createWorkspace = async (e: FormEvent) => {
     e.preventDefault();
     if (!newWorkspaceName.trim()) return;
-    const { workspace } = await api.createWorkspace(newWorkspaceName.trim());
-    await refreshWorkspaces();
-    selectWorkspace(workspace.id);
-    setNewWorkspaceName('');
-    setCreatingWorkspace(false);
+    setPageError('');
+    try {
+      const { workspace } = await api.createWorkspace(newWorkspaceName.trim());
+      await refreshWorkspaces();
+      selectWorkspace(workspace.id);
+      setNewWorkspaceName('');
+      setCreatingWorkspace(false);
+    } catch (err) {
+      setPageError(
+        err instanceof ApiError ? err.message : 'Could not create the workspace.'
+      );
+    }
   };
 
   const deleteMap = async (id: string) => {
     if (!window.confirm('Delete this map? Share links to it will stop working.'))
       return;
-    await api.deleteMap(id);
-    refreshMaps();
+    setPageError('');
+    try {
+      await api.deleteMap(id);
+      refreshMaps();
+    } catch (err) {
+      setPageError(
+        err instanceof ApiError ? err.message : 'Could not delete the map.'
+      );
+    }
   };
 
   const toggleLiveOpportunity = async (map: MapListItem) => {
     const next = !map.is_live_opportunity;
-    await api.setLiveOpportunity(map.id, next);
-    setMaps((items) =>
-      items.map((item) =>
-        item.id === map.id ? { ...item, is_live_opportunity: next } : item
-      )
-    );
+    setPageError('');
+    try {
+      await api.setLiveOpportunity(map.id, next);
+      setMaps((items) =>
+        items.map((item) =>
+          item.id === map.id ? { ...item, is_live_opportunity: next } : item
+        )
+      );
+    } catch (err) {
+      setPageError(
+        err instanceof ApiError ? err.message : 'Could not update the map.'
+      );
+    }
   };
 
   return (
@@ -403,6 +425,11 @@ export default function AccountsPage() {
 
       <main className="min-h-0 flex-1 overflow-auto px-3 py-6 sm:px-6 sm:py-10">
         <div className="mx-auto max-w-7xl">
+        {pageError && (
+          <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {pageError}
+          </p>
+        )}
         <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">

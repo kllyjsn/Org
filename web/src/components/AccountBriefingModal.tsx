@@ -59,7 +59,7 @@ function InsightSection({
                 <div className="ml-[76px] mt-1.5 flex flex-wrap gap-1.5">
                   {item.evidence.slice(0, 2).map((source, sourceIndex) => (
                     <a
-                      key={`${source}-${index}`}
+                      key={`${source}-${sourceIndex}`}
                       href={source}
                       target="_blank"
                       rel="noreferrer"
@@ -394,7 +394,7 @@ export default function AccountBriefingModal({
                           {action.evidence.slice(0, 2).map((source, sourceIndex) =>
                             /^https?:\/\//.test(source) ? (
                               <a
-                                key={`${source}-${index}`}
+                                key={`${source}-${sourceIndex}`}
                                 href={source}
                                 target="_blank"
                                 rel="noreferrer"
