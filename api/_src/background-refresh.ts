@@ -130,6 +130,7 @@ export function mergeBackgroundResearch(
     meta: {
       ...state.meta,
       companyName: result.companyName ?? state.meta?.companyName,
+      companyProfile: result.companyProfile ?? state.meta?.companyProfile ?? null,
       researchedAt: now(),
       provider: result.provider,
       nextRefreshAt: nextRefreshAt(state.meta?.refreshCadence),

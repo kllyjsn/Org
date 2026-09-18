@@ -2568,6 +2568,7 @@ function MapInner() {
               Date.now() +
                 (meta.refreshCadence === 'monthly' ? 30 : 7) * 86_400_000
             ).toISOString(),
+            companyProfile: result.companyProfile ?? meta.companyProfile ?? null,
             initiatives: (
               result.initiatives.length > 0
                 ? result.initiatives

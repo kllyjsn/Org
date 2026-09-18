@@ -5,6 +5,7 @@ import type {
   MapState,
   Person,
   ResearchSource,
+  StakeholderPlanEntry,
   StrategicInitiative,
 } from './types.js';
 
@@ -86,6 +87,22 @@ const contactHeaders = [
   'Notes',
 ];
 
+const peopleHeaders = [
+  'Account',
+  'Name',
+  'Title',
+  'Function (Department)',
+  'Business Unit / Team',
+  'Product Line',
+  'Level',
+  'Buying Role',
+  'Engagement',
+  'Confidence',
+  'LinkedIn',
+  'Email',
+  'Notes',
+];
+
 const headingFill = 'FFA4C2F4';
 const contactsFill = 'FFC9DAF8';
 
@@ -93,8 +110,49 @@ function safeText(value: string): string {
   return /^[=+\-@]/.test(value) ? `'${value}` : value;
 }
 
+function optionalText(value: string | null | undefined): string | null {
+  return value ? safeText(value) : null;
+}
+
 function normalized(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
+}
+
+function accountDisplayName(account: ExportAccount): string {
+  const profile = account.state.meta?.companyProfile ?? null;
+  return account.companyName ?? profile?.companyName ?? account.name;
+}
+
+function engagementLabel(
+  person: Person,
+  stakeholder?: StakeholderPlanEntry
+): string {
+  return person.role === 'champion'
+    ? 'Champ'
+    : person.role === 'economic_buyer'
+      ? 'EB'
+      : person.role === 'blocker'
+        ? 'Blocker'
+        : stakeholder?.stance === 'advocate'
+          ? 'Coach'
+          : person.metWith
+            ? 'Met & Unknown'
+            : 'Not Met';
+}
+
+function humanizeBuyingRole(role: Person['role']): string {
+  return role
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function sortedPeople(account: ExportAccount): Person[] {
+  return [...(account.state.people ?? [])].sort(
+    (a, b) =>
+      normalized(a.department).localeCompare(normalized(b.department)) ||
+      a.name.localeCompare(b.name)
+  );
 }
 
 function sourceDetailsFor(
@@ -174,35 +232,42 @@ function addTerritorySheet(
     const rowNumber = index + 2;
     const initiatives = account.state.meta?.initiatives ?? [];
     const people = account.state.people ?? [];
+    const profile = account.state.meta?.companyProfile ?? null;
+    const annualReport = (profile?.annualReportUrl ?? filingUrl(account)) || null;
+    const description = profile?.description ?? account.briefing?.summary ?? '';
     const row = sheet.addRow([
-      safeText(account.companyName ?? account.name),
+      safeText(accountDisplayName(account)),
       '',
       safeText(account.domain),
       account.isLiveOpportunity ? 'Live Opportunity' : 'Prospect',
       '',
       '',
       '',
-      '',
+      profile?.engineerCount ?? null,
       '',
       { formula: `I${rowNumber}*425` },
       '',
-      '',
-      '',
+      profile?.employeeCount ?? null,
+      profile?.headquarters ? safeText(profile.headquarters) : null,
       safeText(
         `${people.length} stakeholders mapped · ${initiatives.length} initiatives`
       ),
+      profile?.funding ? safeText(profile.funding) : null,
+      profile?.annualRevenueUsd ??
+        (profile?.annualRevenue ? safeText(profile.annualRevenue) : null),
+      profile?.industry ? safeText(profile.industry) : null,
+      profile?.fiscalYearEndMonth ?? null,
+      null,
+      description ? safeText(description) : null,
       '',
-      '',
-      '',
-      '',
-      '',
-      safeText(account.briefing?.summary ?? ''),
-      '',
-      safeText(filingUrl(account)),
+      annualReport ? safeText(annualReport) : null,
       '',
       '',
       '',
     ]);
+    if (profile?.linkedinUrl) {
+      setHyperlink(row.getCell(19), 'Link', profile.linkedinUrl);
+    }
     row.getCell(10).numFmt = '"$"#,##0';
   });
 }
@@ -212,7 +277,10 @@ function addAccountSheet(
   account: ExportAccount,
   taken: Set<string>
 ): void {
-  const sheet = workbook.addWorksheet(accountSheetName(account.companyName ?? account.name, taken));
+  const profile = account.state.meta?.companyProfile ?? null;
+  const sheet = workbook.addWorksheet(
+    accountSheetName(accountDisplayName(account), taken)
+  );
   const widths = [19.25, 26.63, 23.75, 23.38, 21.5, 29.88, 20, 13.25];
   for (const [index, width] of widths.entries()) {
     sheet.getColumn(index < 7 ? index + 1 : 9).width = width;
@@ -223,11 +291,32 @@ function addAccountSheet(
     sheet.getCell(rowNumber, 1).font = { bold: true };
     sheet.mergeCells(`B${rowNumber}:H${rowNumber}`);
   }
-  sheet.getCell(1, 2).value = safeText(account.companyName ?? account.name);
+  sheet.getCell(1, 2).value = safeText(
+    account.companyName ?? profile?.companyName ?? account.name
+  );
+  if (profile?.annualRevenue) {
+    sheet.getCell(2, 2).value = safeText(profile.annualRevenue);
+  }
+  if (profile?.headquarters) {
+    sheet.getCell(3, 2).value = safeText(profile.headquarters);
+  }
   sheet.getCell(4, 2).value = safeText(account.domain);
+  if (profile?.linkedinUrl) {
+    setHyperlink(sheet.getCell(5, 2), 'Link', profile.linkedinUrl);
+  }
   setHyperlink(sheet.getCell(6, 2), 'Link', account.mapUrl);
+  if (profile?.mission) {
+    sheet.getCell(7, 2).value = safeText(profile.mission);
+  }
+  if (profile?.fiscalYearEndMonth !== null && profile?.fiscalYearEndMonth !== undefined) {
+    sheet.getCell(8, 2).value = profile.fiscalYearEndMonth;
+  }
+  if (profile?.engineerCount !== null && profile?.engineerCount !== undefined) {
+    sheet.getCell(9, 2).value = profile.engineerCount;
+  }
   const filing = filingUrl(account);
-  if (filing) setHyperlink(sheet.getCell(11, 2), 'Link', filing);
+  const annualReport = profile?.annualReportUrl ?? filing;
+  if (annualReport) setHyperlink(sheet.getCell(11, 2), 'Link', annualReport);
 
   const headingRows = [12, 14, 16, 18, 20];
   for (const rowNumber of headingRows) {
@@ -342,25 +431,10 @@ function addAccountSheet(
   sheet.getCell(legendRow, 5).value =
     'Mole, Coach, Champ, EB, Blocker, Not Met, Met & Unknown';
 
-  const sortedPeople = [...people].sort(
-    (a, b) =>
-      normalized(a.department).localeCompare(normalized(b.department)) ||
-      a.name.localeCompare(b.name)
-  );
-  sortedPeople.forEach((person) => {
+  const accountPeople = sortedPeople(account);
+  accountPeople.forEach((person) => {
     const stakeholder = account.state.meta?.strategy?.stakeholders?.[person.id];
-    const engagement =
-      person.role === 'champion'
-        ? 'Champ'
-        : person.role === 'economic_buyer'
-          ? 'EB'
-          : person.role === 'blocker'
-            ? 'Blocker'
-            : stakeholder?.stance === 'advocate'
-              ? 'Coach'
-              : person.metWith
-                ? 'Met & Unknown'
-                : 'Not Met';
+    const engagement = engagementLabel(person, stakeholder);
     const notes = [
       person.notes,
       stakeholder?.nextStep && `Next: ${stakeholder.nextStep}`,
@@ -382,7 +456,7 @@ function addAccountSheet(
     if (person.linkedin) setHyperlink(row.getCell(6), 'Link', person.linkedin);
   });
 
-  const otherHeading = contactsHeaderRow + 2 + sortedPeople.length;
+  const otherHeading = contactsHeaderRow + 2 + accountPeople.length;
   sheet.mergeCells(`A${otherHeading}:I${otherHeading}`);
   sheet.getCell(otherHeading, 1).value = 'OTHER INFORMATION';
   styleHeading(sheet.getRow(otherHeading));
@@ -399,6 +473,56 @@ function addAccountSheet(
   };
 }
 
+function addPeopleSheet(
+  workbook: ExcelJS.Workbook,
+  accounts: ExportAccount[]
+): void {
+  const sheet = workbook.addWorksheet('People');
+  sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+  sheet.addRow(peopleHeaders);
+  sheet.getRow(1).font = { bold: true };
+  sheet.autoFilter = { from: 'A1', to: 'M1' };
+  [
+    22, 24, 28, 22, 24, 20, 14, 18, 18, 14, 36, 28, 42,
+  ].forEach((width, index) => {
+    sheet.getColumn(index + 1).width = width;
+  });
+
+  const rows = accounts.flatMap((account) => {
+    const accountName = accountDisplayName(account);
+    return (account.state.people ?? []).map((person) => ({
+      accountName,
+      person,
+      stakeholder: account.state.meta?.strategy?.stakeholders?.[person.id],
+    }));
+  });
+  rows.sort(
+    (a, b) =>
+      a.accountName.localeCompare(b.accountName) ||
+      normalized(a.person.department).localeCompare(normalized(b.person.department)) ||
+      a.person.name.localeCompare(b.person.name)
+  );
+
+  for (const { accountName, person, stakeholder } of rows) {
+    const row = sheet.addRow([
+      safeText(accountName),
+      safeText(person.name),
+      safeText(person.title),
+      optionalText(person.department),
+      optionalText(person.team),
+      optionalText(person.productLine),
+      optionalText(person.jobLevel),
+      safeText(humanizeBuyingRole(person.role)),
+      safeText(engagementLabel(person, stakeholder)),
+      safeText(person.confidence),
+      null,
+      optionalText(person.email),
+      optionalText(person.notes),
+    ]);
+    if (person.linkedin) setHyperlink(row.getCell(11), 'Link', person.linkedin);
+  }
+}
+
 export async function buildTerritoryWorkbook(
   accounts: ExportAccount[],
   opts: { includeTerritorySheet: boolean }
@@ -407,6 +531,7 @@ export async function buildTerritoryWorkbook(
   workbook.creator = 'TopDown';
   workbook.created = new Date();
   if (opts.includeTerritorySheet) addTerritorySheet(workbook, accounts);
+  addPeopleSheet(workbook, accounts);
   const taken = new Set<string>();
   for (const account of accounts) addAccountSheet(workbook, account, taken);
   return Buffer.from(await workbook.xlsx.writeBuffer()) as unknown as Buffer;

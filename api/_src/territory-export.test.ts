@@ -8,7 +8,7 @@ import {
   buildTerritoryWorkbook,
   type ExportAccount,
 } from './territory-export.js';
-import type { MapState, Person, ResearchSource } from './types.js';
+import type { CompanyProfile, MapState, Person, ResearchSource } from './types.js';
 
 const source: ResearchSource = {
   url: 'https://example.com/filing',
@@ -33,13 +33,34 @@ function person(overrides: Partial<Person>): Person {
     metWith: false,
     email: 'alex@example.com',
     linkedin: 'https://linkedin.com/in/alex',
+    team: 'Platform',
+    productLine: 'Developer Tools',
+    jobLevel: 'VP',
     x: 0,
     y: 0,
     ...overrides,
   };
 }
 
-function state(people: Person[]): MapState {
+const companyProfile: CompanyProfile = {
+  companyName: 'Example Profile',
+  description: 'A profile description',
+  mission: 'Make work better',
+  headquarters: '1 Main Street',
+  annualRevenue: '$2.0B',
+  annualRevenueUsd: 2_000_000_000,
+  employeeCount: 5000,
+  engineerCount: 1200,
+  industry: 'Software',
+  fiscalYearEndMonth: 12,
+  linkedinUrl: 'https://linkedin.com/company/example',
+  annualReportUrl: 'https://example.com/annual-report',
+  funding: 'Series C',
+  sources: ['https://example.com/profile'],
+  retrievedAt: new Date().toISOString(),
+};
+
+function state(people: Person[], profile: CompanyProfile | null = companyProfile): MapState {
   return {
     people,
     edges: [],
@@ -61,6 +82,7 @@ function state(people: Person[]): MapState {
           salesAngles: [],
         },
       ],
+      companyProfile: profile,
       strategy: {
         stakeholders: {
           'person-1': {
@@ -192,6 +214,7 @@ test('builds the territory and account plan workbook layout', async () => {
 
   assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), [
     'Territory',
+    'People',
     'Example, Inc.',
     'Second Account',
   ]);
@@ -201,8 +224,72 @@ test('builds the territory and account plan workbook layout', async () => {
   assert.equal(view.xSplit, 1);
   assert.equal(view.ySplit, 1);
   assert.deepEqual(territory.getCell('J2').value, { formula: 'I2*425' });
+  assert.equal(territory.getCell('H2').value, 1200);
+  assert.equal(territory.getCell('L2').value, 5000);
+  assert.equal(territory.getCell('M2').value, '1 Main Street');
+  assert.equal(territory.getCell('P2').value, 2_000_000_000);
+  assert.equal(territory.getCell('Q2').value, 'Software');
+  assert.equal(territory.getCell('R2').value, 12);
+  assert.deepEqual(territory.getCell('S2').value, {
+    text: 'Link',
+    hyperlink: 'https://linkedin.com/company/example',
+  });
+  assert.equal(territory.getCell('T2').value, 'A profile description');
+
+  const peopleSheet = workbook.getWorksheet('People')!;
+  [
+    'Account',
+    'Name',
+    'Title',
+    'Function (Department)',
+    'Business Unit / Team',
+    'Product Line',
+    'Level',
+    'Buying Role',
+    'Engagement',
+    'Confidence',
+    'LinkedIn',
+    'Email',
+    'Notes',
+  ].forEach((header, index) => {
+    assert.equal(peopleSheet.getCell(1, index + 1).value, header);
+  });
+  const peopleView = peopleSheet.views[0] as {
+    xSplit?: number;
+    ySplit?: number;
+  };
+  assert.equal(peopleView.xSplit, 1);
+  assert.equal(peopleView.ySplit, 1);
+  assert.equal(peopleSheet.autoFilter, 'A1:M1');
+  const alexPeopleRow = [2, 3, 4].find(
+    (row) => peopleSheet.getCell(row, 2).value === 'Alex Champion'
+  )!;
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 1).value, 'Example, Inc.');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 4).value, 'Engineering');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 5).value, 'Platform');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 6).value, 'Developer Tools');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 7).value, 'VP');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 8).value, 'Champion');
+  assert.equal(peopleSheet.getCell(alexPeopleRow, 9).value, 'Champ');
+  assert.deepEqual(peopleSheet.getCell(alexPeopleRow, 11).value, {
+    text: 'Link',
+    hyperlink: 'https://linkedin.com/in/alex',
+  });
 
   const accountSheet = workbook.getWorksheet('Example, Inc.')!;
+  assert.equal(accountSheet.getCell('B2').value, '$2.0B');
+  assert.equal(accountSheet.getCell('B3').value, '1 Main Street');
+  assert.deepEqual(accountSheet.getCell('B5').value, {
+    text: 'Link',
+    hyperlink: 'https://linkedin.com/company/example',
+  });
+  assert.equal(accountSheet.getCell('B7').value, 'Make work better');
+  assert.equal(accountSheet.getCell('B8').value, 12);
+  assert.equal(accountSheet.getCell('B9').value, 1200);
+  assert.deepEqual(accountSheet.getCell('B11').value, {
+    text: 'Link',
+    hyperlink: 'https://example.com/annual-report',
+  });
   assert.deepEqual(
     Array.from({ length: 11 }, (_, index) => accountSheet.getCell(index + 1, 1).value),
     [
@@ -240,6 +327,22 @@ test('builds the territory and account plan workbook layout', async () => {
   assert.equal(accountSheet.getCell(unmetRow, 5).value, 'Not Met');
   assert.equal(accountSheet.getCell(unmetRow, 9).value, "'=SUM(A1:A2)");
   assert.equal(typeof accountSheet.getCell(unmetRow, 9).value, 'string');
+
+  const secondSheet = workbook.getWorksheet('Second Account')!;
+  assert.equal(secondSheet.getCell('B2').value, null);
+  assert.equal(secondSheet.getCell('B3').value, null);
+  assert.equal(secondSheet.getCell('B5').value, null);
+  assert.equal(secondSheet.getCell('B7').value, null);
+  assert.equal(secondSheet.getCell('B8').value, null);
+  assert.equal(secondSheet.getCell('B9').value, null);
+  assert.equal(secondSheet.getCell('B11').value, null);
+  assert.equal(territory.getCell('L3').value, null);
+  assert.equal(territory.getCell('M3').value, null);
+  assert.equal(territory.getCell('P3').value, null);
+  assert.equal(territory.getCell('Q3').value, null);
+  assert.equal(territory.getCell('R3').value, null);
+  assert.equal(territory.getCell('S3').value, null);
+  assert.equal(territory.getCell('T3').value, null);
 });
 
 test('accountSheetName strips invalid characters, truncates, and deduplicates', () => {

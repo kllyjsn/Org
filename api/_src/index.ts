@@ -16,6 +16,7 @@ import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
 import { DOMAIN_RE, canonicalPersonName } from './research.js';
+import { exaCompanyProfile } from './exa.js';
 import { initialCheckpoint } from './research-pipeline.js';
 import {
   cancelJob,
@@ -82,6 +83,7 @@ import type {
   WorkspaceRow,
   SellerProfile,
   AccountStrategyPlan,
+  CompanyProfile,
 } from './types.js';
 import {
   classifyTitle,
@@ -173,13 +175,30 @@ async function exportAccountForMap(
       [map.id]
     ),
   ]);
+  let state = map.state as MapState;
+  let companyProfile = state.meta?.companyProfile ?? null;
+  if (!companyProfile && process.env.EXA_API_KEY) {
+    companyProfile = await exaCompanyProfile(map.domain);
+    if (companyProfile) {
+      state = {
+        ...state,
+        meta: { ...state.meta, companyProfile },
+      };
+      await query(
+        `UPDATE maps
+         SET state = jsonb_set(state, '{meta,companyProfile}', $2::jsonb)
+         WHERE id = $1`,
+        [map.id, JSON.stringify(companyProfile)]
+      );
+    }
+  }
   return {
     id: map.id,
     name: map.name,
     domain: map.domain,
     companyName: map.company_name,
     isLiveOpportunity: map.is_live_opportunity,
-    state: map.state as MapState,
+    state,
     strategy: strategyRows[0]?.insights ?? null,
     briefing: briefingRows[0]?.briefing ?? null,
     mapUrl: `${origin}/maps/${map.id}`,
@@ -471,6 +490,55 @@ function sanitizeStrategyPlan(
   };
 }
 
+function sanitizeCompanyProfile(input: unknown): CompanyProfile | null {
+  if (!input || typeof input !== 'object') return null;
+  const value = input as Record<string, unknown>;
+  const text = (key: string): string | null => {
+    const raw = value[key];
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    return trimmed || null;
+  };
+  const number = (key: string): number | null => {
+    const raw = value[key];
+    const parsed =
+      typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+  const url = (key: string): string | null => {
+    const raw = text(key);
+    return raw && /^https?:\/\//i.test(raw) ? raw : null;
+  };
+  const fiscalYearEndMonth = number('fiscalYearEndMonth');
+  return {
+    companyName: text('companyName'),
+    description: text('description'),
+    mission: text('mission'),
+    headquarters: text('headquarters'),
+    annualRevenue: text('annualRevenue'),
+    annualRevenueUsd: number('annualRevenueUsd'),
+    employeeCount: number('employeeCount'),
+    engineerCount: number('engineerCount'),
+    industry: text('industry'),
+    fiscalYearEndMonth:
+      fiscalYearEndMonth !== null &&
+      fiscalYearEndMonth >= 1 &&
+      fiscalYearEndMonth <= 12
+        ? fiscalYearEndMonth
+        : null,
+    linkedinUrl: url('linkedinUrl')?.replace(/\/+$/, '') ?? null,
+    annualReportUrl: url('annualReportUrl'),
+    funding: text('funding'),
+    sources: Array.isArray(value.sources)
+      ? value.sources.filter(
+          (item): item is string =>
+            typeof item === 'string' && /^https?:\/\//i.test(item)
+        )
+      : [],
+    retrievedAt: typeof value.retrievedAt === 'string' ? value.retrievedAt : '',
+  };
+}
+
 function sanitizeState(input: unknown): MapState {
   const s = (input ?? {}) as Partial<MapState>;
   // Normalize sub-fields too — stored states are read by every surface
@@ -553,6 +621,7 @@ function sanitizeState(input: unknown): MapState {
             : [],
         } as StrategicInitiative;
       }),
+      companyProfile: sanitizeCompanyProfile(meta.companyProfile),
       ...(strategy ? { strategy } : {}),
     },
   };

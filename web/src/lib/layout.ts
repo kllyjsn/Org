@@ -406,6 +406,7 @@ export function stateFromResearch(result: ResearchResult): MapState {
       refreshCadence: 'weekly',
       nextRefreshAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
       initiatives: result.initiatives,
+      companyProfile: result.companyProfile,
     },
   };
 }
