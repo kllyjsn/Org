@@ -110,6 +110,7 @@ import {
 import type {
   AccountAgentAction,
   AccountAgentMessage,
+  AccountStrategyPlan,
   BriefingAction,
   BuyingRole,
   MapEdge,
@@ -469,6 +470,17 @@ function MapInner() {
       saveTimer.current = window.setTimeout(() => persist(ns, es), 900);
     },
     [persist, readOnly]
+  );
+
+  const updateStrategyPlan = useCallback(
+    (plan: AccountStrategyPlan) => {
+      if (readOnly || !metaRef.current) return;
+      const nextMeta = { ...metaRef.current, strategy: plan };
+      metaRef.current = nextMeta;
+      setMeta(nextMeta);
+      markDirty(nodes, edges);
+    },
+    [edges, markDirty, nodes, readOnly]
   );
 
   const recordHistory = useCallback(() => {
@@ -2946,16 +2958,30 @@ function MapInner() {
       )}
       {showStrategy && meta && (
         <AccountStrategyModal
+          mapId={mapId ?? null}
+          readOnly={readOnly}
           companyName={meta.companyName}
           domain={domain}
           people={people}
           edges={edges.map(edgeToMap)}
           initiatives={meta.initiatives ?? []}
           sellerProfile={sellerProfile}
+          plan={meta.strategy ?? { stakeholders: {}, tasks: [], updatedAt: '' }}
+          onUpdatePlan={updateStrategyPlan}
           onClose={() => setShowStrategy(false)}
-          onFocusPerson={(person) => {
+          onFocusPeople={(matches) => {
             setShowStrategy(false);
-            focusPeople([person]);
+            focusPeople(matches);
+          }}
+          onOpenDeepResearch={(focus) => {
+            if (readOnly) return;
+            setShowStrategy(false);
+            setDeepResearchFocus(focus);
+            setShowDeepResearch(true);
+          }}
+          onOpenInitiatives={() => {
+            setShowStrategy(false);
+            setShowInitiatives(true);
           }}
         />
       )}
