@@ -13,6 +13,7 @@ import type {
   MapPresence,
   MapState,
   MapVersion,
+  Person,
   ProductEventName,
   ProductValueSummary,
   ResearchEvent,
@@ -291,6 +292,10 @@ export const api = {
     }),
   deleteMap: (id: string) =>
     req<{ ok: true }>(`/api/maps/${id}`, { method: 'DELETE' }),
+  verifyPerson: (mapId: string, personId: string) =>
+    req<{ person: Person }>(`/api/maps/${mapId}/people/${personId}/verify`, {
+      method: 'POST',
+    }),
   setLiveOpportunity: (id: string, live: boolean) =>
     req<{ live: boolean }>(`/api/maps/${id}/opportunity`, {
       method: 'POST',

@@ -12,6 +12,7 @@ export type ProductEventName =
   | 'account_agent_used'
   | 'deep_research_completed'
   | 'comment_added'
+  | 'person_verified'
   | 'share_created'
   | 'live_opportunity_set';
 

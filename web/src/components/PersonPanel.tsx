@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'framer-motion';
-import { Trash2 } from 'lucide-react';
+import { Loader2, ShieldCheck, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { ROLE_META } from '../lib/colors';
+import { evidenceScore } from '../lib/researchQuality';
 import type {
   BuyingRole,
   MapComment,
@@ -32,6 +33,7 @@ interface Props {
   onChange: (person: Person) => void;
   onSetManager: (personId: string, managerId: string | null) => void;
   onAddInfluence: (fromId: string, toId: string, label: string) => void;
+  onVerify?: (person: Person) => void;
   onDelete: (personId: string) => void;
   onClose: () => void;
   onNavigate?: (personId: string) => void;
@@ -47,6 +49,7 @@ export default function PersonPanel({
   onChange,
   onSetManager,
   onAddInfluence,
+  onVerify,
   onDelete,
   onClose,
   onNavigate,
@@ -57,6 +60,9 @@ export default function PersonPanel({
   const [commentError, setCommentError] = useState('');
   const [influenceTarget, setInfluenceTarget] = useState('');
   const [influenceLabel, setInfluenceLabel] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
+  const evidence = evidenceScore(person);
 
   const managerId =
     edges.find((e) => e.kind === 'reports' && e.to === person.id)?.from ?? '';
@@ -341,6 +347,53 @@ export default function PersonPanel({
                   : 's'}
               </span>
             </div>
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
+                  evidence.band === 'strong'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : evidence.band === 'moderate'
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'bg-rose-50 text-rose-700'
+                }`}
+              >
+                {evidence.band} · {evidence.score}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                {evidence.reasons.join(' · ')}
+              </span>
+            </div>
+            {!readOnly && onVerify && (
+              <div className="mb-2">
+                <button
+                  type="button"
+                  disabled={verifying}
+                  onClick={() => {
+                    if (verifying) return;
+                    setVerifying(true);
+                    setVerifyError('');
+                    api
+                      .verifyPerson(mapId, person.id)
+                      .then(({ person: verified }) => onVerify(verified))
+                      .catch(() =>
+                        setVerifyError('Verification failed — try again.')
+                      )
+                      .finally(() => setVerifying(false));
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+                >
+                  {verifying ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <ShieldCheck size={12} />
+                  )}
+                  {verifying ? 'Verifying…' : 'Verify against sources'}
+                </button>
+                {verifyError && (
+                  <p className="mt-1 text-[10px] text-rose-600">{verifyError}</p>
+                )}
+              </div>
+            )}
             <ul className="space-y-2">
               {sourceDetails.map((source, i) => (
                 <li

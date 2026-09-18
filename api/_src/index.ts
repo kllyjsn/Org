@@ -15,7 +15,12 @@ import type { StrategyInsights } from './strategy.js';
 import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
-import { DOMAIN_RE } from './research.js';
+import {
+  DOMAIN_RE,
+  deadSourceUrls,
+  verifyTitleClaims,
+} from './research.js';
+import { applyVerification, toResearchedPerson } from './verify-person.js';
 import { initialCheckpoint } from './research-pipeline.js';
 import {
   cancelJob,
@@ -1112,6 +1117,68 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
     });
   }
   return c.json({ ok: true, updatedAt: updated[0]?.updated_at ?? now() });
+});
+
+app.post('/api/maps/:id/people/:personId/verify', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const state = map.state as MapState;
+  const personId = param(c, 'personId');
+  const person = (state.people ?? []).find((p) => p.id === personId);
+  if (!person) return bad(c, 'person not found', 404);
+
+  try {
+    const deadline = Date.now() + 20_000;
+    const researched = toResearchedPerson(person);
+    const dead = await deadSourceUrls(
+      researched.sourceDetails.map((source) => source.url),
+      deadline
+    );
+    if (dead.size > 0) {
+      researched.sourceDetails = researched.sourceDetails.filter(
+        (source) => !dead.has(source.url)
+      );
+      researched.sources = researched.sources.filter((url) => !dead.has(url));
+      researched.source = researched.sources[0] ?? null;
+    }
+    await verifyTitleClaims([researched], deadline);
+    const verified = applyVerification(person, researched, dead);
+    const nextState: MapState = {
+      ...state,
+      people: state.people.map((p) => (p.id === personId ? verified : p)),
+    };
+
+    // Same persistence path as PATCH: snapshot the prior state, then write.
+    await query(
+      'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+      [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
+    );
+    await query(
+      'UPDATE maps SET state = $1, updated_at = $2 WHERE id = $3',
+      [JSON.stringify(nextState), now(), map.id]
+    );
+    await query(
+      `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
+       (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
+      [map.id]
+    );
+    await recordAnalytics({
+      eventName: 'person_verified',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: {
+        person_id: personId,
+        research_status: verified.researchStatus ?? 'unknown',
+      },
+    });
+    return c.json({ person: verified });
+  } catch (error) {
+    console.error('person verification failed', error);
+    return bad(c, 'verification failed — try again', 502);
+  }
 });
 
 app.post('/api/maps/:id/opportunity', requireAuth, async (c) => {
