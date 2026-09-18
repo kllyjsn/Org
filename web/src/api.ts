@@ -14,6 +14,8 @@ import type {
   MapVersion,
   ProductEventName,
   ProductValueSummary,
+  ResearchEvent,
+  ResearchJob,
   ResearchResult,
   SellerProfile,
   SessionUser,
@@ -129,13 +131,13 @@ export const api = {
       body: JSON.stringify({ workspaceId }),
     }),
 
-  research: (
+  startResearch: (
     domain: string,
     focus?: string,
     knownSources?: string[],
     workspaceId?: string
   ) =>
-    req<ResearchResult>('/api/research', {
+    req<{ jobId: string }>('/api/research', {
       method: 'POST',
       body: JSON.stringify({
         domain,
@@ -144,6 +146,115 @@ export const api = {
         ...(knownSources?.length ? { knownSources } : {}),
       }),
     }),
+  getResearchJob: (id: string) =>
+    req<{ job: ResearchJob }>(`/api/research/jobs/${id}`),
+  cancelResearch: (id: string) =>
+    req<{ job: ResearchJob }>(`/api/research/jobs/${id}/cancel`, {
+      method: 'POST',
+    }),
+  subscribeResearch: (
+    jobId: string,
+    handlers: {
+      onEvent: (event: ResearchEvent) => void;
+      onPartial: (result: ResearchResult) => void;
+      onDone: (result: ResearchResult) => void;
+      onError: (message: string) => void;
+    }
+  ) => {
+    let closed = false;
+    let source: EventSource | null = null;
+    let pollTimer: number | null = null;
+    let reconnectTimer: number | null = null;
+    let seenEvents = 0;
+    let seenPartialPeople = -1;
+    const stopPolling = () => {
+      if (pollTimer !== null) window.clearInterval(pollTimer);
+      pollTimer = null;
+    };
+    const terminal = (job: ResearchJob) =>
+      job.status === 'done' ||
+      job.status === 'failed' ||
+      job.status === 'cancelled';
+    const consumeJob = (job: ResearchJob) => {
+      for (const event of job.events.slice(seenEvents)) handlers.onEvent(event);
+      seenEvents = job.events.length;
+      if (job.partial && job.partial.people.length !== seenPartialPeople) {
+        seenPartialPeople = job.partial.people.length;
+        handlers.onPartial(job.partial);
+      }
+      if (job.status === 'done' && job.result) handlers.onDone(job.result);
+      if (job.status === 'failed') handlers.onError(job.error ?? 'research failed');
+      if (job.status === 'cancelled') handlers.onError('research cancelled');
+      if (terminal(job)) stopPolling();
+      return terminal(job);
+    };
+    const startPolling = () => {
+      if (closed || pollTimer !== null) return;
+      const poll = () => {
+        void api.getResearchJob(jobId)
+          .then(({ job }) => consumeJob(job))
+          .catch((error: unknown) => {
+            if (error instanceof Error) handlers.onError(error.message);
+          });
+      };
+      poll();
+      pollTimer = window.setInterval(poll, 2_000);
+    };
+    const connect = () => {
+      if (closed) return;
+      stopPolling();
+      source?.close();
+      source = new EventSource(`/api/research/jobs/${jobId}/stream`);
+      source.addEventListener('progress', (event) => {
+        handlers.onEvent(JSON.parse((event as MessageEvent).data) as ResearchEvent);
+      });
+      source.addEventListener('partial', (event) => {
+        handlers.onPartial(JSON.parse((event as MessageEvent).data) as ResearchResult);
+      });
+      source.addEventListener('done', (event) => {
+        handlers.onDone(JSON.parse((event as MessageEvent).data) as ResearchResult);
+        source?.close();
+      });
+      source.addEventListener('error', (event) => {
+        const data = (event as MessageEvent).data;
+        if (data) {
+          const payload = JSON.parse(data) as { error?: string };
+          handlers.onError(payload.error ?? 'research failed');
+        }
+        source?.close();
+      });
+      source.addEventListener('cancelled', () => {
+        handlers.onError('research cancelled');
+        source?.close();
+      });
+      source.addEventListener('continue', () => {
+        source?.close();
+        if (!closed) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, 1_000);
+        }
+      });
+      source.onerror = () => {
+        source?.close();
+        startPolling();
+        if (!closed && reconnectTimer === null) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, 1_000);
+        }
+      };
+    };
+    connect();
+    return () => {
+      closed = true;
+      source?.close();
+      stopPolling();
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+    };
+  },
 
   listMaps: (workspaceId: string) =>
     req<{ maps: MapListItem[] }>(`/api/maps?workspaceId=${workspaceId}`),
