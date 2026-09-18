@@ -13,6 +13,7 @@ import {
   LogOut,
   MessageSquare,
   Plus,
+  Puzzle,
   Radar,
   Sparkles,
   Target,
@@ -31,6 +32,7 @@ import FeedbackModal from '../components/FeedbackModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
 import SellerProfileModal from '../components/SellerProfileModal';
 import PersonasModal from '../components/PersonasModal';
+import ExtensionSetupModal from '../components/ExtensionSetupModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
@@ -518,6 +520,7 @@ export default function AccountsPage() {
   const [showPersonas, setShowPersonas] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showFeedbackInbox, setShowFeedbackInbox] = useState(false);
+  const [showExtension, setShowExtension] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [pageError, setPageError] = useState('');
@@ -562,6 +565,7 @@ export default function AccountsPage() {
       [showValue, () => setShowValue(false)],
       [showPricing, () => setShowPricing(false)],
       [showMembers, () => setShowMembers(false)],
+      [showExtension, () => setShowExtension(false)],
       [showCreate, () => setShowCreate(false)],
     ];
     const onEscape = (event: KeyboardEvent) => {
@@ -583,6 +587,7 @@ export default function AccountsPage() {
     showValue,
     showPricing,
     showMembers,
+    showExtension,
     showCreate,
   ]);
 
@@ -688,6 +693,11 @@ export default function AccountsPage() {
           </>
         )}
         <RailSeparator />
+        <RailButton
+          icon={<Puzzle size={16} />}
+          label="Chrome extension"
+          onClick={() => setShowExtension(true)}
+        />
         <RailButton
           icon={<MessageSquare size={16} />}
           label="Send feedback"
@@ -978,6 +988,9 @@ export default function AccountsPage() {
       )}
       {showPersonas && workspaceId && (
         <PersonasModal onClose={() => setShowPersonas(false)} />
+      )}
+      {showExtension && (
+        <ExtensionSetupModal onClose={() => setShowExtension(false)} />
       )}
       </div>
     </div>

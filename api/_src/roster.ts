@@ -3,7 +3,12 @@ import { canonicalPersonName } from './research.js';
 import { classifyTitle, SENIORITY_ORDER, seniorityFromLevel, type Fn } from './classify.js';
 import { now, query } from './db.js';
 
-export type RosterSource = 'sumble' | 'csv' | 'linkedin_url' | 'research';
+export type RosterSource =
+  | 'sumble'
+  | 'csv'
+  | 'linkedin_url'
+  | 'sales_navigator'
+  | 'research';
 export type RosterStatus = 'suggested' | 'added' | 'dismissed';
 export interface RosterPersonRow {
   id: string;
@@ -73,7 +78,9 @@ export function mergeRosterRows(
   const bulk = incoming.source === 'sumble';
   const source =
     existing &&
-    (existing.source === 'linkedin_url' || existing.source === 'csv') &&
+    (existing.source === 'linkedin_url' ||
+      existing.source === 'sales_navigator' ||
+      existing.source === 'csv') &&
     bulk
       ? incoming.source
       : existing?.source ?? incoming.source;
@@ -174,6 +181,21 @@ export async function upsertRosterPeople(
     }
   }
   return { upserted };
+}
+
+/** Person keys (of the given inputs) already present in the roster. */
+export async function knownPersonKeys(
+  workspaceId: string,
+  domainInput: string,
+  inputs: Pick<RosterUpsertInput, 'name' | 'linkedin'>[]
+): Promise<Set<string>> {
+  const keys = [...new Set(inputs.map((input) => personKeyFor(input.name, input.linkedin)))];
+  if (keys.length === 0) return new Set();
+  const rows = await query<{ person_key: string }>(
+    'SELECT person_key FROM roster_people WHERE workspace_id = $1 AND domain = $2 AND person_key = ANY($3::text[])',
+    [workspaceId, domainInput.trim().toLowerCase(), keys]
+  );
+  return new Set(rows.map((row) => row.person_key));
 }
 
 export async function listRoster(
