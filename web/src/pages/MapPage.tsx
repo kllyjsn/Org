@@ -954,6 +954,22 @@ function MapInner() {
     }
     return evidence;
   }, [ghostLaneLabelByGroupId, ghostPeople]);
+  const fitSuggestionRef = useRef<ChartSuggestion | null>(null);
+  useEffect(() => {
+    if (
+      !suggestion ||
+      fitSuggestionRef.current === suggestion ||
+      ghostNodes.length === 0
+    ) {
+      return;
+    }
+    fitSuggestionRef.current = suggestion;
+    const timer = window.setTimeout(
+      () => void rf.fitView({ nodes: ghostNodes, padding: 0.2, duration: 450 }),
+      80
+    );
+    return () => window.clearTimeout(timer);
+  }, [ghostNodes, rf, suggestion]);
 
   const toggleLane = useCallback((lane: string) => {
     setExpandedLanes((prev) => {
@@ -3383,7 +3399,7 @@ function MapInner() {
         )}
 
         {ghostPeople.length > 0 && (
-          <div className="pointer-events-auto absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/80 bg-white/95 px-3 py-1.5 text-xs text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl">
+          <div className={`pointer-events-auto absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/80 bg-white/95 px-3 py-1.5 text-xs text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl ${isMobile ? 'bottom-20' : 'top-16'}`}>
             <span className="font-semibold">{ghostPeople.length} suggested</span>
             <button
               type="button"
@@ -3450,7 +3466,7 @@ function MapInner() {
                 <>Collapse lanes</>
               ) : (
                 <>
-                  Showing {laneView.shownCount} of {people.length}
+                  Showing {laneView.shownCount} of {people.length + ghostPeople.length}
                   <span className="text-[#5b4cf0]">Show all</span>
                 </>
               )}
@@ -3647,7 +3663,7 @@ function MapInner() {
           </div>
         )}
 
-        {people.length === 0 && (
+        {people.length === 0 && ghostPeople.length === 0 && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
             <div className="rounded-2xl border border-slate-200 bg-white/90 px-6 py-4 text-center text-sm text-slate-500 shadow-sm">
               This map is empty.
