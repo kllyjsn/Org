@@ -345,7 +345,7 @@ export default function RosterView({
         ) : (
           <table className="w-full border-collapse">
             <caption className="sr-only">Stakeholder roster</caption>
-            <thead className="sticky top-0 z-10 bg-white">
+            <thead className="sticky top-0 z-10 bg-[#f6f7f2]/95 backdrop-blur">
               <tr className="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
                 <th
                   scope="col"
@@ -394,12 +394,12 @@ export default function RosterView({
                   <tr
                     key={person.id}
                     onClick={() => onSelect(person)}
-                    className={`h-[52px] cursor-pointer border-b border-slate-100 transition hover:bg-white ${
+                    className={`h-[52px] cursor-pointer transition hover:bg-white ${
                       selectedId === person.id ? 'bg-[#f5f4ff]' : ''
                     }`}
                   >
-                    <td className="max-w-[260px] truncate px-3 py-2 sm:px-4">
-                      <div className="flex items-center gap-2.5">
+                    <td className="h-[52px] max-w-[260px] overflow-hidden truncate border-b border-slate-100 px-3 py-0 align-middle sm:px-4">
+                      <div className="flex items-center gap-2.5 overflow-hidden leading-tight">
                         <div
                           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold text-white ${deptColor(
                             person.department
@@ -426,13 +426,13 @@ export default function RosterView({
                               />
                             )}
                           </div>
-                          <div className="truncate text-[11px] text-slate-500">
+                          <div className="truncate whitespace-nowrap text-[11px] leading-tight text-slate-500">
                             {person.title || '—'}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="hidden max-w-[180px] truncate px-3 py-2 md:table-cell">
+                    <td className="hidden h-[52px] max-w-[180px] truncate overflow-hidden border-b border-slate-100 px-3 py-0 align-middle md:table-cell">
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${deptColor(
@@ -442,17 +442,17 @@ export default function RosterView({
                         {lane}
                       </span>
                     </td>
-                    <td className="hidden max-w-[160px] truncate px-3 py-2 lg:table-cell">
+                    <td className="hidden h-[52px] max-w-[160px] truncate overflow-hidden border-b border-slate-100 px-3 py-0 align-middle lg:table-cell">
                       <span className="block truncate text-[12px] text-slate-600">
                         {person.team ?? person.productLine ?? '—'}
                       </span>
                     </td>
-                    <td className="hidden max-w-[180px] truncate px-3 py-2 xl:table-cell">
+                    <td className="hidden h-[52px] max-w-[180px] truncate overflow-hidden border-b border-slate-100 px-3 py-0 align-middle xl:table-cell">
                       <span className="block truncate text-[12px] text-slate-600">
                         {managerOf.get(person.id) ?? '—'}
                       </span>
                     </td>
-                    <td className="hidden max-w-[160px] truncate px-3 py-2 sm:table-cell">
+                    <td className="hidden h-[52px] max-w-[160px] truncate overflow-hidden border-b border-slate-100 px-3 py-0 align-middle sm:table-cell">
                       {role.label ? (
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${role.chip}`}
@@ -464,7 +464,7 @@ export default function RosterView({
                         <span className="text-[11px] text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="max-w-[64px] truncate px-3 py-2 text-center">
+                    <td className="h-[52px] max-w-[64px] truncate overflow-hidden border-b border-slate-100 px-3 py-0 text-center align-middle">
                       {person.metWith ? (
                         <span title="Met with" className="inline-flex">
                           <UserCheck size={15} className="text-emerald-600" />

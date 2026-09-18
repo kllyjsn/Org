@@ -775,7 +775,7 @@ function MapInner() {
       .map((node) => {
         const person = node.data.person;
         const ariaLabel = `${person.name}${person.title ? ', ' + person.title : ''}${person.department ? ', ' + person.department : ''}`;
-        const pos = view.posOverride.get(node.id);
+        const pos = node.dragging ? undefined : view.posOverride.get(node.id);
         const x = pos?.x ?? node.position.x;
         const y = pos?.y ?? node.position.y;
         const cached = visibleNodeCache.current.get(node);
