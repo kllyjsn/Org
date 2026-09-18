@@ -43,6 +43,56 @@ export interface LaneViewResult {
   tiles: LaneViewTile[];
   shownCount: number;
   hiddenCount: number;
+  laneOrder: string[];
+}
+
+interface LaneSortCacheEntry {
+  key: string;
+  members: LaneViewItem[];
+  order: string[];
+}
+
+const laneSortCache = new Map<string, LaneSortCacheEntry>();
+const LANE_CACHE_LIMIT = 64;
+
+export function clearLaneViewCache(): void {
+  laneSortCache.clear();
+}
+
+export function laneTopK(members: Person[], columns: number): number {
+  const cap = Math.max(1, columns) * 2;
+  const leaders = members.reduce(
+    (count, person) => count + (seniorityRank(person) <= 6 ? 1 : 0),
+    0
+  );
+  return Math.max(cap, leaders);
+}
+
+function sortedLaneMembers(lane: string, members: LaneViewItem[]): LaneViewItem[] {
+  const key = members.map((member) => member.id).join('|');
+  const cached = laneSortCache.get(lane);
+  if (cached?.key === key) {
+    const cachedById = new Map(cached.members.map((member) => [member.id, member]));
+    if (members.every((member) => cachedById.get(member.id)?.person === member.person)) {
+      const currentById = new Map(members.map((member) => [member.id, member]));
+      return cached.order.map((id) => currentById.get(id)!);
+    }
+  }
+  const sorted = [...members].sort(
+    (a, b) =>
+      seniorityRank(a.person) - seniorityRank(b.person) ||
+      a.person.name.localeCompare(b.person.name)
+  );
+  laneSortCache.delete(lane);
+  laneSortCache.set(lane, {
+    key,
+    members: sorted,
+    order: sorted.map((member) => member.id),
+  });
+  while (laneSortCache.size > LANE_CACHE_LIMIT) {
+    laneSortCache.delete(laneSortCache.keys().next().value!);
+  }
+  return sorted;
 }
 
 /**
@@ -64,13 +114,14 @@ export function computeLaneView(
   }
 ): LaneViewResult {
   const columns = Math.max(1, options.columns);
-  const cap = columns * 2;
   const laneOf = options.laneOf ?? personLane;
   const colGap = options.colGap ?? LANE_COL_GAP;
   const lanes = new Map<string, LaneViewItem[]>();
   for (const item of items) {
     const name = laneOf(item.person);
-    lanes.set(name, [...(lanes.get(name) ?? []), item]);
+    const members = lanes.get(name);
+    if (members) members.push(item);
+    else lanes.set(name, [item]);
   }
   const ordered = [...lanes.entries()]
     .map(([name, members]) => {
@@ -92,6 +143,7 @@ export function computeLaneView(
   const visibleIds = new Set<string>();
   const headers: LaneViewHeader[] = [];
   const tiles: LaneViewTile[] = [];
+  const laneOrder = ordered.map((lane) => lane.name);
   let offset = 0;
   let shown = 0;
   // Headers must never overlap: lanes whose members interleave in position
@@ -102,13 +154,10 @@ export function computeLaneView(
     const expanded = options.showAll
       ? !options.collapsedLanes.has(lane.name)
       : options.expandedLanes.has(lane.name);
-    const members = [...lane.members].sort(
-      (a, b) =>
-        seniorityRank(a.person) - seniorityRank(b.person) ||
-        a.person.name.localeCompare(b.person.name)
-    );
-    const collapsible = !expanded && members.length > cap + 2;
-    const shownCount = collapsible ? cap : members.length;
+    const members = sortedLaneMembers(lane.name, lane.members);
+    const topK = laneTopK(members.map((item) => item.person), columns);
+    const collapsible = !expanded && members.length > topK + 2;
+    const shownCount = collapsible ? topK : members.length;
     const top = lane.minY - offset;
     if (collapsible) {
       members.forEach((item, index) => {
@@ -176,5 +225,6 @@ export function computeLaneView(
     tiles,
     shownCount: shown,
     hiddenCount: items.length - shown,
+    laneOrder,
   };
 }
