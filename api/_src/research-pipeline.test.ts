@@ -23,6 +23,7 @@ const person = (name: string, title = 'Director of Engineering') => ({
 function deps(overrides: Partial<PipelineDeps> = {}): Partial<PipelineDeps> {
   return {
     exaPeopleContext: async () => '',
+    exaCompanyProfile: async () => null,
     sumbleOrgPeople: async () => null,
     resolveSourceUrls: async () => undefined,
     verifyTitleClaims: async () => undefined,
@@ -62,6 +63,33 @@ function deps(overrides: Partial<PipelineDeps> = {}): Partial<PipelineDeps> {
     ...overrides,
   };
 }
+
+test('company profile is included in partial research results', async () => {
+  const checkpoint = await runStep(initialCheckpoint({ domain: 'example.com' }), {
+    deadlineMs: Date.now() + 30_000,
+    deps: deps({
+      exaCompanyProfile: async () => ({
+        companyName: 'Example, Inc.',
+        description: null,
+        mission: null,
+        headquarters: null,
+        annualRevenue: null,
+        annualRevenueUsd: null,
+        employeeCount: null,
+        engineerCount: null,
+        industry: null,
+        fiscalYearEndMonth: null,
+        linkedinUrl: null,
+        annualReportUrl: null,
+        funding: null,
+        sources: [],
+        retrievedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    }),
+    emit: () => undefined,
+  });
+  assert.equal(partialResult(checkpoint).companyProfile?.companyName, 'Example, Inc.');
+});
 
 test('pipeline completes, normalizes people, and emits each pass', async () => {
   const events: { message: string }[] = [];

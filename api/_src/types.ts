@@ -53,6 +53,24 @@ export interface Person {
   y: number;
 }
 
+export interface CompanyProfile {
+  companyName: string | null;
+  description: string | null;
+  mission: string | null;
+  headquarters: string | null;
+  annualRevenue: string | null;
+  annualRevenueUsd: number | null;
+  employeeCount: number | null;
+  engineerCount: number | null;
+  industry: string | null;
+  fiscalYearEndMonth: number | null;
+  linkedinUrl: string | null;
+  annualReportUrl: string | null;
+  funding: string | null;
+  sources: string[];
+  retrievedAt: string;
+}
+
 export interface MapEdge {
   id: string;
   from: string; // manager person id
@@ -72,6 +90,7 @@ export interface MapMeta {
   nextRefreshAt?: string | null;
   initiatives?: StrategicInitiative[];
   strategy?: AccountStrategyPlan;
+  companyProfile?: CompanyProfile | null;
 }
 
 export type Stance = 'advocate' | 'neutral' | 'skeptic' | 'unknown';
