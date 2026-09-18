@@ -1600,9 +1600,23 @@ function MapInner() {
 
   const handleSuggestedApplied = useCallback(
     (updatedMap: LoadedMap) => {
-      handleRosterMapUpdated(updatedMap);
+      const laid = applyLanes(
+        updatedMap.state.people,
+        isMobile ? 2 : 4,
+        laneGrouping,
+        isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
+      );
+      const laidMap = {
+        ...updatedMap,
+        state: { ...updatedMap.state, people: laid },
+      };
+      handleRosterMapUpdated(laidMap);
       setShowSuggest(false);
-      window.setTimeout(() => autoLayout(laneGrouping), 0);
+      markDirty(nodesRef.current, edgesRef.current);
+      window.setTimeout(
+        () => void rf.fitView({ padding: 0.2, duration: 450 }),
+        80
+      );
       if (mapId) {
         void api
           .getRoster(mapId, { pageSize: 1 })
@@ -1610,7 +1624,14 @@ function MapInner() {
           .catch(() => undefined);
       }
     },
-    [autoLayout, handleRosterMapUpdated, laneGrouping, mapId]
+    [
+      handleRosterMapUpdated,
+      isMobile,
+      laneGrouping,
+      markDirty,
+      mapId,
+      rf,
+    ]
   );
 
   useEffect(() => {
