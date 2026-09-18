@@ -62,6 +62,27 @@ CREATE TABLE IF NOT EXISTS share_links (
   expires_at TEXT,
   created_at TEXT NOT NULL
 );
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS token_hash TEXT;
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS label TEXT;
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS passcode_hash TEXT;
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS allowed_emails JSONB;
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS locked_until TEXT;
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS view_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS last_viewed_at TEXT;
+-- legacy rows stored the secret in token; hash it and replace token with
+-- an opaque id so the DB no longer holds secrets (old URLs keep working via
+-- the hash)
+UPDATE share_links SET token_hash = encode(sha256(convert_to(token,'UTF8')),'hex'), token = md5(random()::text || token) WHERE token_hash IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_share_links_hash ON share_links(token_hash);
+CREATE TABLE IF NOT EXISTS share_grants (
+  token TEXT PRIMARY KEY,
+  link_id TEXT NOT NULL REFERENCES share_links(token) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_share_grants_map ON share_grants(map_id, expires_at);
 CREATE TABLE IF NOT EXISTS comments (
   id TEXT PRIMARY KEY,
   map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,

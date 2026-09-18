@@ -149,9 +149,18 @@ export interface MapRow {
 }
 
 export interface ShareLinkRow {
+  /** Opaque link id — the URL secret is only stored as `token_hash`. */
   token: string;
+  token_hash: string | null;
   map_id: string;
   created_by: string;
+  label: string | null;
+  passcode_hash: string | null;
+  allowed_emails: string[] | null;
+  failed_attempts: number;
+  locked_until: string | null;
+  view_count: number;
+  last_viewed_at: string | null;
   expires_at: string | null;
   created_at: string;
 }

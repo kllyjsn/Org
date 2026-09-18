@@ -89,6 +89,7 @@ import MeetingsImportModal from '../components/MeetingsImportModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
+import { Wordmark } from '../components/Wordmark';
 import {
   applyLanes,
   applyLayout,
@@ -193,8 +194,10 @@ function isTypingTarget(target: EventTarget | null): boolean {
   );
 }
 
-function MapInner() {
-  const { mapId } = useParams<{ mapId: string }>();
+function MapInner({ shareMapId }: { shareMapId?: string }) {
+  const params = useParams<{ mapId: string }>();
+  const mapId = shareMapId ?? params.mapId;
+  const shareMode = Boolean(shareMapId);
   const [searchParams] = useSearchParams();
   const mapViewEntry = useRef<'dashboard' | 'direct'>(
     searchParams.get('briefing') === '1' ? 'dashboard' : 'direct'
@@ -203,6 +206,7 @@ function MapInner() {
   const viewport = useViewport();
   const isMobile = useIsMobile();
   const [mapName, setMapName] = useState('');
+  const [mapUpdatedAt, setMapUpdatedAt] = useState('');
   const [domain, setDomain] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
   const sellerProfile = useSession(
@@ -249,7 +253,7 @@ function MapInner() {
   const remoteUpdatedAt = useRef('');
   const saveStateRef = useRef<SaveState>('saved');
 
-  const readOnly = role === 'viewer';
+  const readOnly = shareMode || role === 'viewer';
   // Phone viewports fit an entire org to ~20% zoom, which renders cards
   // unreadable, so open on the top of the hierarchy at a legible scale.
   const openingFitOptions = useMemo(
@@ -339,14 +343,17 @@ function MapInner() {
         setMeta(map.state.meta);
         setRole(map.role);
         remoteUpdatedAt.current = map.updated_at;
+        setMapUpdatedAt(map.updated_at);
         setPast([]);
         setFuture([]);
         setLoaded(true);
-        void api
-          .trackEvent(mapId, 'map_viewed', {
-            entry: mapViewEntry.current,
-          })
-          .catch(() => undefined);
+        if (!shareMode) {
+          void api
+            .trackEvent(mapId, 'map_viewed', {
+              entry: mapViewEntry.current,
+            })
+            .catch(() => undefined);
+        }
         window.setTimeout(() => {
           // Tall maps center on nothing useful when fit to bounds — anchor
           // the top of the chart at a readable zoom instead.
@@ -360,7 +367,16 @@ function MapInner() {
         }, 50);
       })
       .catch(() => setNotFound(true));
-  }, [mapId, setNodes, setEdges, rf, openingFitOptions, isMobile, anchorTopLeft]);
+  }, [
+    mapId,
+    setNodes,
+    setEdges,
+    rf,
+    openingFitOptions,
+    isMobile,
+    anchorTopLeft,
+    shareMode,
+  ]);
 
   useEffect(() => {
     if (searchParams.get('briefing') === '1') {
@@ -370,7 +386,7 @@ function MapInner() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!mapId) return;
+    if (!mapId || shareMode) return;
     const update = () => {
       const cursor = cursorRef.current;
       void api
@@ -388,7 +404,7 @@ function MapInner() {
     update();
     const interval = window.setInterval(update, 1_500);
     return () => window.clearInterval(interval);
-  }, [mapId, selectedId]);
+  }, [mapId, selectedId, shareMode]);
 
   useEffect(() => {
     if (!mapId) return;
@@ -403,6 +419,7 @@ function MapInner() {
           }
           if (map.updated_at <= remoteUpdatedAt.current) return;
           remoteUpdatedAt.current = map.updated_at;
+          setMapUpdatedAt(map.updated_at);
           const flow = toFlow(map.state, map.role === 'viewer');
           setMapName(map.name);
           setMeta(map.state.meta);
@@ -2284,17 +2301,23 @@ function MapInner() {
         aria-label="Map tools"
         className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-56 sm:items-stretch sm:px-3"
       >
-        <Link
-          to="/app"
-          title="Back to accounts"
-          aria-label="Back to accounts"
-          className="flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-white sm:h-9 sm:w-full sm:justify-start sm:px-3"
-        >
-          <ArrowLeft size={17} className="shrink-0" />
-          <span className="hidden truncate text-[13px] font-medium sm:block">
-            Accounts
-          </span>
-        </Link>
+        {shareMode ? (
+          <div className="flex items-center justify-center py-1 sm:justify-start">
+            <Wordmark size="sm" inverse />
+          </div>
+        ) : (
+          <Link
+            to="/app"
+            title="Back to accounts"
+            aria-label="Back to accounts"
+            className="flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-white sm:h-9 sm:w-full sm:justify-start sm:px-3"
+          >
+            <ArrowLeft size={17} className="shrink-0" />
+            <span className="hidden truncate text-[13px] font-medium sm:block">
+              Accounts
+            </span>
+          </Link>
+        )}
         <RailSeparator />
         <RailButton
           icon={<Waypoints size={16} />}
@@ -2308,30 +2331,32 @@ function MapInner() {
           active={viewMode === 'roster'}
           onClick={() => setViewMode('roster')}
         />
+        <RailSeparator />
+        {!readOnly && (
+          <RailButton
+            icon={<Sparkles size={16} />}
+            label="Deep research"
+            onClick={() => {
+              setDeepResearchFocus('');
+              setShowDeepResearch(true);
+            }}
+          />
+        )}
+        <RailButton
+          icon={<Radar size={16} />}
+          label="Briefing"
+          onClick={() => {
+            setBriefingEntry('toolbar');
+            setShowBriefing(true);
+          }}
+        />
+        <RailButton
+          icon={<Compass size={16} />}
+          label="Strategy"
+          onClick={() => setShowStrategy(true)}
+        />
         {!readOnly && (
           <>
-            <RailSeparator />
-            <RailButton
-              icon={<Sparkles size={16} />}
-              label="Deep research"
-              onClick={() => {
-                setDeepResearchFocus('');
-                setShowDeepResearch(true);
-              }}
-            />
-            <RailButton
-              icon={<Radar size={16} />}
-              label="Briefing"
-              onClick={() => {
-                setBriefingEntry('toolbar');
-                setShowBriefing(true);
-              }}
-            />
-            <RailButton
-              icon={<Compass size={16} />}
-              label="Strategy"
-              onClick={() => setShowStrategy(true)}
-            />
             <RailButton
               icon={<UserCheck size={16} />}
               label="Meetings"
@@ -2385,24 +2410,24 @@ function MapInner() {
               className="hidden"
               onChange={(event) => void importCrmCsv(event)}
             />
-            <RailButton
-              icon={<History size={16} />}
-              label="History"
-              onClick={openHistory}
-            />
-            <RailButton
-              icon={<BellRing size={16} />}
-              label="Changes"
-              onClick={() => setShowChanges(true)}
-            />
-            {(meta?.initiatives?.length ?? 0) > 0 && (
-              <RailButton
-                icon={<Lightbulb size={16} />}
-                label="Initiatives"
-                onClick={() => setShowInitiatives(true)}
-              />
-            )}
           </>
+        )}
+        <RailButton
+          icon={<History size={16} />}
+          label="History"
+          onClick={openHistory}
+        />
+        <RailButton
+          icon={<BellRing size={16} />}
+          label="Changes"
+          onClick={() => setShowChanges(true)}
+        />
+        {(meta?.initiatives?.length ?? 0) > 0 && (
+          <RailButton
+            icon={<Lightbulb size={16} />}
+            label="Initiatives"
+            onClick={() => setShowInitiatives(true)}
+          />
         )}
         <RailSeparator />
         <RailButton
@@ -2410,19 +2435,30 @@ function MapInner() {
           label="Export PNG"
           onClick={() => void exportPng()}
         />
-        <RailButton
-          icon={<MessageSquare size={16} />}
-          label="Send feedback"
-          onClick={() => setShowFeedback(true)}
-        />
-        <div className="flex-1" />
-        {!readOnly && (
+        {!shareMode && (
           <RailButton
-            icon={<Share2 size={16} />}
-            label="Share"
-            accent
-            onClick={() => setShowShare(true)}
+            icon={<MessageSquare size={16} />}
+            label="Send feedback"
+            onClick={() => setShowFeedback(true)}
           />
+        )}
+        <div className="flex-1" />
+        {shareMode ? (
+          <Link
+            to="/"
+            className="mx-auto flex w-fit items-center justify-center rounded-lg bg-[#c9f04b] px-3 py-2 text-[13px] font-semibold text-slate-950 transition hover:bg-[#d5f66c] sm:w-full"
+          >
+            Make your own
+          </Link>
+        ) : (
+          !readOnly && (
+            <RailButton
+              icon={<Share2 size={16} />}
+              label="Share"
+              accent
+              onClick={() => setShowShare(true)}
+            />
+          )
         )}
       </nav>
 
@@ -2466,29 +2502,40 @@ function MapInner() {
             </button>
           )}
           <div className="hidden flex-1 sm:block" />
-          <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
-            {saveState === 'saving'
-              ? 'Saving…'
-              : saveState === 'dirty'
-                ? 'Unsaved changes'
-                : 'Saved'}
-          </span>
-          <div className="flex -space-x-1">
-            {presence.slice(0, 4).map((person) => (
-              <span
-                key={person.id}
-                title={`${person.name} is viewing`}
-                className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#5b4cf0] text-[10px] font-semibold text-white"
-              >
-                {person.name
-                  .split(' ')
-                  .map((part) => part[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()}
+          {shareMode ? (
+            <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-500 sm:inline">
+              live view · updated{' '}
+              {mapUpdatedAt
+                ? new Date(mapUpdatedAt).toLocaleDateString()
+                : '…'}
+            </span>
+          ) : (
+            <>
+              <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
+                {saveState === 'saving'
+                  ? 'Saving…'
+                  : saveState === 'dirty'
+                    ? 'Unsaved changes'
+                    : 'Saved'}
               </span>
-            ))}
-          </div>
+              <div className="flex -space-x-1">
+                {presence.slice(0, 4).map((person) => (
+                  <span
+                    key={person.id}
+                    title={`${person.name} is viewing`}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#5b4cf0] text-[10px] font-semibold text-white"
+                  >
+                    {person.name
+                      .split(' ')
+                      .map((part) => part[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </header>
 
       <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
@@ -2803,7 +2850,9 @@ function MapInner() {
               <div>
                 <h2 className="font-semibold text-slate-900">Version history</h2>
                 <p className="text-xs text-slate-500">
-                  Restore an earlier collaborative save.
+                  {readOnly
+                    ? 'Earlier collaborative saves.'
+                    : 'Restore an earlier collaborative save.'}
                 </p>
               </div>
               <button
@@ -2832,12 +2881,14 @@ function MapInner() {
                       {new Date(version.created_at).toLocaleString()}
                     </p>
                   </div>
-                  <button
-                    onClick={() => void restoreVersion(version.id)}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    Restore
-                  </button>
+                  {!readOnly && (
+                    <button
+                      onClick={() => void restoreVersion(version.id)}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Restore
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -3021,10 +3072,10 @@ function MapInner() {
   );
 }
 
-export default function MapPage() {
+export default function MapPage({ shareMapId }: { shareMapId?: string }) {
   return (
     <ReactFlowProvider>
-      <MapInner />
+      <MapInner shareMapId={shareMapId} />
     </ReactFlowProvider>
   );
 }

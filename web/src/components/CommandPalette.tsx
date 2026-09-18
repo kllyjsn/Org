@@ -26,6 +26,7 @@ import type {
 } from '../types';
 import type { AgentCommandResult } from '../lib/agentCanvas';
 import { tokenMatch } from '../lib/searchText';
+import { ApiError } from '../api';
 
 export type PaletteAction =
   | 'layout'
@@ -234,8 +235,12 @@ export default function CommandPalette({
           actions: response.actions,
         },
       ]);
-    } catch {
-      setError('The account analyst is temporarily unavailable. Your map is unchanged.');
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 401
+          ? 'Sign in to ask the account analyst about this account.'
+          : 'The account analyst is temporarily unavailable. Your map is unchanged.'
+      );
     } finally {
       setLoading(false);
       window.setTimeout(() => inputRef.current?.focus(), 0);
