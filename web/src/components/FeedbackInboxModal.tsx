@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Inbox, Loader2, X } from 'lucide-react';
 import { api } from '../api';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type { FeedbackItem, FeedbackStatus } from '../types';
 
 const CATEGORY_LABELS = {
@@ -19,6 +20,8 @@ export default function FeedbackInboxModal({
 }) {
   const [items, setItems] = useState<FeedbackItem[] | null>(null);
   const [error, setError] = useState('');
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   useEffect(() => {
     api
@@ -38,14 +41,23 @@ export default function FeedbackInboxModal({
 
   return (
     <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] shadow-2xl sm:max-w-3xl sm:rounded-3xl">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feedback-inbox-modal-title"
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] shadow-2xl sm:max-w-3xl sm:rounded-3xl"
+      >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 bg-white/70 p-5 sm:p-6">
           <div>
             <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
               <Inbox size={13} />
               Admin
             </div>
-            <h2 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+            <h2
+              id="feedback-inbox-modal-title"
+              className="text-2xl font-semibold tracking-[-0.04em] text-slate-950"
+            >
               User feedback
             </h2>
           </div>

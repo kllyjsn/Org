@@ -64,6 +64,7 @@ export default function FeedbackModal({
         ref={trapRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="feedback-modal-title"
         initial={{ y: 24, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 26, stiffness: 260 }}
@@ -75,7 +76,10 @@ export default function FeedbackModal({
               <MessageSquare size={13} />
               Tell us what to fix
             </div>
-            <h2 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-3xl">
+            <h2
+              id="feedback-modal-title"
+              className="text-2xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-3xl"
+            >
               Send feedback.
             </h2>
             <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
@@ -97,6 +101,7 @@ export default function FeedbackModal({
             <button
               key={item.id}
               onClick={() => setCategory(item.id)}
+              aria-pressed={category === item.id}
               className={`rounded-2xl border p-3 text-left transition ${
                 category === item.id
                   ? 'border-[#5b4cf0] bg-white shadow-sm'
@@ -118,11 +123,15 @@ export default function FeedbackModal({
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           placeholder="What happened, or what would make this better?"
+          aria-label="Feedback message"
           className="mt-4 min-h-32 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-6 outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
         />
 
         {error && (
-          <div className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div
+            role="alert"
+            className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700"
+          >
             {error}
           </div>
         )}

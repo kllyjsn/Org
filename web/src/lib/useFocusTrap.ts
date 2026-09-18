@@ -8,15 +8,23 @@ const FOCUSABLE =
  * Keeps Tab focus cycling inside a mounted dialog and focuses its first
  * control on open. Attach the returned ref to the dialog container.
  */
-export function useFocusTrap(ref: RefObject<HTMLElement | null>) {
+export function useFocusTrap(
+  ref: RefObject<HTMLElement | null>,
+  enabled = true
+) {
   useEffect(() => {
+    if (!enabled) return;
     const el = ref.current;
     if (!el) return;
+    const previouslyFocused = document.activeElement;
     const items = () =>
       Array.from(el.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
         (node) => !node.hasAttribute('disabled')
       );
-    items()[0]?.focus();
+    const initial =
+      el.querySelector<HTMLElement>('[autofocus], [data-autofocus]') ??
+      items()[0];
+    initial?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
       const focusable = items();
@@ -32,6 +40,14 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>) {
       }
     };
     el.addEventListener('keydown', onKeyDown);
-    return () => el.removeEventListener('keydown', onKeyDown);
-  }, [ref]);
+    return () => {
+      el.removeEventListener('keydown', onKeyDown);
+      if (
+        previouslyFocused instanceof HTMLElement &&
+        document.contains(previouslyFocused)
+      ) {
+        previouslyFocused.focus();
+      }
+    };
+  }, [ref, enabled]);
 }

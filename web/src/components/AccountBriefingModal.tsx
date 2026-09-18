@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   BellRing,
@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { api } from '../api';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type {
   AccountBriefing,
   BriefingAction,
@@ -106,6 +107,8 @@ export default function AccountBriefingModal({
 }) {
   const [briefing, setBriefing] = useState<AccountBriefing | null>(null);
   const [error, setError] = useState('');
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   useEffect(() => {
     void api
@@ -119,7 +122,13 @@ export default function AccountBriefingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f6f7f2] shadow-2xl sm:max-w-4xl sm:rounded-3xl">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="briefing-modal-title"
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f6f7f2] shadow-2xl sm:max-w-4xl sm:rounded-3xl"
+      >
         <div className="relative overflow-hidden bg-slate-950 p-5 text-white sm:p-8">
           <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[#5b4cf0]/35 blur-3xl" />
           <div className="relative flex items-start justify-between gap-4">
@@ -128,7 +137,10 @@ export default function AccountBriefingModal({
                 <Radar size={13} />
                 Account pulse
               </div>
-              <h2 className="max-w-2xl text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
+              <h2
+                id="briefing-modal-title"
+                className="max-w-2xl text-3xl font-semibold tracking-[-0.045em] sm:text-4xl"
+              >
                 {briefing?.headline ?? 'Building your account briefing…'}
               </h2>
               {briefing && (
