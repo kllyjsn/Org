@@ -21,6 +21,9 @@ interface Props {
   mapId: string;
   workspaceId: string;
   readOnly: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  stage: string | null;
+  onDealSaved: (deal: { outcome: 'open' | 'won' | 'lost'; stage: string | null }) => void;
   onApply: (state: MapState) => void;
   onClose: () => void;
   /** Reuse of the old "Import CRM" CSV path, now inside the modal. */
@@ -32,14 +35,88 @@ function fmtAmount(amount: number | null): string {
   return `$${amount.toLocaleString()}`;
 }
 
+const DEAL_STAGES = ['discovery', 'evaluation', 'proposal', 'negotiation', 'closed'] as const;
+
+function DealControls({
+  mapId,
+  readOnly,
+  deal,
+  onSaved,
+}: {
+  mapId: string;
+  readOnly: boolean;
+  deal: { outcome: 'open' | 'won' | 'lost'; stage: string | null };
+  onSaved: (d: { outcome: 'open' | 'won' | 'lost'; stage: string | null }) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const save = async (patch: {
+    outcome?: 'open' | 'won' | 'lost';
+    stage?: string | null;
+  }) => {
+    if (patch.outcome && patch.outcome !== 'open' &&
+        !window.confirm(`Mark this map as ${patch.outcome}?`)) return;
+    setSaving(true);
+    try {
+      await api.setOutcome(mapId, {
+        outcome: patch.outcome ?? deal.outcome,
+        stage: patch.stage !== undefined
+          ? (patch.stage as (typeof DEAL_STAGES)[number] | null)
+          : (deal.stage as (typeof DEAL_STAGES)[number] | null),
+      });
+      onSaved({
+        outcome: patch.outcome ?? deal.outcome,
+        stage: patch.stage !== undefined ? patch.stage : deal.stage,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="rounded-lg border border-slate-200 p-3">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        Deal
+      </div>
+      <div className="flex items-center gap-2">
+        <select
+          value={DEAL_STAGES.includes(deal.stage as never) ? deal.stage! : 'discovery'}
+          disabled={readOnly || saving}
+          onChange={(e) => void save({ stage: e.target.value })}
+          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+        >
+          {DEAL_STAGES.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={deal.outcome}
+          disabled={readOnly || saving}
+          onChange={(e) =>
+            void save({ outcome: e.target.value as 'open' | 'won' | 'lost' })
+          }
+          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+        >
+          <option value="open">open</option>
+          <option value="won">won</option>
+          <option value="lost">lost</option>
+        </select>
+        {saving && <Loader2 size={13} className="animate-spin text-slate-400" />}
+      </div>
+    </div>
+  );
+}
+
 export default function CrmModal({
   mapId,
   workspaceId: _workspaceId,
   readOnly,
+  outcome,
+  stage,
+  onDealSaved,
   onApply,
   onClose,
   onCsvImport,
 }: Props) {
+  const [deal, setDeal] = useState({ outcome, stage });
   const [status, setStatus] = useState<CrmStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -195,7 +272,7 @@ export default function CrmModal({
               id="crm-modal-title"
               className="text-lg font-semibold tracking-tight text-slate-950"
             >
-              HubSpot & Salesforce sync
+              CRM & deal
             </h2>
           </div>
           <button
@@ -207,6 +284,7 @@ export default function CrmModal({
           </button>
         </div>
       <div className="flex flex-col gap-4 p-5">
+        <DealControls mapId={mapId} readOnly={readOnly} deal={deal} onSaved={(d) => { setDeal(d); onDealSaved(d); }} />
         {error && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
             {error}

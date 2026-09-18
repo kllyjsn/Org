@@ -211,6 +211,10 @@ function MapInner() {
   const [showMeetings, setShowMeetings] = useState(false);
   const [showCalls, setShowCalls] = useState(false);
   const [showCrm, setShowCrm] = useState(false);
+  const [deal, setDeal] = useState<{
+    outcome: 'open' | 'won' | 'lost';
+    stage: string | null;
+  }>({ outcome: 'open', stage: null });
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -347,6 +351,7 @@ function MapInner() {
         setWorkspaceId(map.workspace_id);
         setMeta(map.state.meta);
         setRole(map.role);
+        setDeal({ outcome: map.outcome ?? 'open', stage: map.stage ?? null });
         remoteUpdatedAt.current = map.updated_at;
         setPast([]);
         setFuture([]);
@@ -412,6 +417,7 @@ function MapInner() {
           }
           if (map.updated_at <= remoteUpdatedAt.current) return;
           remoteUpdatedAt.current = map.updated_at;
+          setDeal({ outcome: map.outcome ?? 'open', stage: map.stage ?? null });
           const flow = toFlow(map.state, map.role === 'viewer');
           setMapName(map.name);
           setMeta(map.state.meta);
@@ -2806,6 +2812,9 @@ function MapInner() {
           mapId={mapId}
           workspaceId={workspaceId}
           readOnly={readOnly}
+          outcome={deal.outcome}
+          stage={deal.stage}
+          onDealSaved={setDeal}
           onApply={applyTranscriptState}
           onCsvImport={(event) => void importCrmCsv(event)}
           onClose={() => setShowCrm(false)} />

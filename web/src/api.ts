@@ -19,10 +19,12 @@ import type {
   MapComment,
   MapListItem,
   MapPresence,
+  DealStage,
   MapState,
   MapVersion,
   NotificationsResponse,
   Person,
+  PortfolioResponse,
   ProductEventName,
   ProductValueSummary,
   ResearchEvent,
@@ -168,6 +170,17 @@ export const api = {
     }),
   crmPush: (mapId: string) =>
     req<CrmPushResult>(`/api/maps/${mapId}/crm/push`, { method: 'POST' }),
+
+  getPortfolio: (workspaceId: string) =>
+    req<PortfolioResponse>(`/api/workspaces/${workspaceId}/portfolio`),
+  setOutcome: (
+    mapId: string,
+    body: { outcome: 'open' | 'won' | 'lost'; stage?: DealStage | null }
+  ) =>
+    req<{ ok: true; outcome: string; stage: string | null }>(
+      `/api/maps/${mapId}/outcome`,
+      { method: 'PATCH', body: JSON.stringify(body) }
+    ),
 
   listNotifications: (workspaceId: string) =>
     req<NotificationsResponse>(`/api/workspaces/${workspaceId}/notifications`),
