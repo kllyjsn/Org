@@ -142,6 +142,7 @@ function MembersModal({
   maps: { id: string; name: string }[];
   onClose: () => void;
 }) {
+  const { user } = useSession();
   const [members, setMembers] = useState<
     {
       id: string;
@@ -173,6 +174,9 @@ function MembersModal({
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const trapRef = useRef<HTMLDivElement>(null);
   useFocusTrap(trapRef);
+
+  const selfScoped =
+    members.find((m) => m.id === user?.id)?.access_scope === 'selected';
 
   const refresh = useCallback(
     () =>
@@ -276,7 +280,7 @@ function MembersModal({
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                     {m.role}
                   </span>
-                  {m.role !== 'owner' && (
+                  {m.role !== 'owner' && !selfScoped && (
                     <button
                       type="button"
                       onClick={() => {
@@ -353,6 +357,11 @@ function MembersModal({
             </li>
           ))}
         </ul>
+        {selfScoped ? (
+          <p className="text-xs text-slate-500">
+            Only members with access to all accounts can invite teammates.
+          </p>
+        ) : (
         <form onSubmit={add} className="flex flex-col gap-2">
           <input
             className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500"
@@ -380,6 +389,7 @@ function MembersModal({
             Invite
           </button>
         </form>
+        )}
         {notice && (
           <p className="mt-2 flex items-center gap-2 text-xs text-emerald-600">
             {notice}

@@ -752,9 +752,11 @@ app.get('/api/workspaces/:id/members', requireAuth, async (c) => {
 app.post('/api/workspaces/:id/members', requireAuth, async (c) => {
   const user = c.get('user');
   const wsId = param(c, 'id');
-  const role = await workspaceRoleFor(user, wsId);
-  if (role !== 'owner' && role !== 'member')
+  const selfAccess = await workspaceAccessFor(user, wsId);
+  if (!selfAccess || !canWrite(selfAccess.role))
     return bad(c, 'insufficient role', 403);
+  if (selfAccess.scoped)
+    return bad(c, 'members with limited account access cannot manage members', 403);
   const body = await c.req.json().catch(() => null);
   const email = normalizeEmail(body?.email);
   if (!isValidEmail(email)) return bad(c, 'valid email required');
@@ -850,9 +852,12 @@ app.post('/api/workspaces/:id/members', requireAuth, async (c) => {
 app.patch('/api/workspaces/:id/members/:userId/access', requireAuth, async (c) => {
   const user = c.get('user');
   const wsId = param(c, 'id');
-  const requesterRole = await workspaceRoleFor(user, wsId);
-  if (requesterRole !== 'owner' && requesterRole !== 'member') {
+  const selfAccess = await workspaceAccessFor(user, wsId);
+  if (!selfAccess || !canWrite(selfAccess.role)) {
     return bad(c, 'insufficient role', 403);
+  }
+  if (selfAccess.scoped) {
+    return bad(c, 'members with limited account access cannot manage members', 403);
   }
   const target = await membership(param(c, 'userId'), wsId);
   if (!target) return bad(c, 'not a member', 404);
