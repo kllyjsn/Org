@@ -9,6 +9,8 @@ import {
   deepenAccountBriefing,
 } from './briefing.js';
 import type { AccountBriefing } from './briefing.js';
+import { deepenAccountStrategy } from './strategy.js';
+import type { StrategyInsights } from './strategy.js';
 import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
@@ -220,6 +222,64 @@ function sanitizeState(input: unknown): MapState {
   ) as MapState['people'];
   const edges = Array.isArray(s.edges) ? s.edges.slice(0, 2000) : [];
   const meta = (s.meta ?? {}) as MapState['meta'];
+  const rawStrategy = meta.strategy;
+  const strategy =
+    rawStrategy && typeof rawStrategy === 'object'
+      ? (() => {
+          const value = rawStrategy as unknown as Record<string, unknown>;
+          const rawStakeholders =
+            value.stakeholders && typeof value.stakeholders === 'object'
+              ? (value.stakeholders as Record<string, unknown>)
+              : {};
+          const stakeholders = Object.fromEntries(
+            Object.entries(rawStakeholders)
+              .slice(0, 500)
+              .map(([id, item]) => {
+                const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+                const stance: 'advocate' | 'neutral' | 'skeptic' | 'unknown' =
+                  row.stance === 'advocate' ||
+                  row.stance === 'neutral' ||
+                  row.stance === 'skeptic' ||
+                  row.stance === 'unknown'
+                    ? row.stance
+                    : 'unknown';
+                return [
+                  id,
+                  {
+                    stance,
+                    nextStep: typeof row.nextStep === 'string' ? row.nextStep.slice(0, 500) : '',
+                    note: typeof row.note === 'string' ? row.note.slice(0, 500) : '',
+                  },
+                ];
+              })
+          );
+          const tasks = Array.isArray(value.tasks)
+            ? value.tasks
+                .slice(0, 50)
+                .map((item) => {
+                  if (!item || typeof item !== 'object') return null;
+                  const row = item as Record<string, unknown>;
+                  if (typeof row.id !== 'string' || typeof row.title !== 'string') return null;
+                  return {
+                    id: row.id.slice(0, 200),
+                    title: row.title.slice(0, 500),
+                    done: row.done === true,
+                    ...(typeof row.personId === 'string' ? { personId: row.personId.slice(0, 200) } : {}),
+                    source: row.source === 'manual' ? ('manual' as const) : ('generated' as const),
+                    createdAt: typeof row.createdAt === 'string' ? row.createdAt : '',
+                  };
+                })
+                .filter((item): item is NonNullable<typeof item> => item !== null)
+            : [];
+          return {
+            ...(typeof value.entryPersonId === 'string' || value.entryPersonId === null ? { entryPersonId: value.entryPersonId } : {}),
+            ...(typeof value.targetPersonId === 'string' || value.targetPersonId === null ? { targetPersonId: value.targetPersonId } : {}),
+            stakeholders,
+            tasks,
+            updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
+          };
+        })()
+      : undefined;
   return {
     people,
     edges,
@@ -253,6 +313,7 @@ function sanitizeState(input: unknown): MapState {
           ? initiative.salesAngles
           : [],
       })),
+      ...(strategy ? { strategy } : {}),
     },
   };
 }
@@ -961,6 +1022,96 @@ app.get('/api/maps/:id/briefing', requireAuth, async (c) => {
     ]
   );
   return c.json(deepBriefing);
+});
+
+app.get('/api/maps/:id/strategy', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const state = map.state as MapState;
+  const workspaces = await query<{ seller_profile: SellerProfile | null }>(
+    'SELECT seller_profile FROM workspaces WHERE id = $1',
+    [map.workspace_id]
+  );
+  const sellerProfile = workspaces[0]?.seller_profile ?? null;
+  const cached = await query<{ insights: StrategyInsights }>(
+    `SELECT insights FROM account_strategies
+     WHERE map_id = $1
+       AND map_updated_at = $2
+       AND seller_profile IS NOT DISTINCT FROM $3::jsonb
+       AND generated_at::timestamptz > NOW() - INTERVAL '6 hours'`,
+    [map.id, map.updated_at, sellerProfile]
+  );
+  if (!c.req.query('refresh') && cached[0]) return c.json(cached[0].insights);
+
+  const rolePriority: Record<string, number> = {
+    champion: 100,
+    economic_buyer: 90,
+    decision_maker: 80,
+    technical_buyer: 70,
+    influencer: 50,
+    blocker: 10,
+    none: 0,
+  };
+  const targetPriority: Record<string, number> = {
+    economic_buyer: 100,
+    decision_maker: 90,
+    technical_buyer: 70,
+    champion: 40,
+    influencer: 30,
+    blocker: 10,
+    none: 0,
+  };
+  const entry = [...state.people].sort((a, b) => (rolePriority[b.role] ?? 0) - (rolePriority[a.role] ?? 0))[0];
+  const target =
+    [...state.people]
+      .filter((person) => person.id !== entry?.id)
+      .sort((a, b) => (targetPriority[b.role] ?? 0) - (targetPriority[a.role] ?? 0))[0] ?? entry;
+  const pathIds = entry && target ? (() => {
+    const adjacency = new Map<string, string[]>();
+    for (const edge of state.edges ?? []) {
+      adjacency.set(edge.from, [...(adjacency.get(edge.from) ?? []), edge.to]);
+      adjacency.set(edge.to, [...(adjacency.get(edge.to) ?? []), edge.from]);
+    }
+    const queue = entry ? [entry.id] : [];
+    const previous = new Map<string, string>();
+    const seen = new Set(queue);
+    while (queue.length) {
+      const current = queue.shift()!;
+      if (current === target?.id) break;
+      for (const next of adjacency.get(current) ?? []) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        previous.set(next, current);
+        queue.push(next);
+      }
+    }
+    if (!target || (!seen.has(target.id) && target.id !== entry?.id)) return [];
+    const ids = [target.id];
+    while (ids[0] !== entry?.id) ids.unshift(previous.get(ids[0])!);
+    return ids;
+  })() : [];
+  const pathNames = pathIds.map((id) => state.people.find((person) => person.id === id)?.name ?? id);
+  const risks = [
+    ...state.people.filter((person) => person.role === 'blocker').map((person) => `Blocker mapped: ${person.name}`),
+    ...(state.people.some((person) => person.role === 'economic_buyer') ? [] : ['Economic buyer is not mapped']),
+  ];
+  const objections = target?.role === 'technical_buyer'
+    ? ['Security, integration effort, and architecture fit']
+    : ['Priority, timing, and ownership of the problem'];
+  const insights = await deepenAccountStrategy(state, sellerProfile, { entry, target, pathNames, risks, objections });
+  await query(
+    `INSERT INTO account_strategies
+       (map_id, map_updated_at, seller_profile, insights, generated_at)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (map_id) DO UPDATE SET
+       map_updated_at = EXCLUDED.map_updated_at,
+       seller_profile = EXCLUDED.seller_profile,
+       insights = EXCLUDED.insights,
+       generated_at = EXCLUDED.generated_at`,
+    [map.id, map.updated_at, sellerProfile, insights, insights.generatedAt]
+  );
+  return c.json(insights);
 });
 
 app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => {
