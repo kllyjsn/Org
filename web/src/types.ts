@@ -480,3 +480,39 @@ export interface IntegrationSyncResult {
   touchpoints: number;
   peopleUpdated: number;
 }
+
+export type NotificationKind = 'slack_webhook' | 'email';
+export type NotificationNoticeKind =
+  | 'change_alert'
+  | 'pre_meeting_brief'
+  | 'weekly_coverage';
+
+export interface NotificationChannel {
+  id: string;
+  kind: NotificationKind;
+  label: string | null;
+  enabled: boolean;
+  createdAt: string;
+  targetHint: string;
+}
+
+export interface NotificationPrefs {
+  notifyEmail: boolean;
+  notifyBriefs: boolean;
+}
+
+export interface NotificationRecent {
+  kind: NotificationNoticeKind;
+  title: string;
+  scheduledFor: string;
+  sentAt: string | null;
+  lastError: string | null;
+}
+
+export interface NotificationsResponse {
+  channels: NotificationChannel[];
+  prefs: NotificationPrefs;
+  emailConfigured: boolean;
+  encryptionConfigured: boolean;
+  recent: NotificationRecent[];
+}

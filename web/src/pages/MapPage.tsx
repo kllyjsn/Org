@@ -84,6 +84,7 @@ import {
 } from '../lib/layout';
 import type { LaneGrouping } from '../lib/layout';
 import { computeLaneView } from '../lib/laneView';
+import { committeeCoverage, coverageBand } from '../lib/coverage';
 import { useIsMobile } from '../lib/useIsMobile';
 import { matchesAllTokens } from '../lib/searchText';
 import { ROLE_META } from '../lib/colors';
@@ -745,6 +746,10 @@ function MapInner() {
   const committeeCovered = COMMITTEE_ROLES.filter(
     (r) => (coverage.get(r) ?? 0) > 0
   ).length;
+  const committeeScore = useMemo(
+    () => committeeCoverage(people),
+    [people]
+  );
 
   const relayLanes = useCallback(
     (ns: Node<PersonNodeData>[]) => {
@@ -2700,6 +2705,21 @@ function MapInner() {
                     );
                   })}
                 </ul>
+                <div className="border-t border-slate-100 px-4 py-2.5">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-[.1em] text-slate-400">
+                      Coverage score
+                    </span>
+                    <span className="text-xs font-semibold text-slate-700">
+                      {committeeScore.score} · {coverageBand(committeeScore.score)}
+                    </span>
+                  </div>
+                  {committeeScore.untouchedKeyPeople.length > 0 && (
+                    <p className="mt-1 text-[11px] leading-relaxed text-amber-600">
+                      No touch in 30+ days: {committeeScore.untouchedKeyPeople.map((p) => p.name).join(', ')}
+                    </p>
+                  )}
+                </div>
                 {committeeCovered < COMMITTEE_ROLES.length && (
                   <p className="border-t border-slate-100 px-4 py-2.5 text-[11px] leading-relaxed text-slate-500">
                     Set a person’s buying role from their profile to fill the gaps.

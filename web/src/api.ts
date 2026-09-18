@@ -15,6 +15,7 @@ import type {
   MapPresence,
   MapState,
   MapVersion,
+  NotificationsResponse,
   Person,
   ProductEventName,
   ProductValueSummary,
@@ -122,6 +123,46 @@ export const api = {
     }),
   disconnectIntegration: (id: string) =>
     req<{ ok: true }>(`/api/integrations/${id}`, { method: 'DELETE' }),
+
+  listNotifications: (workspaceId: string) =>
+    req<NotificationsResponse>(`/api/workspaces/${workspaceId}/notifications`),
+  addSlackChannel: (workspaceId: string, url: string, label: string) =>
+    req<{ ok: true }>(`/api/workspaces/${workspaceId}/notifications/channels`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'slack_webhook', url, label }),
+    }),
+  addEmailChannel: (workspaceId: string) =>
+    req<{ ok: true }>(`/api/workspaces/${workspaceId}/notifications/channels`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'email' }),
+    }),
+  testNotificationChannel: (workspaceId: string, channelId: string) =>
+    req<{ ok: true }>(
+      `/api/workspaces/${workspaceId}/notifications/channels/${channelId}/test`,
+      { method: 'POST' }
+    ),
+  setNotificationChannelEnabled: (
+    workspaceId: string,
+    channelId: string,
+    enabled: boolean
+  ) =>
+    req<{ ok: true }>(
+      `/api/workspaces/${workspaceId}/notifications/channels/${channelId}`,
+      { method: 'PATCH', body: JSON.stringify({ enabled }) }
+    ),
+  removeNotificationChannel: (workspaceId: string, channelId: string) =>
+    req<{ ok: true }>(
+      `/api/workspaces/${workspaceId}/notifications/channels/${channelId}`,
+      { method: 'DELETE' }
+    ),
+  updateNotificationPrefs: (
+    workspaceId: string,
+    prefs: { notifyEmail?: boolean; notifyBriefs?: boolean }
+  ) =>
+    req<{ ok: true }>(`/api/workspaces/${workspaceId}/notifications/prefs`, {
+      method: 'PATCH',
+      body: JSON.stringify(prefs),
+    }),
 
   sendFeedback: (input: {
     category: FeedbackCategory;

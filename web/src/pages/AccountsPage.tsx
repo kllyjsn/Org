@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
   BarChart3,
+  BellRing,
   BriefcaseBusiness,
   Building2,
   Clock3,
@@ -29,6 +30,7 @@ import FeedbackInboxModal from '../components/FeedbackInboxModal';
 import FeedbackModal from '../components/FeedbackModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
 import IntegrationsModal from '../components/IntegrationsModal';
+import NotificationsModal from '../components/NotificationsModal';
 import SellerProfileModal from '../components/SellerProfileModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -229,6 +231,7 @@ export default function AccountsPage() {
   const [showValue, setShowValue] = useState(false);
   const [showSellerProfile, setShowSellerProfile] = useState(false);
   const [showIntegrations, setShowIntegrations] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showFeedbackInbox, setShowFeedbackInbox] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
@@ -271,6 +274,7 @@ export default function AccountsPage() {
       [showFeedback, () => setShowFeedback(false)],
       [showFeedbackInbox, () => setShowFeedbackInbox(false)],
       [showIntegrations, () => setShowIntegrations(false)],
+      [showNotifications, () => setShowNotifications(false)],
       [showSellerProfile, () => setShowSellerProfile(false)],
       [showValue, () => setShowValue(false)],
       [showPricing, () => setShowPricing(false)],
@@ -292,6 +296,7 @@ export default function AccountsPage() {
     showFeedback,
     showFeedbackInbox,
     showIntegrations,
+    showNotifications,
     showSellerProfile,
     showValue,
     showPricing,
@@ -387,6 +392,11 @@ export default function AccountsPage() {
               icon={<Zap size={16} />}
               label="Integrations"
               onClick={() => setShowIntegrations(true)}
+            />
+            <RailButton
+              icon={<BellRing size={16} />}
+              label="Notifications"
+              onClick={() => setShowNotifications(true)}
             />
             <RailButton
               icon={<BarChart3 size={16} />}
@@ -676,6 +686,12 @@ export default function AccountsPage() {
       )}
       {showFeedbackInbox && (
         <FeedbackInboxModal onClose={() => setShowFeedbackInbox(false)} />
+      )}
+      {showNotifications && workspaceId && (
+        <NotificationsModal
+          workspaceId={workspaceId}
+          onClose={() => setShowNotifications(false)}
+        />
       )}
       {showIntegrations && workspaceId && (
         <IntegrationsModal
