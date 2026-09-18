@@ -148,7 +148,7 @@ export default function PersonPanel({
   };
 
   const field =
-    'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10 disabled:bg-slate-50 disabled:text-slate-600';
+    'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:bg-slate-50 disabled:text-slate-600';
 
   const set = (patch: Partial<Person>) => onChange({ ...person, ...patch });
 
@@ -159,12 +159,12 @@ export default function PersonPanel({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 340, opacity: 0 }}
       transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-      className="absolute inset-x-0 bottom-0 z-30 flex h-[82%] flex-col rounded-t-3xl border-t border-slate-200 bg-[#f9faf7] shadow-[0_-20px_60px_rgba(15,23,42,.15)] sm:inset-y-0 sm:left-auto sm:h-full sm:w-[360px] sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-[-20px_0_60px_rgba(15,23,42,.12)]"
+      className="absolute inset-x-0 bottom-0 z-30 flex h-[82%] flex-col rounded-t-3xl border-t border-slate-200 bg-sheet shadow-[0_-20px_60px_rgba(15,23,42,.15)] sm:inset-y-0 sm:left-auto sm:h-full sm:w-[360px] sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-[-20px_0_60px_rgba(15,23,42,.12)]"
     >
       <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300 sm:hidden" />
       <div className="flex items-start justify-between border-b border-slate-200/80 px-5 py-4">
         <div>
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
             {readOnly ? 'Stakeholder intelligence' : 'Stakeholder profile'}
           </div>
           <h2 className="text-lg font-semibold tracking-tight text-slate-950">
@@ -238,19 +238,19 @@ export default function PersonPanel({
                       </span>
                     </span>
                     {index === visible.length - 1 && (
-                      <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
+                      <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
                         manager
                       </span>
                     )}
                   </button>
                 ))}
               <div
-                className="flex items-center gap-2 rounded-lg bg-[#eeecff] px-2 py-1.5"
+                className="flex items-center gap-2 rounded-lg bg-brand-soft px-2 py-1.5"
                 style={{
                   paddingLeft: `${8 + Math.min(chainUp.length, 5) * 12}px`,
                 }}
               >
-                <span className="truncate text-xs font-semibold text-[#5b4cf0]">
+                <span className="truncate text-xs font-semibold text-brand">
                   {person.name}
                 </span>
               </div>
@@ -291,7 +291,7 @@ export default function PersonPanel({
                     <button
                       type="button"
                       onClick={() => setShowAllReports((v) => !v)}
-                      className="w-full rounded-lg px-2 py-1 text-left text-[10px] font-semibold text-[#5b4cf0] hover:bg-slate-50"
+                      className="w-full rounded-lg px-2 py-1 text-left text-[10px] font-semibold text-brand hover:bg-slate-50"
                     >
                       {showAllReports
                         ? 'Show fewer'
@@ -310,7 +310,7 @@ export default function PersonPanel({
               Research quality
             </span>
             <span
-              className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                 person.confidence === 'high'
                   ? 'bg-emerald-50 text-emerald-700'
                   : person.confidence === 'medium'

@@ -68,11 +68,11 @@ export default function FeedbackModal({
         initial={{ y: 24, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 26, stiffness: 260 }}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:rounded-3xl sm:p-7"
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-sheet p-5 shadow-2xl sm:rounded-3xl sm:p-7"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
               <MessageSquare size={13} />
               Tell us what to fix
             </div>
@@ -90,7 +90,7 @@ export default function FeedbackModal({
           <button
             onClick={onClose}
             aria-label="Close feedback"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
           >
             <X size={16} />
           </button>
@@ -104,7 +104,7 @@ export default function FeedbackModal({
               aria-pressed={category === item.id}
               className={`rounded-2xl border p-3 text-left transition ${
                 category === item.id
-                  ? 'border-[#5b4cf0] bg-white shadow-sm'
+                  ? 'border-brand bg-white shadow-sm'
                   : 'border-slate-200 bg-white/60 hover:border-slate-300'
               }`}
             >
@@ -124,7 +124,7 @@ export default function FeedbackModal({
           onChange={(event) => setMessage(event.target.value)}
           placeholder="What happened, or what would make this better?"
           aria-label="Feedback message"
-          className="mt-4 min-h-32 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-6 outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
+          className="mt-4 min-h-32 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-6 outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
         />
 
         {error && (

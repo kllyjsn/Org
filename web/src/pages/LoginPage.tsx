@@ -97,8 +97,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-full bg-[#f6f7f2] text-slate-950">
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-[#f6f7f2]/90 backdrop-blur-xl">
+    <div className="min-h-full bg-paper text-slate-950">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-paper/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
           <Wordmark size="md" />
           <nav className="hidden items-center gap-7 text-sm font-medium text-slate-500 md:flex">
@@ -131,17 +131,17 @@ export default function LoginPage() {
 
       <main id="main" tabIndex={-1}>
         <section className="relative overflow-hidden border-b border-slate-200">
-          <div className="pointer-events-none absolute -left-32 top-10 h-96 w-96 rounded-full bg-[#5b4cf0]/10 blur-3xl" />
-          <div className="pointer-events-none absolute right-0 top-0 h-[34rem] w-[34rem] rounded-full bg-[#c9f04b]/10 blur-3xl" />
+          <div className="pointer-events-none absolute -left-32 top-10 h-96 w-96 rounded-full bg-brand/10 blur-3xl" />
+          <div className="pointer-events-none absolute right-0 top-0 h-[34rem] w-[34rem] rounded-full bg-accent/10 blur-3xl" />
           <div className="relative mx-auto grid max-w-7xl gap-12 px-5 py-16 sm:px-8 sm:py-24 lg:grid-cols-[1.12fr_.88fr] lg:items-center lg:py-28">
             <div>
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#5b4cf0]/20 bg-white/70 px-3 py-1.5 text-xs font-semibold text-[#5b4cf0] shadow-sm">
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand/20 bg-white/70 px-3 py-1.5 text-xs font-semibold text-brand shadow-sm">
                 <Radar size={13} />
                 Account intelligence that leads to action
               </div>
               <h1 className="max-w-3xl text-5xl font-semibold leading-[.96] tracking-[-0.06em] text-slate-950 sm:text-7xl">
                 Know the account.
-                <span className="block text-[#5b4cf0]">Make the right move.</span>
+                <span className="block text-brand">Make the right move.</span>
               </h1>
               <p className="mt-7 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
                 TopDown turns scattered public research into a living account
@@ -151,7 +151,7 @@ export default function LoginPage() {
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <button
                   onClick={() => openAccess('register')}
-                  className="group flex items-center justify-center gap-2 rounded-xl bg-[#5b4cf0] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(91,76,240,.24)] hover:bg-[#4b3ddd]"
+                  className="group flex items-center justify-center gap-2 rounded-xl bg-brand px-5 py-3.5 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(91,76,240,.24)] hover:bg-brand-deep"
                 >
                   Build your first account
                   <ArrowRight
@@ -173,7 +173,7 @@ export default function LoginPage() {
                   'No integration required',
                 ].map((item) => (
                   <span key={item} className="flex items-center gap-1.5">
-                    <Check size={13} className="text-[#5b4cf0]" />
+                    <Check size={13} className="text-brand" />
                     {item}
                   </span>
                 ))}
@@ -185,7 +185,7 @@ export default function LoginPage() {
               className="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-[0_28px_90px_rgba(15,23,42,.12)] backdrop-blur sm:p-7"
             >
               <div className="mb-6">
-                <p className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#5b4cf0]">
+                <p className="text-[10px] font-semibold uppercase tracking-[.18em] text-brand">
                   Start with one live account
                 </p>
                 <h2 className="mt-2 text-3xl font-semibold tracking-[-0.045em]">
@@ -220,7 +220,7 @@ export default function LoginPage() {
                       id="login-name"
                       aria-label="Your name"
                       autoComplete="name"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
                       placeholder="Your name"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
@@ -230,7 +230,7 @@ export default function LoginPage() {
                       id="login-workspace"
                       aria-label="Workspace name"
                       autoComplete="organization"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
                       placeholder="Workspace name (e.g. North America sales)"
                       value={workspaceName}
                       onChange={(event) => setWorkspaceName(event.target.value)}
@@ -241,7 +241,7 @@ export default function LoginPage() {
                   id="login-email"
                   aria-label="Work email"
                   autoComplete="email"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
                   placeholder="Work email"
                   type="email"
                   value={email}
@@ -252,7 +252,7 @@ export default function LoginPage() {
                   id="login-password"
                   aria-label="Password"
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
                   placeholder={
                     mode === 'register' ? 'Password (8+ characters)' : 'Password'
                   }
@@ -272,7 +272,7 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={busy}
-                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-[#5b4cf0] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(91,76,240,.24)] transition hover:bg-[#4b3ddd] disabled:opacity-60"
+                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-brand-deep disabled:opacity-60"
                 >
                   {busy
                     ? 'Working…'
@@ -288,7 +288,7 @@ export default function LoginPage() {
 
         <section id="outcomes" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
           <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[.18em] text-[#5b4cf0]">
+            <p className="text-xs font-semibold uppercase tracking-[.18em] text-brand">
               Built around seller outcomes
             </p>
             <h2 className="mt-4 text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">
@@ -302,7 +302,7 @@ export default function LoginPage() {
                 className="rounded-3xl border border-slate-200 bg-white p-6 td-card-shadow sm:p-7"
               >
                 <div className="flex items-center justify-between">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#eeecff] text-[#5b4cf0]">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-soft text-brand">
                     <Icon size={20} />
                   </span>
                   <span className="font-mono text-xs text-slate-300">{number}</span>
@@ -321,7 +321,7 @@ export default function LoginPage() {
             <div className="grid gap-12 lg:grid-cols-[.72fr_1.28fr] lg:items-center">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-3 py-1.5 text-xs text-slate-300">
-                  <Sparkles size={13} className="text-[#c9f04b]" />
+                  <Sparkles size={13} className="text-accent" />
                   Illustrative workflow: Stripe → Microsoft
                 </div>
                 <h2 className="mt-6 text-4xl font-semibold leading-tight tracking-[-0.05em] sm:text-5xl">
@@ -338,7 +338,7 @@ export default function LoginPage() {
                     ['After', 'A sourced map, an explicit path hypothesis, and a prioritized next move.'],
                   ].map(([label, copy]) => (
                     <div key={label} className="flex gap-3">
-                      <span className="mt-0.5 rounded-md bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#c9f04b]">
+                      <span className="mt-0.5 rounded-md bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
                         {label}
                       </span>
                       <p className="text-sm leading-6 text-slate-300">{copy}</p>
@@ -347,10 +347,10 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#f6f7f2] text-slate-950 shadow-2xl">
+              <div className="overflow-hidden rounded-3xl border border-white/10 bg-paper text-slate-950 shadow-2xl">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                   <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#5b4cf0]">
+                    <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-brand">
                       Microsoft account plan
                     </div>
                     <div className="mt-1 text-sm font-semibold">
@@ -358,7 +358,7 @@ export default function LoginPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-[#effbd0] px-2.5 py-1 text-[10px] font-semibold">
+                    <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[10px] font-semibold">
                       Live deal
                     </span>
                     <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-500 shadow-sm">
@@ -368,52 +368,52 @@ export default function LoginPage() {
                 </div>
                 <div className="grid gap-4 p-4 sm:p-6 md:grid-cols-[1.25fr_.75fr]">
                   <div className="td-grid relative min-h-[440px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 sm:min-h-[360px]">
-                    <div className="absolute left-1/2 top-7 z-10 w-40 -translate-x-1/2 rounded-xl border border-[#5b4cf0]/30 bg-white p-3 shadow-lg sm:w-44">
-                      <div className="text-[9px] font-semibold uppercase tracking-wide text-[#5b4cf0]">
+                    <div className="absolute left-1/2 top-7 z-10 w-40 -translate-x-1/2 rounded-xl border border-brand/30 bg-white p-3 shadow-lg sm:w-44">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-brand">
                         Decision area
                       </div>
                       <div className="mt-1 text-xs font-semibold">
                         Enterprise commerce leader
                       </div>
                       <div className="mt-2 flex gap-1">
-                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-700">
+                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                           Sourced
                         </span>
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[8px] text-slate-500">
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
                           High confidence
                         </span>
                       </div>
                     </div>
                     <div className="absolute left-3 top-[29%] z-10 w-32 rounded-xl border border-slate-200 bg-white p-3 shadow-md sm:left-[18%] sm:top-[47%] sm:w-36">
-                      <div className="text-[9px] font-semibold uppercase text-slate-400">
+                      <div className="text-[10px] font-semibold uppercase text-slate-400">
                         Champion path
                       </div>
                       <div className="mt-1 text-xs font-semibold">
                         Payments product lead
                       </div>
-                      <span className="mt-2 inline-block rounded bg-amber-50 px-1.5 py-0.5 text-[8px] font-semibold text-amber-700">
+                      <span className="mt-2 inline-block rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                         Inferred assignment
                       </span>
                     </div>
                     <div className="absolute right-3 top-[47%] z-10 w-32 rounded-xl border border-slate-200 bg-white p-3 shadow-md sm:right-[13%] sm:top-[52%] sm:w-36">
-                      <div className="text-[9px] font-semibold uppercase text-slate-400">
+                      <div className="text-[10px] font-semibold uppercase text-slate-400">
                         Validation
                       </div>
                       <div className="mt-1 text-xs font-semibold">
                         Procurement partner
                       </div>
-                      <span className="mt-2 inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-700">
+                      <span className="mt-2 inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                         Sourced
                       </span>
                     </div>
                     <div className="absolute bottom-4 left-1/2 z-10 w-36 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-3 shadow-md sm:bottom-6 sm:w-40">
-                      <div className="text-[9px] font-semibold uppercase text-slate-400">
+                      <div className="text-[10px] font-semibold uppercase text-slate-400">
                         Technical influence
                       </div>
                       <div className="mt-1 text-xs font-semibold">
                         Commerce engineering
                       </div>
-                      <span className="mt-2 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[8px] text-slate-500">
+                      <span className="mt-2 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
                         Needs verification
                       </span>
                     </div>
@@ -432,7 +432,7 @@ export default function LoginPage() {
 
                   <div className="space-y-3">
                     <div className="rounded-2xl bg-slate-950 p-4 text-white">
-                      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#c9f04b]">
+                      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-accent">
                         <Target size={12} /> Next move
                       </div>
                       <p className="mt-3 text-sm font-semibold leading-5">
@@ -473,7 +473,7 @@ export default function LoginPage() {
         <section id="teams" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
           <div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr]">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[.18em] text-[#5b4cf0]">
+              <p className="text-xs font-semibold uppercase tracking-[.18em] text-brand">
                 One account truth
               </p>
               <h2 className="mt-4 text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">
@@ -491,7 +491,7 @@ export default function LoginPage() {
                   key={audience.label}
                   className="grid gap-3 py-6 sm:grid-cols-[140px_1fr]"
                 >
-                  <div className="text-xs font-semibold uppercase tracking-[.12em] text-[#5b4cf0]">
+                  <div className="text-xs font-semibold uppercase tracking-[.12em] text-brand">
                     {audience.label}
                   </div>
                   <div>
@@ -508,7 +508,7 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="mx-4 mb-4 overflow-hidden rounded-3xl bg-[#5b4cf0] text-white sm:mx-6 sm:mb-6">
+        <section className="mx-4 mb-4 overflow-hidden rounded-3xl bg-brand text-white sm:mx-6 sm:mb-6">
           <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-6 py-12 sm:px-10 lg:flex-row lg:items-center lg:py-14">
             <div>
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.15em] text-white/70">
@@ -521,7 +521,7 @@ export default function LoginPage() {
             </div>
             <button
               onClick={() => openAccess('register')}
-              className="flex shrink-0 items-center gap-2 rounded-xl bg-[#c9f04b] px-5 py-3.5 text-sm font-semibold text-slate-950 shadow-lg hover:bg-[#d6f56b]"
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-slate-950 shadow-lg hover:bg-accent-hover"
             >
               Build your first map <ArrowRight size={16} />
             </button>

@@ -46,11 +46,11 @@ export default function FeedbackInboxModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-inbox-modal-title"
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] shadow-2xl sm:max-w-3xl sm:rounded-3xl"
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-sheet shadow-2xl sm:max-w-3xl sm:rounded-3xl"
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 bg-white/70 p-5 sm:p-6">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
               <Inbox size={13} />
               Admin
             </div>
@@ -64,7 +64,7 @@ export default function FeedbackInboxModal({
           <button
             onClick={onClose}
             aria-label="Close feedback inbox"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
           >
             <X size={16} />
           </button>
@@ -93,7 +93,7 @@ export default function FeedbackInboxModal({
               className="rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[#eeecff] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#5b4cf0]">
+                <span className="rounded-full bg-brand-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-brand">
                   {CATEGORY_LABELS[item.category]}
                 </span>
                 <span className="text-xs font-medium text-slate-600">

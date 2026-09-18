@@ -18,6 +18,7 @@ import {
   Trash2,
   Users,
   Workflow,
+  X,
   Zap,
 } from 'lucide-react';
 import { Wordmark } from '../components/Wordmark';
@@ -69,21 +70,33 @@ function MembersModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
       <div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="members-modal-title"
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-sheet p-5 shadow-2xl sm:rounded-3xl sm:p-7"
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="members-modal-title" className="text-lg font-semibold">
-            Workspace members
-          </h2>
-          <button            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600" aria-label="Close">
-            ✕
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
+              <Users size={13} aria-hidden="true" />
+              Workspace
+            </div>
+            <h2
+              id="members-modal-title"
+              className="text-2xl font-semibold tracking-[-0.04em] text-slate-950"
+            >
+              Workspace members
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
+          >
+            <X size={16} />
           </button>
         </div>
         <ul className="mb-4 divide-y divide-slate-100">
@@ -93,7 +106,7 @@ function MembersModal({
                 <div className="text-sm font-medium">{m.name}</div>
                 <div className="text-xs text-slate-500">{m.email}</div>
               </div>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 {m.role}
               </span>
             </li>
@@ -101,7 +114,7 @@ function MembersModal({
         </ul>
         <form onSubmit={add} className="flex gap-2">
           <input
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500"
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
             placeholder="teammate@company.com"
             type="email"
             aria-label="Teammate email"
@@ -112,7 +125,7 @@ function MembersModal({
           />
           <button
             type="submit"
-            className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+            className="rounded-xl bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-deep"
           >
             Add
           </button>
@@ -155,33 +168,36 @@ function PricingModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
       <div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="pricing-modal-title"
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-sheet p-5 shadow-2xl sm:rounded-3xl sm:p-7"
       >
-        <div className="mb-5 flex items-start justify-between">
+        <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
               <Zap size={13} /> TopDown Pro
             </div>
             <h2
               id="pricing-modal-title"
-              className="text-2xl font-bold text-slate-900"
+              className="text-2xl font-semibold tracking-[-0.04em] text-slate-950"
             >
               Unlimited account maps
             </h2>
           </div>
-          <button            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600" aria-label="Close">
-            ✕
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
+          >
+            <X size={16} />
           </button>
         </div>
         <div className="mb-5 flex items-end gap-1">
-          <span className="text-4xl font-bold text-slate-900">$10</span>
+          <span className="text-4xl font-semibold tracking-[-0.04em] text-slate-900">$10</span>
           <span className="pb-1 text-sm text-slate-500">/ month</span>
         </div>
         <ul className="mb-6 space-y-2 text-sm text-slate-600">
@@ -193,7 +209,7 @@ function PricingModal({
         <button
           onClick={() => void upgrade()}
           disabled={loading}
-          className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white shadow-cta hover:bg-brand-deep disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? 'Opening secure checkout…' : 'Upgrade to Pro'}
         </button>
@@ -322,10 +338,10 @@ export default function AccountsPage() {
   };
 
   return (
-    <div className="flex h-full overflow-hidden bg-[#f6f7f2]">
+    <div className="flex h-full overflow-hidden bg-paper">
       <nav
         aria-label="Workspace tools"
-        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-56 sm:items-stretch sm:px-3"
+        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-ink py-2 sm:w-56 sm:items-stretch sm:px-3"
       >
         <div
           className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[.06] sm:w-full sm:justify-start sm:px-3"
@@ -442,7 +458,7 @@ export default function AccountsPage() {
         <div className="mx-auto max-w-7xl">
         <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
-            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-brand">
               <Radar size={14} />
               Account intelligence
             </div>
@@ -490,8 +506,8 @@ export default function AccountsPage() {
               }
               className="group relative flex min-h-52 flex-col items-start justify-between overflow-hidden rounded-2xl bg-slate-950 p-5 text-left text-white shadow-[0_20px_45px_rgba(15,23,42,.16)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_55px_rgba(15,23,42,.22)]"
             >
-              <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-[#5b4cf0] blur-2xl transition group-hover:scale-125" />
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-[#c9f04b] text-slate-950">
+              <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-brand blur-2xl transition group-hover:scale-125" />
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-slate-950">
                 <Plus size={20} />
               </div>
               <div className="relative">
@@ -512,12 +528,12 @@ export default function AccountsPage() {
               <div
                 key={m.id}
                 onClick={() => navigate(`/app/maps/${m.id}`)}
-                className="group relative flex min-h-52 cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 td-card-shadow transition hover:-translate-y-0.5 hover:border-[#b9b2ff] hover:shadow-[0_20px_48px_rgba(15,23,42,.12)]"
+                className="group relative flex min-h-52 cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 td-card-shadow transition hover:-translate-y-0.5 hover:border-brand-line hover:shadow-[0_20px_48px_rgba(15,23,42,.12)]"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eeecff] text-[#5b4cf0]">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
                         <Building2 size={18} />
                       </div>
                       <div className="min-w-0">
@@ -551,7 +567,7 @@ export default function AccountsPage() {
                       T0 public web
                     </span>
                     {m.is_live_opportunity && (
-                      <span className="rounded-full bg-[#effbd0] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                      <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
                         Live deal
                       </span>
                     )}
@@ -559,8 +575,8 @@ export default function AccountsPage() {
                 </div>
                 <div className="flex items-end justify-between border-t border-slate-100 pt-4 text-xs text-slate-500">
                   <div className="flex gap-4">
-                    <span className="flex items-center gap-1.5 font-medium text-slate-700">
-                      <Workflow size={13} className="text-[#5b4cf0]" /> {m.peopleCount} people
+                    <span className="flex items-center gap-1.5 whitespace-nowrap font-medium text-slate-700">
+                      <Workflow size={13} className="text-brand" /> {m.peopleCount} people
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Clock3 size={13} /> {new Date(m.updated_at).toLocaleDateString()}
@@ -575,8 +591,8 @@ export default function AccountsPage() {
                         }}
                         className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition ${
                           m.is_live_opportunity
-                            ? 'bg-[#effbd0] text-slate-700 hover:bg-[#e4f7b7]'
-                            : 'bg-slate-100 text-slate-500 hover:text-[#5b4cf0] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100'
+                            ? 'bg-accent-soft text-slate-700 hover:bg-accent-softer'
+                            : 'bg-slate-100 text-slate-500 hover:text-brand sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100'
                         }`}
                       >
                         <BriefcaseBusiness size={12} />
@@ -590,13 +606,13 @@ export default function AccountsPage() {
                         event.stopPropagation();
                         navigate(`/app/maps/${m.id}?briefing=1`);
                       }}
-                      className="flex items-center gap-1.5 rounded-lg bg-[#eeecff] px-2.5 py-1.5 text-[10px] font-semibold text-[#5b4cf0] transition hover:bg-[#e3dfff] sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                      className="flex items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1.5 text-[10px] font-semibold text-brand transition hover:bg-brand-softer sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                     >
                       <Radar size={12} /> Next moves
                     </button>
                     <ArrowUpRight
                       size={17}
-                      className="text-slate-300 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#5b4cf0]"
+                      className="text-slate-300 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand"
                     />
                   </div>
                 </div>

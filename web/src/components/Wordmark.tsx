@@ -30,7 +30,7 @@ export function Wordmark({
           strokeWidth="3.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={inverse ? 'text-white' : 'text-[#5b4cf0]'}
+          className={inverse ? 'text-white' : 'text-brand'}
         />
         <path
           d="M22 6v20m0 0 5.5-5.5M22 26l-5.5-5.5"
@@ -38,7 +38,7 @@ export function Wordmark({
           strokeWidth="3.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={inverse ? 'text-[#c9f04b]' : 'text-slate-950'}
+          className={inverse ? 'text-accent' : 'text-slate-950'}
         />
       </svg>
       {!markOnly && (

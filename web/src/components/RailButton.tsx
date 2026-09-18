@@ -31,7 +31,7 @@ export default function RailButton({
         active
           ? 'bg-white/15 text-white'
           : accent
-            ? 'bg-[#5b4cf0] text-white hover:bg-[#6b5cf8]'
+            ? 'bg-brand text-white hover:bg-brand-hover'
             : 'text-slate-400 hover:bg-white/10 hover:text-white'
       } ${disabled ? 'cursor-not-allowed opacity-35' : ''}`}
     >

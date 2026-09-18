@@ -184,7 +184,7 @@ export default function RosterView({
   };
 
   return (
-    <div className="flex h-full flex-col bg-[#f6f7f2]">
+    <div className="flex h-full flex-col bg-paper">
       <div className="shrink-0 space-y-2 border-b border-slate-200/80 bg-white/80 px-3 py-2.5 backdrop-blur-xl sm:px-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
@@ -202,7 +202,7 @@ export default function RosterView({
             onClick={cycleSort}
             title="Change sort"
             aria-label={`Sort by ${SORT_LABEL[sortKey]}`}
-            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:text-[#5b4cf0]"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:text-brand"
           >
             <ArrowDownWideNarrow size={14} />
             <span className="hidden sm:inline">{SORT_LABEL[sortKey]}</span>
@@ -211,7 +211,7 @@ export default function RosterView({
             type="button"
             onClick={() => exportCsv('visible')}
             title={`Export the ${rows.length} visible rows as CSV`}
-            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:text-[#5b4cf0]"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:text-brand"
           >
             <Download size={14} />
             <span className="hidden sm:inline">Export</span>
@@ -221,7 +221,7 @@ export default function RosterView({
               type="button"
               onClick={() => exportCsv('all')}
               title={`Filters are active — export all ${people.length} people instead`}
-              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-[#5b4cf0]/30 bg-[#eeecff] px-3 py-2 text-xs font-semibold text-[#5144d7] shadow-sm hover:bg-[#e2dfff]"
+              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-brand/30 bg-brand-soft px-3 py-2 text-xs font-semibold text-brand-text shadow-sm hover:bg-brand-softer"
             >
               <Download size={14} />
               <span className="hidden sm:inline">All {people.length}</span>
@@ -291,7 +291,7 @@ export default function RosterView({
                 aria-pressed={active}
                 className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                   active
-                    ? 'border-[#5b4cf0] bg-[#eeecff] text-[#5b4cf0]'
+                    ? 'border-brand bg-brand-soft text-brand'
                     : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
                 }`}
               >
@@ -301,7 +301,7 @@ export default function RosterView({
                   )}`}
                 />
                 {lane}
-                <span className={active ? 'text-[#8c82ff]' : 'text-slate-400'}>
+                <span className={active ? 'text-brand-faint' : 'text-slate-400'}>
                   {count}
                 </span>
               </button>
@@ -332,7 +332,7 @@ export default function RosterView({
         ) : (
           <table className="w-full border-collapse">
             <caption className="sr-only">Stakeholder roster</caption>
-            <thead className="sticky top-0 z-10 bg-[#f6f7f2]/95 backdrop-blur">
+            <thead className="sticky top-0 z-10 bg-paper/95 backdrop-blur">
               <tr className="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
                 <th
                   scope="col"
@@ -379,7 +379,7 @@ export default function RosterView({
                     key={person.id}
                     onClick={() => onSelect(person)}
                     className={`cursor-pointer border-b border-slate-100 transition hover:bg-white ${
-                      selectedId === person.id ? 'bg-[#f5f4ff]' : ''
+                      selectedId === person.id ? 'bg-brand-tint' : ''
                     }`}
                   >
                     <td className="px-3 py-2 sm:px-4">
