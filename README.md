@@ -1,7 +1,9 @@
-# Org
+# TopDown
 
 **Org charts that build themselves.** Paste a company domain → get an AI-researched
 stakeholder map in ~60 seconds → manipulate it on a canvas → share a live link.
+
+Deployed at [topdown.sh](https://topdown.sh) — Vercel (web + serverless API) + Vercel Postgres.
 
 Built for sales teams mapping buying committees — champions, economic buyers,
 blockers, and the reporting lines between them.
@@ -24,14 +26,14 @@ blockers, and the reporting lines between them.
 | Piece | Choice |
 |---|---|
 | `web/` | React 18 + TypeScript + Vite + Tailwind + Zustand + React Flow |
-| `api/` | Hono + better-sqlite3 (file DB; swap to Postgres when we outgrow it) |
-| LLM | OpenRouter (primary, `OPENROUTER_API_KEY`) → Perplexity sonar (fallback) → demo fixture |
+| `api/` | Hono + Postgres — `api/index.ts` is the Vercel serverless entry, `_src/serve.ts` is the local dev server |
+| LLM | Gemini → OpenRouter → Perplexity → demo fixture; override with `LLM_PROVIDER_PRIORITY` |
 
 ## Dev
 
 ```bash
 npm install
-cp .env.example .env        # add PERPLEXITY_API_KEY or OPENROUTER_API_KEY
+cp .env.example .env        # MONGODB_URI + at least one LLM key
 npm run dev                 # api :8787  +  web :5173 (proxies /api)
 ```
 
