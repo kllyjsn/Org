@@ -304,11 +304,15 @@ export default function NotificationsModal({
               )}
             </section>
 
-            {data.recent.length > 0 && (
-              <section>
-                <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <BellRing size={12} /> Recent
-                </h3>
+            <section>
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <BellRing size={12} /> Recent
+              </h3>
+              {data.recent.length === 0 ? (
+                <p className="text-[11px] text-slate-400">
+                  No notifications sent yet.
+                </p>
+              ) : (
                 <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
                   {data.recent.map((row, index) => (
                     <li
@@ -337,8 +341,8 @@ export default function NotificationsModal({
                     </li>
                   ))}
                 </ul>
-              </section>
-            )}
+              )}
+            </section>
           </div>
         )}
       </div>
