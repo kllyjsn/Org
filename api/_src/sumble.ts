@@ -70,6 +70,74 @@ async function sumbleCall(
   return payload;
 }
 
+export async function sumbleResolveOrg(
+  domain: string,
+  apiKey: string,
+  deadlineMs: number
+): Promise<{ id: string | number; name: string | null } | null> {
+  const payload = await sumbleCall(
+    '/organizations',
+    { organizations: [{ url: domain }], select: { attributes: ['id', 'name'] } },
+    apiKey,
+    deadlineMs
+  );
+  const row = rowsOf(payload, 'organizations')[0] as Record<string, unknown> | undefined;
+  const org = (row?.attributes ?? row) as Record<string, unknown> | undefined;
+  const id = org ? idOf(org.id ?? org.organization_id) : null;
+  return id == null ? null : { id, name: textOf(org?.name) };
+}
+
+export async function sumbleAllPeople(
+  orgId: string | number,
+  apiKey: string,
+  opts: { max?: number; deadlineMs: number; onProgress: (n: number) => void }
+): Promise<{ people: Record<string, unknown>[]; total: number | null }> {
+  const max = Math.min(2000, opts.max ?? 2000);
+  const out: Record<string, unknown>[] = [];
+  let total: number | null = null;
+  const limit = 200;
+  for (
+    let offset = 0;
+    out.length < max && Date.now() < opts.deadlineMs - 1_500;
+    offset += limit
+  ) {
+    const payload = await sumbleCall('/people', {
+      filter: { organization_ids: [orgId] },
+      select: { attributes: ['name', 'job_title', 'job_level', 'job_function', 'linkedin_url', 'location', 'sumble_url'] },
+      limit, offset, order_by_column: 'job_level', order_by_direction: 'DESC',
+    }, apiKey, opts.deadlineMs);
+    if (!payload) break;
+    if (typeof payload.detail === 'string' && !Array.isArray(payload.people)) throw new Error(payload.detail);
+    const rows = rowsOf(payload, 'people') as Record<string, unknown>[];
+    out.push(...rows);
+    opts.onProgress(out.length);
+    if (typeof payload.total === 'number') total = payload.total;
+    if (rows.length < limit || (total != null && out.length >= Math.min(total, max))) break;
+  }
+  return { people: out.slice(0, max), total };
+}
+
+export async function sumbleRelatedPeople(
+  orgId: string | number,
+  apiKey: string,
+  deadlineMs: number
+): Promise<Map<string, string>> {
+  const payload = await sumbleCall('/people', {
+    filter: { organization_ids: [orgId] },
+    select: {
+      attributes: ['name', 'job_title'],
+      related_people: {
+        attributes: ['name', 'job_title'],
+        direction: ['managers', 'direct_reports'],
+      },
+    },
+    limit: 25,
+    order_by_column: 'job_level',
+    order_by_direction: 'DESC',
+  }, apiKey, deadlineMs);
+  return sumbleRelationships(rowsOf(payload, 'people')).managerByName;
+}
+
 function rowsOf(payload: SumbleResponse | null, key: string): unknown[] {
   if (!payload) return [];
   const value = payload[key];
@@ -359,50 +427,21 @@ export async function sumbleOrgPeople(
   const apiKey = process.env.SUMBLE_API_KEY;
   if (!apiKey) return null;
 
-  const orgPayload = await sumbleCall(
-    '/organizations',
-    {
-      organizations: [{ url: domain }],
-      select: { attributes: ['id', 'name'] },
-    },
-    apiKey,
-    deadlineMs
-  );
-  const orgRow = rowsOf(orgPayload, 'organizations')[0] as
-    | Record<string, unknown>
-    | undefined;
-  const org = (orgRow?.attributes ?? orgRow) as
-    | Record<string, unknown>
-    | undefined;
-  const orgId = org ? idOf(org.id ?? org.organization_id) : null;
-  if (!orgId) return null;
+  const resolved = await sumbleResolveOrg(domain, apiKey, deadlineMs);
+  if (!resolved) return null;
+  const orgId = resolved.id;
+  const org = { id: resolved.id, name: resolved.name };
 
   const remaining = deadlineMs - Date.now();
   if (remaining < 2_000) return null;
   const innerDeadline = Date.now() + remaining;
 
-  const [peoplePayload, teamsPayload, relatedPayload] = await Promise.all([
-    sumbleCall(
-      '/people',
-      {
-        filter: { organization_ids: [orgId] },
-        select: {
-          attributes: [
-            'name',
-            'job_title',
-            'job_function',
-            'job_level',
-            'linkedin_url',
-            'location',
-          ],
-        },
-        limit: 200,
-        order_by_column: 'job_level',
-        order_by_direction: 'DESC',
-      },
-      apiKey,
-      innerDeadline
-    ),
+  const [peopleResult, teamsPayload, relatedPayload] = await Promise.all([
+    sumbleAllPeople(orgId, apiKey, {
+      max: 200,
+      deadlineMs: innerDeadline,
+      onProgress: () => undefined,
+    }).catch(() => ({ people: [], total: null })),
     sumbleCall(
       '/teams',
       {
@@ -447,7 +486,7 @@ export async function sumbleOrgPeople(
     rowsOf(relatedPayload, 'people')
   );
   const people = sumblePeopleToRaw(
-    rowsOf(peoplePayload, 'people'),
+    peopleResult.people,
     teamByName,
     managerByName
   );
@@ -455,11 +494,9 @@ export async function sumbleOrgPeople(
   const extra = extraPeople.filter((p) => !covered.has(String(p.name).toLowerCase()));
   const combined = [...people, ...extra];
   if (combined.length === 0) return null;
-  const total =
-    typeof peoplePayload?.total === 'number' ? peoplePayload.total : null;
   return {
     companyName: textOf(org?.name),
     people: combined,
-    total,
+    total: peopleResult.total,
   };
 }

@@ -48,6 +48,7 @@ export interface Person {
   metWith?: boolean;
   email: string | null;
   linkedin: string | null;
+  jobLevel?: string | null;
   x: number;
   y: number;
 }
@@ -172,4 +173,3 @@ export interface ShareLinkRow {
   expires_at: string | null;
   created_at: string;
 }
-
