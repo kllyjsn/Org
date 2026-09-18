@@ -47,6 +47,13 @@ meeting counts, and `metWith` on mapped people. Set the provider OAuth
 client env vars plus `INTEGRATION_ENCRYPTION_KEY` (tokens are AES-256-GCM
 encrypted at rest); without them the UI shows providers as Not configured.
 
+## Notifications
+
+Change-alert digests, pre-meeting briefs, and a weekly committee coverage
+roll-up are delivered via Slack webhooks and (with `RESEND_API_KEY`) email.
+Slack webhook URLs are encrypted at rest with `INTEGRATION_ENCRYPTION_KEY`;
+a `/api/cron/notify` tick (every 15 min) queues briefs and flushes the outbox.
+
 ## Notes
 
 - Auth is minimal email/password + session cookie — structured to swap in

@@ -171,6 +171,37 @@ CREATE TABLE IF NOT EXISTS touchpoints (
 );
 CREATE INDEX IF NOT EXISTS idx_touchpoints_map ON touchpoints(map_id);
 CREATE INDEX IF NOT EXISTS idx_integrations_workspace ON integrations(workspace_id);
+ALTER TABLE workspace_members
+  ADD COLUMN IF NOT EXISTS notify_email BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE workspace_members
+  ADD COLUMN IF NOT EXISTS notify_briefs BOOLEAN NOT NULL DEFAULT TRUE;
+CREATE TABLE IF NOT EXISTS notification_channels (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('slack_webhook','email')),
+  target TEXT NOT NULL,
+  label TEXT,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS notification_outbox (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  map_id TEXT REFERENCES maps(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('change_alert','pre_meeting_brief','weekly_coverage')),
+  dedupe_key TEXT UNIQUE NOT NULL,
+  payload JSONB NOT NULL,
+  scheduled_for TEXT NOT NULL,
+  sent_at TEXT,
+  attempts INT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notification_channels_workspace
+  ON notification_channels(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_due
+  ON notification_outbox(sent_at, scheduled_for);
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
 CREATE INDEX IF NOT EXISTS research_jobs_status_idx
   ON research_jobs (status, created_at);

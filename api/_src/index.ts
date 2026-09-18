@@ -22,12 +22,21 @@ import {
 } from './research.js';
 import { applyVerification, toResearchedPerson } from './verify-person.js';
 import {
+  decryptSecret,
   encryptionKeyConfigured,
   encryptSecret,
   signPayload,
   signatureMatches,
 } from './crypto.js';
 import { adapterFor, providerStatus } from './integrations/registry.js';
+import { committeeCoverage } from './notifications/coverage.js';
+import {
+  enqueuePreMeetingBriefs,
+  enqueueWeeklyCoverage,
+  notificationsConfigured,
+  sendDue,
+  sendThroughChannel,
+} from './notifications/dispatch.js';
 import {
   syncIntegration,
   syncNextDueIntegration,
@@ -424,10 +433,31 @@ app.get('/api/cron/refresh', async (c) => {
       console.error('integration sync failed', error);
       return { synced: false };
     });
-    return c.json({ ...refresh, integrationSync });
+    const notifications = await sendDue().catch((error) => {
+      console.error('notification dispatch failed', error);
+      return { sent: 0, failed: 0 };
+    });
+    return c.json({ ...refresh, integrationSync, notifications });
   } catch (error) {
     console.error('background refresh failed', error);
     return bad(c, 'background refresh failed', 500);
+  }
+});
+
+app.get('/api/cron/notify', async (c) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return bad(c, 'notifications are not configured', 503);
+  if (c.req.header('authorization') !== `Bearer ${secret}`) {
+    return bad(c, 'unauthorized', 401);
+  }
+  try {
+    const briefs = await enqueuePreMeetingBriefs();
+    const weekly = await enqueueWeeklyCoverage();
+    const sent = await sendDue();
+    return c.json({ briefs, weekly, sent });
+  } catch (error) {
+    console.error('notify cron failed', error);
+    return bad(c, 'notification dispatch failed', 500);
   }
 });
 
@@ -1103,6 +1133,264 @@ app.delete('/api/integrations/:id', requireAuth, async (c) => {
   await query('DELETE FROM integrations WHERE id = $1', [integration.id]);
   return c.json({ ok: true });
 });
+
+// ---------- notifications ----------
+
+interface ChannelRow {
+  id: string;
+  workspace_id: string;
+  kind: 'slack_webhook' | 'email';
+  target: string;
+  label: string | null;
+  enabled: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+/** Slack webhook URLs never leave the API — only a location hint. */
+function targetHint(channel: ChannelRow): string {
+  if (channel.kind !== 'slack_webhook') return 'workspace members';
+  try {
+    const url = new URL(decryptSecret(channel.target));
+    const tail = url.pathname.slice(-4);
+    return `${url.hostname}/…${tail}`;
+  } catch {
+    return 'slack webhook';
+  }
+}
+
+app.get('/api/workspaces/:id/notifications', requireAuth, async (c) => {
+  const user = c.get('user');
+  const wsId = param(c, 'id');
+  if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
+  const channels = await query<ChannelRow>(
+    `SELECT * FROM notification_channels
+     WHERE workspace_id = $1 ORDER BY created_at`,
+    [wsId]
+  );
+  const prefs = await query<{
+    notify_email: boolean;
+    notify_briefs: boolean;
+  }>(
+    `SELECT notify_email, notify_briefs FROM workspace_members
+     WHERE workspace_id = $1 AND user_id = $2`,
+    [wsId, user.id]
+  );
+  const recent = await query<{
+    kind: string;
+    payload: { title?: string };
+    scheduled_for: string;
+    sent_at: string | null;
+    last_error: string | null;
+  }>(
+    `SELECT kind, payload, scheduled_for, sent_at, last_error
+     FROM notification_outbox
+     WHERE workspace_id = $1 ORDER BY scheduled_for DESC LIMIT 10`,
+    [wsId]
+  );
+  const configured = notificationsConfigured();
+  return c.json({
+    channels: channels.map((channel) => ({
+      id: channel.id,
+      kind: channel.kind,
+      label: channel.label,
+      enabled: channel.enabled,
+      createdAt: channel.created_at,
+      targetHint: targetHint(channel),
+    })),
+    prefs: {
+      notifyEmail: prefs[0]?.notify_email ?? true,
+      notifyBriefs: prefs[0]?.notify_briefs ?? true,
+    },
+    emailConfigured: configured.email,
+    encryptionConfigured: configured.encryption,
+    recent: recent.map((row) => ({
+      kind: row.kind,
+      title: row.payload?.title ?? '',
+      scheduledFor: row.scheduled_for,
+      sentAt: row.sent_at,
+      lastError: row.last_error,
+    })),
+  });
+});
+
+app.post(
+  '/api/workspaces/:id/notifications/channels',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    if (!canWrite(await workspaceRoleFor(user, wsId))) {
+      return bad(c, 'insufficient role', 403);
+    }
+    const body = await c.req.json().catch(() => null);
+    const kind = body?.kind;
+    if (kind === 'email') {
+      // One email channel row per workspace.
+      await query(
+        `INSERT INTO notification_channels
+          (id, workspace_id, kind, target, label, created_by, enabled, created_at)
+         VALUES ($1,$2,'email','members','Workspace email',$3,TRUE,$4)
+         ON CONFLICT DO NOTHING`,
+        [randomUUID(), wsId, user.id, now()]
+      );
+      return c.json({ ok: true });
+    }
+    if (kind !== 'slack_webhook') return bad(c, 'unknown channel kind', 400);
+    const url = typeof body?.url === 'string' ? body.url.trim() : '';
+    if (!url.startsWith('https://hooks.slack.com/')) {
+      return bad(c, 'must be a https://hooks.slack.com/ webhook URL', 400);
+    }
+    if (!notificationsConfigured().encryption) {
+      return bad(c, 'notifications are not configured', 503);
+    }
+    const label =
+      typeof body?.label === 'string' ? body.label.trim().slice(0, 120) : null;
+    await query(
+      `INSERT INTO notification_channels
+        (id, workspace_id, kind, target, label, created_by, enabled, created_at)
+       VALUES ($1,$2,'slack_webhook',$3,$4,$5,TRUE,$6)`,
+      [randomUUID(), wsId, encryptSecret(url), label, user.id, now()]
+    );
+    return c.json({ ok: true });
+  }
+);
+
+/** Channel must live in a workspace the caller can write to. */
+async function channelForUser(
+  user: UserRow,
+  channelId: string
+): Promise<[ChannelRow | null, boolean]> {
+  const rows = await query<ChannelRow>(
+    'SELECT * FROM notification_channels WHERE id = $1',
+    [channelId]
+  );
+  const channel = rows[0];
+  if (!channel) return [null, false];
+  return [channel, canWrite(await workspaceRoleFor(user, channel.workspace_id))];
+}
+
+app.post(
+  '/api/workspaces/:id/notifications/channels/:channelId/test',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    if (!canWrite(await workspaceRoleFor(user, wsId))) {
+      return bad(c, 'insufficient role', 403);
+    }
+    const [channel, allowed] = await channelForUser(
+      user,
+      param(c, 'channelId')
+    );
+    if (!channel || channel.workspace_id !== wsId) {
+      return bad(c, 'not found', 404);
+    }
+    if (!allowed) return bad(c, 'insufficient role', 403);
+    try {
+      await sendThroughChannel(channel.id, {
+        title: 'TopDown connected',
+        lines: ['Notifications from this workspace will arrive here.'],
+        ctaLabel: 'Open TopDown',
+        ctaUrl: `${publicAppUrl()}/app`,
+      });
+      return c.json({ ok: true });
+    } catch (error) {
+      return bad(
+        c,
+        error instanceof Error ? error.message : 'test send failed',
+        502
+      );
+    }
+  }
+);
+
+app.patch(
+  '/api/workspaces/:id/notifications/channels/:channelId',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    const [channel, allowed] = await channelForUser(
+      user,
+      param(c, 'channelId')
+    );
+    if (!channel || channel.workspace_id !== wsId) {
+      return bad(c, 'not found', 404);
+    }
+    if (!allowed) return bad(c, 'insufficient role', 403);
+    const body = await c.req.json().catch(() => null);
+    await query(
+      'UPDATE notification_channels SET enabled = $1 WHERE id = $2',
+      [body?.enabled === true, channel.id]
+    );
+    return c.json({ ok: true });
+  }
+);
+
+app.delete(
+  '/api/workspaces/:id/notifications/channels/:channelId',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    const [channel, allowed] = await channelForUser(
+      user,
+      param(c, 'channelId')
+    );
+    if (!channel || channel.workspace_id !== wsId) {
+      return bad(c, 'not found', 404);
+    }
+    if (!allowed) return bad(c, 'insufficient role', 403);
+    await query('DELETE FROM notification_channels WHERE id = $1', [
+      channel.id,
+    ]);
+    return c.json({ ok: true });
+  }
+);
+
+app.patch(
+  '/api/workspaces/:id/notifications/prefs',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    if (!(await workspaceRoleFor(user, wsId))) {
+      return bad(c, 'not a member', 403);
+    }
+    const body = await c.req.json().catch(() => null);
+    const updates: string[] = [];
+    const params: unknown[] = [];
+    if (typeof body?.notifyEmail === 'boolean') {
+      params.push(body.notifyEmail);
+      updates.push(`notify_email = $${params.length}`);
+    }
+    if (typeof body?.notifyBriefs === 'boolean') {
+      params.push(body.notifyBriefs);
+      updates.push(`notify_briefs = $${params.length}`);
+    }
+    if (updates.length === 0) return bad(c, 'nothing to update', 400);
+    params.push(wsId, user.id);
+    await query(
+      `UPDATE workspace_members SET ${updates.join(', ')}
+       WHERE workspace_id = $${params.length - 1} AND user_id = $${params.length}`,
+      params
+    );
+    return c.json({ ok: true });
+  }
+);
+
+app.post(
+  '/api/maps/:id/notifications/coverage-preview',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const [map, role] = await mapForUser(user, param(c, 'id'));
+    if (!map) return bad(c, 'not found', 404);
+    if (!role) return bad(c, 'not a member', 403);
+    return c.json(committeeCoverage(map.state as MapState));
+  }
+);
 
 // ---------- maps ----------
 
