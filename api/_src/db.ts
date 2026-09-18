@@ -173,6 +173,43 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_user_dedupe
   ON analytics_events(user_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
 DELETE FROM analytics_events
   WHERE occurred_at::timestamptz < NOW() - INTERVAL '24 months';
+CREATE TABLE IF NOT EXISTS roster_people (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  domain TEXT NOT NULL,
+  person_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  title TEXT,
+  "function" TEXT,
+  seniority TEXT,
+  location TEXT,
+  linkedin TEXT,
+  email TEXT,
+  manager_key TEXT,
+  source TEXT NOT NULL,
+  source_url TEXT,
+  confidence TEXT NOT NULL DEFAULT 'medium',
+  status TEXT NOT NULL DEFAULT 'suggested',
+  map_person_id TEXT,
+  raw JSONB,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  UNIQUE (workspace_id, domain, person_key)
+);
+CREATE INDEX IF NOT EXISTS roster_people_ws_domain ON roster_people(workspace_id, domain);
+CREATE TABLE IF NOT EXISTS roster_sync_jobs (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  domain TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued','running','done','failed')),
+  events JSONB NOT NULL DEFAULT '[]',
+  summary JSONB,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `;
 
 async function getPool(): Promise<pg.Pool> {

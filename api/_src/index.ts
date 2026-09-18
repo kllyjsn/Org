@@ -15,7 +15,7 @@ import type { StrategyInsights } from './strategy.js';
 import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
-import { DOMAIN_RE } from './research.js';
+import { DOMAIN_RE, canonicalPersonName } from './research.js';
 import { initialCheckpoint } from './research-pipeline.js';
 import {
   cancelJob,
@@ -69,6 +69,20 @@ import type {
   SellerProfile,
   AccountStrategyPlan,
 } from './types.js';
+import { classifyTitle, functionToDepartment, seniorityToJobLevel } from './classify.js';
+import { rowsFromCsv, rowsFromLinkedinUrls, linkedinSlug } from './csv.js';
+import { configuredRosterProviders } from './roster-providers.js';
+import {
+  listRoster,
+  rosterCounts,
+  setRosterStatus,
+  upsertRosterPeople,
+} from './roster.js';
+import {
+  createRosterSyncJob,
+  getRosterSyncJob,
+  runRosterSync,
+} from './roster-sync.js';
 
 type Vars = { user: UserRow };
 const app = new Hono<{ Variables: Vars }>();
@@ -197,6 +211,24 @@ async function mapForUser(
 
 function canWrite(role: MemberRow['role'] | null): boolean {
   return role === 'owner' || role === 'member';
+}
+
+async function saveMapState(map: MapRow, state: MapState, userId: string, name = map.name) {
+  await query(
+    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), map.id, map.name, JSON.stringify(map.state), userId, now()]
+  );
+  await query(
+    'UPDATE maps SET name = $1, state = $2, company_name = $3, updated_at = $4 WHERE id = $5',
+    [name, JSON.stringify(state), state.meta?.companyName ?? map.company_name, now(), map.id]
+  );
+  await query(
+    `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
+     (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
+    [map.id]
+  );
+  const updated = await query<MapRow>('SELECT * FROM maps WHERE id = $1', [map.id]);
+  return updated[0] ?? { ...map, name, state, updated_at: now() };
 }
 
 async function recordAnalytics(
@@ -1144,6 +1176,26 @@ app.post('/api/maps', requireAuth, async (c) => {
     'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
     [randomUUID(), id, name, JSON.stringify(state), user.id, now()]
   );
+  if (state.meta.researchedAt && state.people.length > 0) {
+    void upsertRosterPeople(
+      wsId,
+      domain,
+      state.people.map((person) => ({
+        name: person.name,
+        title: person.title,
+        location: null,
+        linkedin: person.linkedin,
+        email: person.email,
+        managerKey: null,
+        source: 'research' as const,
+        sourceUrl: person.sources[0] ?? null,
+        confidence: person.confidence,
+        status: 'added' as const,
+        mapPersonId: person.id,
+        jobLevel: (person as Person & { jobLevel?: string | null }).jobLevel ?? null,
+      }))
+    ).catch((error) => console.error('research roster import failed', error));
+  }
   const sourceCount =
     state.people.reduce((sum, person) => sum + person.sources.length, 0) +
     (state.meta.initiatives ?? []).reduce(
@@ -1234,6 +1286,125 @@ app.post('/api/maps/:id/ask', requireAuth, async (c) => {
   }
 });
 
+app.get('/api/maps/:id/roster', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const pageSize = Math.min(200, Math.max(1, Number(c.req.query('pageSize') ?? 50) || 50));
+  const page = Math.max(0, Number(c.req.query('page') ?? 0) || 0);
+  const data = await listRoster(map.workspace_id, map.domain, {
+    q: c.req.query('q') || undefined, function: c.req.query('function') || undefined,
+    seniority: c.req.query('seniority') || undefined, status: c.req.query('status') || 'suggested',
+    source: c.req.query('source') || undefined, page, pageSize,
+  });
+  return c.json({ ...data, counts: await rosterCounts(map.workspace_id, map.domain), providers: configuredRosterProviders() });
+});
+
+app.post('/api/maps/:id/roster/sync', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot sync roster', 403);
+  const existing = await query<{ id: string }>(
+    `SELECT id FROM roster_sync_jobs WHERE map_id = $1 AND status IN ('queued','running') LIMIT 1`, [map.id]
+  );
+  if (existing[0]) return c.json({ error: 'roster sync already running', jobId: existing[0].id }, 409);
+  const job = await createRosterSyncJob({ workspaceId: map.workspace_id, mapId: map.id, userId: user.id, domain: map.domain });
+  if (!process.env.VERCEL) void runRosterSync(job.id).catch((error) => console.error('roster sync failed', error));
+  return c.json({ jobId: job.id }, 202);
+});
+
+app.get('/api/maps/:id/roster/sync/:jobId', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const job = await getRosterSyncJob(param(c, 'jobId'));
+  if (!job || job.map_id !== map.id) return bad(c, 'roster sync job not found', 404);
+  if (job.status === 'queued' && !process.env.VERCEL) void runRosterSync(job.id).catch((error) => console.error('roster sync tick failed', error));
+  return c.json({ job: { id: job.id, status: job.status, events: job.events, summary: job.summary, error: job.error } });
+});
+
+app.post('/api/maps/:id/roster/import', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot import roster', 403);
+  const body = await c.req.json().catch(() => null);
+  const rows = typeof body?.csv === 'string'
+    ? rowsFromCsv(body.csv).map((row) => ({ ...row, source: 'csv' as const, confidence: 'medium' as const }))
+    : Array.isArray(body?.linkedinUrls)
+      ? rowsFromLinkedinUrls(body.linkedinUrls.filter((value: unknown): value is string => typeof value === 'string'))
+          .map((row) => ({ ...row, source: 'linkedin_url' as const, confidence: 'low' as const }))
+      : [];
+  if (rows.length === 0) return bad(c, 'csv or linkedinUrls required');
+  const result = await upsertRosterPeople(map.workspace_id, map.domain, rows.map((row) => ({
+    name: row.name, title: row.title, location: row.location, linkedin: row.linkedin, email: row.email,
+    managerKey: null, source: row.source, confidence: row.confidence, sourceUrl: row.linkedin, raw: row,
+  })));
+  return c.json({ imported: result.upserted, counts: await rosterCounts(map.workspace_id, map.domain) });
+});
+
+app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot add roster people', 403);
+  const body = await c.req.json().catch(() => null);
+  const ids = Array.isArray(body?.ids) ? body.ids.filter((id: unknown): id is string => typeof id === 'string').slice(0, 200) : [];
+  const rows = await query<import('./roster.js').RosterPersonRow>(
+    `SELECT * FROM roster_people WHERE workspace_id = $1 AND domain = $2 AND id = ANY($3::text[])`,
+    [map.workspace_id, map.domain.trim().toLowerCase(), ids]
+  );
+  const pending = rows.filter((row) => row.status !== 'added');
+  if (pending.length === 0) return c.json({ map: { ...map, role }, added: 0 });
+  const state = map.state as MapState;
+  const existing = state.people;
+  const baseX = existing.length ? Math.min(...existing.map((person) => person.x)) : 0;
+  const baseY = existing.length ? Math.max(...existing.map((person) => person.y)) + 240 : 0;
+  const additions = pending.map((row, index) => {
+    const classified = classifyTitle(row.title);
+    const fn = (row.function || classified.function) as import('./classify.js').Fn;
+    return {
+      id: randomUUID(), name: row.name, title: row.title ?? 'Employee',
+      department: functionToDepartment(fn), team: null, role: 'none' as const,
+      confidence: row.confidence, sources: row.source_url ? [row.source_url] : row.linkedin ? [row.linkedin] : [],
+      notes: '', email: row.email, linkedin: row.linkedin,
+      jobLevel: seniorityToJobLevel((row.seniority || classified.seniority) as import('./classify.js').Seniority),
+      x: baseX + (index % 4) * 260, y: baseY + Math.floor(index / 4) * 140,
+    } as unknown as Person;
+  });
+  const keyToId = new Map<string, string>();
+  const rosterManagers = await query<{ person_key: string; map_person_id: string }>(
+    `SELECT person_key, map_person_id FROM roster_people
+     WHERE workspace_id = $1 AND domain = $2 AND status = 'added' AND map_person_id IS NOT NULL`,
+    [map.workspace_id, map.domain.trim().toLowerCase()]
+  );
+  for (const row of rosterManagers) keyToId.set(row.person_key, row.map_person_id);
+  for (const person of existing) keyToId.set(linkedinSlug(person.linkedin) ?? canonicalPersonName(person.name), person.id);
+  for (const person of additions) keyToId.set(canonicalPersonName(person.name), person.id);
+  const edges = [...state.edges];
+  for (let index = 0; index < pending.length; index += 1) {
+    const manager = pending[index].manager_key ? keyToId.get(pending[index].manager_key!) : undefined;
+    if (manager && manager !== additions[index].id) edges.push({ id: randomUUID(), from: manager, to: additions[index].id, kind: 'reports', label: null });
+  }
+  const updated = await saveMapState(map, { ...state, people: [...existing, ...additions], edges }, user.id);
+  await setRosterStatus(map.workspace_id, map.domain, pending.map((row) => row.id), 'added', new Map(pending.map((row, index) => [row.id, additions[index].id])));
+  return c.json({ map: { ...updated, role }, added: additions.length });
+});
+
+for (const action of ['dismiss', 'restore'] as const) {
+  app.post(`/api/maps/:id/roster/${action}`, requireAuth, async (c) => {
+    const user = c.get('user');
+    const [map, role] = await mapForUser(user, param(c, 'id'));
+    if (!map || !role) return bad(c, 'not found', 404);
+    if (!canWrite(role)) return bad(c, 'viewers cannot update roster', 403);
+    const body = await c.req.json().catch(() => null);
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((id: unknown): id is string => typeof id === 'string').slice(0, 200) : [];
+    await setRosterStatus(map.workspace_id, map.domain, ids, action === 'dismiss' ? 'dismissed' : 'suggested', undefined, action === 'restore');
+    return c.json({ ok: true });
+  });
+}
+
 app.patch('/api/maps/:id', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user, param(c, 'id'));
@@ -1250,26 +1421,13 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
   // Version snapshots only on real state changes — name-only PATCHes and
   // autosave heartbeats would otherwise drown meaningful checkpoints.
   if (body?.state !== undefined) {
+    await saveMapState(map, state, user.id, name);
+  } else {
     await query(
-      'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
-      [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
+      'UPDATE maps SET name = $1, state = $2, company_name = $3, updated_at = $4 WHERE id = $5',
+      [name, JSON.stringify(state), state.meta?.companyName ?? map.company_name, now(), map.id]
     );
   }
-  await query(
-    'UPDATE maps SET name = $1, state = $2, company_name = $3, updated_at = $4 WHERE id = $5',
-    [
-      name,
-      JSON.stringify(state),
-      state.meta?.companyName ?? map.company_name,
-      now(),
-      map.id,
-    ]
-  );
-  await query(
-    `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
-     (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
-    [map.id]
-  );
   const updated = await query<{ updated_at: string }>(
     'SELECT updated_at FROM maps WHERE id = $1',
     [map.id]
