@@ -240,3 +240,21 @@ test('dedupe keys are stable and inputs-insensitive to order', () => {
   );
   assert.equal(isoWeek(new Date('2026-03-09T00:00:00Z')), '2026-W11');
 });
+
+test('composePreMeetingBrief: 90+ minutes formats as hours', () => {
+  const attendee = person({ id: 'p9', name: 'Jo', role: 'decision_maker', metWith: true });
+  const coverage = committeeCoverage(state([attendee]), NOW);
+  const notice = composePreMeetingBrief(
+    { id: 'm1', name: 'Acme' },
+    {
+      subject: 'Kickoff',
+      startsAt: '2026-03-09T15:00:00.000Z', // NOW + 3h
+      attendees: [attendee],
+    },
+    null,
+    coverage,
+    'https://app.test',
+    NOW
+  );
+  assert.equal(notice.title, 'Brief: Kickoff in 3 h');
+});
