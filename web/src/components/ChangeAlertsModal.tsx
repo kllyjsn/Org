@@ -6,6 +6,7 @@ import {
   Loader2,
   UserMinus,
   UserPlus,
+  X,
 } from 'lucide-react';
 import { api } from '../api';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -77,9 +78,10 @@ export default function ChangeAlertsModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+            aria-label="Close"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
           >
-            Close
+            <X size={16} />
           </button>
         </div>
 

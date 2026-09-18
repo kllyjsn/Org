@@ -111,10 +111,10 @@ export default function SellerProfileModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
             aria-label="Close"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 

@@ -573,7 +573,7 @@ export default function AccountsPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-end justify-between border-t border-slate-100 pt-4 text-xs text-slate-500">
+                <div className="flex flex-wrap items-end justify-between gap-y-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
                   <div className="flex gap-4">
                     <span className="flex items-center gap-1.5 whitespace-nowrap font-medium text-slate-700">
                       <Workflow size={13} className="text-brand" /> {m.peopleCount} people
@@ -608,7 +608,8 @@ export default function AccountsPage() {
                       }}
                       className="flex items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1.5 text-[10px] font-semibold text-brand transition hover:bg-brand-softer sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                     >
-                      <Radar size={12} /> Next moves
+                      <Radar size={12} />
+                      <span className="hidden sm:inline">Next moves</span>
                     </button>
                     <ArrowUpRight
                       size={17}
