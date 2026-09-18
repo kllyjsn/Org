@@ -61,6 +61,7 @@ import {
   Rows3,
   UserCheck,
   UserPlus,
+  Users,
 } from 'lucide-react';
 import { api } from '../api';
 import { useSession } from '../store';
@@ -91,6 +92,7 @@ import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
 import MeetingsImportModal from '../components/MeetingsImportModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
+import RosterDrawer from '../components/RosterDrawer';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
 import {
@@ -223,6 +225,12 @@ function MapInner() {
   const [viewMode, setViewMode] = useState<'canvas' | 'roster'>('canvas');
   useDocumentTitle(`${mapName || 'Map'} — TopDown`);
   const [showMeetings, setShowMeetings] = useState(false);
+  const [showRoster, setShowRoster] = useState(false);
+  const [rosterCounts, setRosterCounts] = useState<{
+    suggested: number;
+    added: number;
+    dismissed: number;
+  } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -365,6 +373,10 @@ function MapInner() {
         setFuture([]);
         setLoaded(true);
         void api
+          .getRoster(mapId, { pageSize: 1 })
+          .then(({ counts }) => setRosterCounts(counts))
+          .catch(() => undefined);
+        void api
           .trackEvent(mapId, 'map_viewed', {
             entry: mapViewEntry.current,
           })
@@ -501,6 +513,59 @@ function MapInner() {
       saveTimer.current = window.setTimeout(() => persist(ns, es), 900);
     },
     [persist, readOnly]
+  );
+
+  const flushPendingPersist = useCallback(async () => {
+    if (
+      !mapId ||
+      !metaRef.current ||
+      readOnly ||
+      saveStateRef.current === 'saved'
+    ) {
+      return;
+    }
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    saveStateRef.current = 'saving';
+    setSaveState('saving');
+    try {
+      const { updatedAt } = await api.patchMap(mapId, {
+        state: toState(
+          nodesRef.current,
+          edgesRef.current,
+          metaRef.current
+        ),
+      });
+      remoteUpdatedAt.current = updatedAt;
+      saveStateRef.current = 'saved';
+      setSaveState('saved');
+    } catch (error) {
+      saveStateRef.current = 'dirty';
+      setSaveState('dirty');
+      throw error;
+    }
+  }, [mapId, readOnly]);
+
+  const handleRosterMapUpdated = useCallback(
+    async (updatedMap: import('../types').LoadedMap) => {
+      await flushPendingPersist();
+      const flow = toFlow(updatedMap.state, readOnly);
+      setMapName(updatedMap.name);
+      setDomain(updatedMap.domain);
+      setMeta(updatedMap.state.meta);
+      nodesRef.current = flow.nodes;
+      edgesRef.current = flow.edges;
+      setNodes(flow.nodes);
+      setEdges(flow.edges);
+      setPast([]);
+      setFuture([]);
+      setSaveState('saved');
+      saveStateRef.current = 'saved';
+      remoteUpdatedAt.current = updatedMap.updated_at;
+    },
+    [flushPendingPersist, readOnly, setEdges, setNodes]
   );
 
   const updateStrategyPlan = useCallback(
@@ -2344,6 +2409,19 @@ function MapInner() {
           active={viewMode === 'roster'}
           onClick={() => setViewMode('roster')}
         />
+        <RailButton
+          icon={<Users size={16} />}
+          label={
+            rosterCounts === null
+              ? 'Suggested contacts'
+              : `Suggested contacts (${rosterCounts.suggested})`
+          }
+          active={showRoster}
+          onClick={() => {
+            setSelectedId(null);
+            setShowRoster((value) => !value);
+          }}
+        />
         {!readOnly && (
           <>
             <RailSeparator />
@@ -2844,6 +2922,17 @@ function MapInner() {
         )}
 
         <AnimatePresence>
+          {showRoster && mapId && (
+            <RosterDrawer
+              mapId={mapId}
+              domain={domain}
+              readOnly={readOnly}
+              onClose={() => setShowRoster(false)}
+              onMapUpdated={(updatedMap) => void handleRosterMapUpdated(updatedMap)}
+              onCountsChange={setRosterCounts}
+              beforeAdd={flushPendingPersist}
+            />
+          )}
           {selected && mapId && (
             <PersonPanel
               key={selected.id}

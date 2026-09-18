@@ -15,6 +15,7 @@ import type {
   MapVersion,
   ProductEventName,
   ProductValueSummary,
+  Confidence,
   ResearchEvent,
   ResearchJob,
   ResearchResult,
@@ -23,6 +24,81 @@ import type {
   ShareLink,
   Workspace,
 } from './types';
+
+export type RosterFn =
+  | 'executive'
+  | 'engineering'
+  | 'product'
+  | 'design'
+  | 'data'
+  | 'security'
+  | 'it'
+  | 'sales'
+  | 'marketing'
+  | 'customer_success'
+  | 'support'
+  | 'finance'
+  | 'legal'
+  | 'people'
+  | 'operations'
+  | 'other';
+
+export type RosterSeniority =
+  | 'c_level'
+  | 'evp_svp'
+  | 'vp'
+  | 'director'
+  | 'manager'
+  | 'lead'
+  | 'ic'
+  | 'unknown';
+
+export interface RosterPerson {
+  id: string;
+  name: string;
+  title: string | null;
+  function: RosterFn | null;
+  seniority: RosterSeniority | null;
+  location: string | null;
+  linkedin: string | null;
+  email: string | null;
+  manager_key: string | null;
+  source: 'sumble' | 'crustdata' | 'csv' | 'linkedin_url' | 'research';
+  source_url: string | null;
+  confidence: Confidence;
+  status: 'suggested' | 'added' | 'dismissed';
+  map_person_id: string | null;
+  last_seen_at: string;
+}
+
+export interface RosterListResponse {
+  total: number;
+  byFunction: Partial<Record<RosterFn, number>>;
+  bySeniority: Partial<Record<RosterSeniority, number>>;
+  people: RosterPerson[];
+  counts: {
+    suggested: number;
+    added: number;
+    dismissed: number;
+  };
+  providers: string[];
+}
+
+export interface RosterSyncEvent {
+  provider: string;
+  status: 'skipped' | 'fetching' | 'done' | 'failed';
+  fetched?: number;
+  upserted?: number;
+  message?: string;
+}
+
+export interface RosterSyncJob {
+  id: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  events: RosterSyncEvent[];
+  summary: { message?: string; providers?: RosterSyncEvent[]; total?: unknown } | null;
+  error: string | null;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -320,6 +396,77 @@ export const api = {
       body: JSON.stringify({ workspaceId, name, domain, state, analytics }),
     }),
   getMap: (id: string) => req<{ map: LoadedMap }>(`/api/maps/${id}`),
+  getRoster: (
+    mapId: string,
+    params: {
+      q?: string;
+      function?: RosterFn;
+      seniority?: RosterSeniority;
+      status?: RosterPerson['status'];
+      source?: RosterPerson['source'];
+      page?: number;
+      pageSize?: number;
+    } = {}
+  ) => {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== '') search.set(key, String(value));
+    }
+    const query = search.toString();
+    return req<RosterListResponse>(
+      `/api/maps/${mapId}/roster${query ? `?${query}` : ''}`
+    );
+  },
+  startRosterSync: async (mapId: string) => {
+    const res = await fetch(`${API_BASE}/api/maps/${mapId}/roster/sync`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      jobId?: string;
+      error?: string;
+    };
+    if ((res.status === 202 || res.status === 409) && data.jobId) {
+      return { jobId: data.jobId };
+    }
+    throw new ApiError(
+      typeof data.error === 'string'
+        ? data.error
+        : `request failed (${res.status})`,
+      res.status
+    );
+  },
+  getRosterSync: (mapId: string, jobId: string) =>
+    req<{ job: RosterSyncJob }>(
+      `/api/maps/${mapId}/roster/sync/${jobId}`
+    ),
+  addRosterPeople: (mapId: string, ids: string[]) =>
+    req<{ map: LoadedMap; added: number }>(`/api/maps/${mapId}/roster/add`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  dismissRosterPeople: (mapId: string, ids: string[]) =>
+    req<{ ok: true }>(`/api/maps/${mapId}/roster/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  restoreRosterPeople: (mapId: string, ids: string[]) =>
+    req<{ ok: true }>(`/api/maps/${mapId}/roster/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  importRoster: (
+    mapId: string,
+    body: { csv: string } | { linkedinUrls: string[] }
+  ) =>
+    req<{
+      imported: number;
+      counts: RosterListResponse['counts'];
+    }>(`/api/maps/${mapId}/roster/import`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   patchMap: (id: string, patch: { name?: string; state?: MapState }) =>
     req<{ ok: true; updatedAt: string }>(`/api/maps/${id}`, {
       method: 'PATCH',
