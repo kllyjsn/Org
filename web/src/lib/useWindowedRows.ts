@@ -67,7 +67,7 @@ export function useWindowedRows(opts: {
     };
   }, [opts.scrollRef]);
 
-  if (opts.scrollRef.current === null && viewport.height === 0) {
+  if (viewport.height === 0) {
     return {
       start: 0,
       end: Math.min(opts.count, 30),

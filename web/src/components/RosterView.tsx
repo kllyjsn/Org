@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownWideNarrow, Download, Search, UserCheck } from 'lucide-react';
 import { deptColor, initials, ROLE_META } from '../lib/colors';
 import { matchesAllTokens } from '../lib/searchText';
 import { personLane, seniorityRank } from '../lib/layout';
+import { useWindowedRows } from '../lib/useWindowedRows';
 import type { Person } from '../types';
 
 type SortKey = 'org' | 'name' | 'department' | 'team' | 'seniority';
+const ROW_H = 52;
 
 const SORT_LABEL: Record<SortKey, string> = {
   org: 'Organization',
@@ -131,6 +133,16 @@ export default function RosterView({
     });
     return [...filtered].sort(compare);
   }, [people, deptFilter, metFilter, query, compare]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { start, end, topPad, bottomPad } = useWindowedRows({
+    count: rows.length,
+    rowHeight: ROW_H,
+    scrollRef,
+  });
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+  }, [rows]);
 
   const toggleDept = (lane: string) => {
     setDeptFilter((prev) => {
@@ -323,7 +335,8 @@ export default function RosterView({
         tabIndex={0}
         role="region"
         aria-label="Roster table"
-        className="min-h-0 flex-1 overflow-y-auto"
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-auto"
       >
         {rows.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-slate-400">
@@ -332,7 +345,7 @@ export default function RosterView({
         ) : (
           <table className="w-full border-collapse">
             <caption className="sr-only">Stakeholder roster</caption>
-            <thead className="sticky top-0 z-10 bg-[#f6f7f2]/95 backdrop-blur">
+            <thead className="sticky top-0 z-10 bg-white">
               <tr className="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">
                 <th
                   scope="col"
@@ -367,7 +380,10 @@ export default function RosterView({
               </tr>
             </thead>
             <tbody>
-              {rows.map((person) => {
+              <tr aria-hidden="true">
+                <td colSpan={6} style={{ height: topPad, padding: 0 }} />
+              </tr>
+              {rows.slice(start, end).map((person) => {
                 const role = ROLE_META[person.role] ?? ROLE_META.none;
                 const lane = personLane(person);
                 const needsReview =
@@ -378,11 +394,11 @@ export default function RosterView({
                   <tr
                     key={person.id}
                     onClick={() => onSelect(person)}
-                    className={`cursor-pointer border-b border-slate-100 transition hover:bg-white ${
+                    className={`h-[52px] cursor-pointer border-b border-slate-100 transition hover:bg-white ${
                       selectedId === person.id ? 'bg-[#f5f4ff]' : ''
                     }`}
                   >
-                    <td className="px-3 py-2 sm:px-4">
+                    <td className="max-w-[260px] truncate px-3 py-2 sm:px-4">
                       <div className="flex items-center gap-2.5">
                         <div
                           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold text-white ${deptColor(
@@ -416,7 +432,7 @@ export default function RosterView({
                         </div>
                       </div>
                     </td>
-                    <td className="hidden px-3 py-2 md:table-cell">
+                    <td className="hidden max-w-[180px] truncate px-3 py-2 md:table-cell">
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${deptColor(
@@ -426,17 +442,17 @@ export default function RosterView({
                         {lane}
                       </span>
                     </td>
-                    <td className="hidden px-3 py-2 lg:table-cell">
-                      <span className="text-[12px] text-slate-600">
+                    <td className="hidden max-w-[160px] truncate px-3 py-2 lg:table-cell">
+                      <span className="block truncate text-[12px] text-slate-600">
                         {person.team ?? person.productLine ?? '—'}
                       </span>
                     </td>
-                    <td className="hidden px-3 py-2 xl:table-cell">
-                      <span className="text-[12px] text-slate-600">
+                    <td className="hidden max-w-[180px] truncate px-3 py-2 xl:table-cell">
+                      <span className="block truncate text-[12px] text-slate-600">
                         {managerOf.get(person.id) ?? '—'}
                       </span>
                     </td>
-                    <td className="hidden px-3 py-2 sm:table-cell">
+                    <td className="hidden max-w-[160px] truncate px-3 py-2 sm:table-cell">
                       {role.label ? (
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${role.chip}`}
@@ -448,7 +464,7 @@ export default function RosterView({
                         <span className="text-[11px] text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="max-w-[64px] truncate px-3 py-2 text-center">
                       {person.metWith ? (
                         <span title="Met with" className="inline-flex">
                           <UserCheck size={15} className="text-emerald-600" />
@@ -460,6 +476,9 @@ export default function RosterView({
                   </tr>
                 );
               })}
+              <tr aria-hidden="true">
+                <td colSpan={6} style={{ height: bottomPad, padding: 0 }} />
+              </tr>
             </tbody>
           </table>
         )}

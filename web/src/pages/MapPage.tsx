@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ReactFlow, {
@@ -59,6 +59,7 @@ import {
   MessageSquare,
   Network,
   Rows3,
+  Trash2,
   UserCheck,
   UserPlus,
 } from 'lucide-react';
@@ -102,6 +103,9 @@ import {
 } from '../lib/layout';
 import type { LaneGrouping } from '../lib/layout';
 import { computeLaneView } from '../lib/laneView';
+import { generateFixtureState } from '../lib/devFixtures';
+import { isBigMap } from '../lib/bigMap';
+import { planPngExport } from '../lib/pngExport';
 import { useIsMobile } from '../lib/useIsMobile';
 import { matchesAllTokens } from '../lib/searchText';
 import { ROLE_META } from '../lib/colors';
@@ -138,6 +142,8 @@ const COMMITTEE_ROLES: BuyingRole[] = [
 
 // Tighter column spacing on phones so two lanes fit the viewport.
 const MOBILE_COL_GAP = 270;
+
+const MemoMiniMap = memo(MiniMap);
 
 function toFlow(
   state: MapState,
@@ -204,6 +210,10 @@ function MapInner() {
   const mapViewEntry = useRef<'dashboard' | 'direct'>(
     searchParams.get('briefing') === '1' ? 'dashboard' : 'direct'
   );
+  const fixtureCount = import.meta.env.DEV
+    ? Number(searchParams.get('fixture')) || 0
+    : 0;
+  const fixtureMode = fixtureCount > 0;
   const rf = useReactFlow();
   const viewport = useViewport();
   const isMobile = useIsMobile();
@@ -221,6 +231,7 @@ function MapInner() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<EdgeData>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'canvas' | 'roster'>('canvas');
+  const [viewModeTouched, setViewModeTouched] = useState(false);
   useDocumentTitle(`${mapName || 'Map'} — TopDown`);
   const [showMeetings, setShowMeetings] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
@@ -258,6 +269,9 @@ function MapInner() {
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   const remoteUpdatedAt = useRef('');
   const saveStateRef = useRef<SaveState>('saved');
+  const pendingFocus = useRef<{ ids: Set<string>; single: boolean } | null>(
+    null
+  );
   // Mirror of the latest canvas arrays. Handlers persist post-update state
   // through these refs instead of running side effects inside state
   // updaters, which StrictMode double-invokes in dev.
@@ -320,8 +334,22 @@ function MapInner() {
 
   useEffect(() => {
     if (!mapId) return;
-    api
-      .getMap(mapId)
+    const mapRequest = fixtureMode
+      ? Promise.resolve({
+          map: {
+            state: generateFixtureState(fixtureCount, {
+              columns: isMobile ? 2 : 4,
+              colGap: isMobile ? MOBILE_COL_GAP : LANE_COL_GAP,
+            }),
+            name: `Fixture ${fixtureCount}`,
+            domain: 'fixture.example',
+            workspace_id: '',
+            role: 'member' as const,
+            updated_at: new Date().toISOString(),
+          },
+        })
+      : api.getMap(mapId);
+    mapRequest
       .then(({ map }) => {
         const flow = toFlow(map.state, map.role === 'viewer');
         // Default view for accounts with meeting coverage: met/unmet lanes
@@ -364,11 +392,13 @@ function MapInner() {
         setPast([]);
         setFuture([]);
         setLoaded(true);
-        void api
-          .trackEvent(mapId, 'map_viewed', {
-            entry: mapViewEntry.current,
-          })
-          .catch(() => undefined);
+        if (!fixtureMode) {
+          void api
+            .trackEvent(mapId, 'map_viewed', {
+              entry: mapViewEntry.current,
+            })
+            .catch(() => undefined);
+        }
         window.setTimeout(() => {
           // Tall maps center on nothing useful when fit to bounds — anchor
           // the top of the chart at a readable zoom instead.
@@ -382,7 +412,17 @@ function MapInner() {
         }, 50);
       })
       .catch(() => setNotFound(true));
-  }, [mapId, setNodes, setEdges, rf, openingFitOptions, isMobile, anchorTopLeft]);
+  }, [
+    mapId,
+    setNodes,
+    setEdges,
+    rf,
+    openingFitOptions,
+    isMobile,
+    anchorTopLeft,
+    fixtureCount,
+    fixtureMode,
+  ]);
 
   useEffect(() => {
     if (searchParams.get('briefing') === '1') {
@@ -392,7 +432,7 @@ function MapInner() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!mapId) return;
+    if (!mapId || fixtureMode) return;
     const update = () => {
       const cursor = cursorRef.current;
       void api
@@ -410,10 +450,10 @@ function MapInner() {
     update();
     const interval = window.setInterval(update, 1_500);
     return () => window.clearInterval(interval);
-  }, [mapId, selectedId]);
+  }, [mapId, selectedId, fixtureMode]);
 
   useEffect(() => {
-    if (!mapId) return;
+    if (!mapId || fixtureMode) return;
     const sync = () => {
       if (saveStateRef.current !== 'saved') return;
       void api
@@ -437,20 +477,20 @@ function MapInner() {
     };
     const interval = window.setInterval(sync, 3_000);
     return () => window.clearInterval(interval);
-  }, [mapId, setNodes, setEdges]);
+  }, [mapId, setNodes, setEdges, fixtureMode]);
 
   const openHistory = useCallback(() => {
-    if (!mapId) return;
+    if (!mapId || fixtureMode) return;
     setShowHistory(true);
     void api
       .listVersions(mapId)
       .then(({ versions: items }) => setVersions(items))
       .catch(() => undefined);
-  }, [mapId]);
+  }, [mapId, fixtureMode]);
 
   const restoreVersion = useCallback(
     async (versionId: string) => {
-      if (!mapId) return;
+      if (!mapId || fixtureMode) return;
       try {
         const restored = await api.restoreVersion(mapId, versionId);
         const flow = toFlow(restored.state, readOnly);
@@ -469,11 +509,16 @@ function MapInner() {
         window.setTimeout(() => setImportNotice(''), 5_000);
       }
     },
-    [mapId, readOnly, setNodes, setEdges]
+    [mapId, readOnly, setNodes, setEdges, fixtureMode]
   );
 
   const persist = useCallback(
     (ns: Node<PersonNodeData>[], es: FlowEdge[]) => {
+      if (fixtureMode) {
+        saveStateRef.current = 'saved';
+        setSaveState('saved');
+        return;
+      }
       if (!mapId || !metaRef.current || readOnly) return;
       saveStateRef.current = 'saving';
       setSaveState('saving');
@@ -489,7 +534,7 @@ function MapInner() {
           setSaveState('dirty');
         });
     },
-    [mapId, readOnly]
+    [mapId, readOnly, fixtureMode]
   );
 
   const markDirty = useCallback(
@@ -609,6 +654,12 @@ function MapInner() {
 
   const selected = nodes.find((n) => n.id === selectedId)?.data.person ?? null;
   const people = useMemo(() => nodes.map((n) => n.data.person), [nodes]);
+  const bigMap = isBigMap(people.length);
+  useEffect(() => {
+    if (loaded && isMobile && bigMap && !viewModeTouched) {
+      setViewMode('roster');
+    }
+  }, [loaded, isMobile, bigMap, viewModeTouched]);
   const managerOf = useMemo(() => {
     const nameById = new Map(people.map((person) => [person.id, person.name]));
     const map = new Map<string, string>();
@@ -649,8 +700,8 @@ function MapInner() {
     });
   }, []);
 
-  const laneView = useMemo(() => {
-    const view = computeLaneView(
+  const laneItems = useMemo(
+    () =>
       nodes.map((n) => ({
         id: n.id,
         x: n.position.x,
@@ -658,15 +709,27 @@ function MapInner() {
         person: n.data.person,
         dragging: n.dragging,
       })),
-      {
+    [nodes]
+  );
+  const view = useMemo(
+    () =>
+      computeLaneView(laneItems, {
         columns: isMobile ? 2 : 4,
         colGap: isMobile ? MOBILE_COL_GAP : LANE_COL_GAP,
         expandedLanes,
         collapsedLanes,
         showAll: showAllLanes,
         laneOf,
-      }
-    );
+      }),
+    [laneItems, isMobile, expandedLanes, collapsedLanes, showAllLanes, laneOf]
+  );
+  const visibleNodeCache = useRef(
+    new WeakMap<
+      Node<PersonNodeData>,
+      { derived: Node<PersonNodeData>; x: number; y: number }
+    >()
+  );
+  const laneView = useMemo(() => {
     // Synthetic nodes must declare their size: React Flow hides nodes until
     // they are measured, and these objects are recreated on every lane
     // recompute, which wipes their measured dimensions and leaves them
@@ -712,18 +775,58 @@ function MapInner() {
       .map((node) => {
         const person = node.data.person;
         const ariaLabel = `${person.name}${person.title ? ', ' + person.title : ''}${person.department ? ', ' + person.department : ''}`;
-        if (node.dragging) return { ...node, ariaLabel };
         const pos = view.posOverride.get(node.id);
-        return pos ? { ...node, position: pos, ariaLabel } : { ...node, ariaLabel };
+        const x = pos?.x ?? node.position.x;
+        const y = pos?.y ?? node.position.y;
+        const cached = visibleNodeCache.current.get(node);
+        if (
+          cached &&
+          cached.x === x &&
+          cached.y === y &&
+          cached.derived.data === node.data
+        ) {
+          return cached.derived;
+        }
+        const derived = {
+          ...node,
+          ...(pos ? { position: pos } : {}),
+          ariaLabel,
+        };
+        visibleNodeCache.current.set(node, { derived, x, y });
+        return derived;
       });
     return {
       nodes: [...headers, ...tiles, ...visibleNodes],
       shownCount: view.shownCount,
       hiddenCount: view.hiddenCount,
+      laneOrder: view.laneOrder,
     };
-  }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, laneOf, toggleLane]);
+  }, [nodes, view, isMobile, toggleLane]);
 
   const displayNodes = laneView.nodes;
+
+  useEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending) return;
+    const matched = displayNodes.filter((node) => pending.ids.has(node.id));
+    if (matched.length !== pending.ids.size) return;
+    const frame = window.requestAnimationFrame(() => {
+      const current = pendingFocus.current;
+      if (!current) return;
+      const currentMatched = displayNodes.filter((node) =>
+        current.ids.has(node.id)
+      );
+      if (currentMatched.length !== current.ids.size) return;
+      rf.fitView({
+        nodes: currentMatched,
+        padding: current.single ? 1.3 : 0.35,
+        duration: 450,
+        maxZoom: 1,
+      });
+      pendingFocus.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [displayNodes, rf]);
 
   const displayEdges = useMemo(() => {
     const nameById = new Map(people.map((person) => [person.id, person.name]));
@@ -1033,19 +1136,13 @@ function MapInner() {
       }));
       nodesRef.current = next;
       setNodes(next);
+      pendingFocus.current = {
+        ids,
+        single: matches.length === 1,
+      };
       setSelectedId(matches.length === 1 ? matches[0].id : null);
-      const matchedNodes = nodes.filter((node) => ids.has(node.id));
-      window.setTimeout(
-        () =>
-          rf.fitView({
-            nodes: matchedNodes,
-            padding: matches.length === 1 ? 1.3 : 0.35,
-            duration: 450,
-          }),
-        30
-      );
     },
-    [nodes, rf, setNodes, laneOf]
+    [setNodes, laneOf]
   );
 
   const deletePerson = useCallback(
@@ -1123,6 +1220,45 @@ function MapInner() {
     setNodes(next);
     markDirty(next, edgesRef.current);
   }, [selectedNodes, recordHistory, setNodes, markDirty]);
+
+  const assignRole = useCallback(
+    (role: BuyingRole) => {
+      if (selectedNodes.length === 0) return;
+      recordHistory();
+      const selectedIds = new Set(selectedNodes.map((node) => node.id));
+      const next = nodesRef.current.map((node) =>
+        selectedIds.has(node.id)
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                person: { ...node.data.person, role },
+              },
+            }
+          : node
+      );
+      nodesRef.current = next;
+      setNodes(next);
+      markDirty(next, edgesRef.current);
+    },
+    [selectedNodes, recordHistory, setNodes, markDirty]
+  );
+
+  const deleteSelection = useCallback(() => {
+    if (selectedNodes.length === 0) return;
+    recordHistory();
+    const ids = new Set(selectedNodes.map((node) => node.id));
+    const nextNodes = nodesRef.current.filter((node) => !ids.has(node.id));
+    const nextEdges = edgesRef.current.filter(
+      (edge) => !ids.has(edge.source) && !ids.has(edge.target)
+    );
+    nodesRef.current = nextNodes;
+    edgesRef.current = nextEdges;
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    markDirty(nextNodes, nextEdges);
+    setSelectedId(null);
+  }, [selectedNodes, recordHistory, setNodes, setEdges, markDirty]);
 
   const distributeHorizontally = useCallback(() => {
     if (selectedNodes.length < 3) return;
@@ -1830,36 +1966,72 @@ function MapInner() {
     if (!el || displayNodes.length === 0) return;
     try {
       const bounds = getNodesBounds(displayNodes);
-      const W = 1920;
-      const H = Math.max(1080, Math.ceil((bounds.height * 1920) / Math.max(bounds.width, 1)) + 200);
-      const vp = getViewportForBounds(bounds, W, H, 0.4, 1.5, 0.08);
+      const plan = planPngExport(bounds);
+      const flow = document.querySelector('.react-flow') as HTMLElement | null;
+      if (plan.mode === 'viewport') {
+        if (!flow) return;
+        const current = rf.getViewport();
+        const width = flow.clientWidth;
+        const height = flow.clientHeight;
+        const url = await toPng(el, {
+          backgroundColor: '#f8fafc',
+          width,
+          height,
+          style: {
+            width: `${width}px`,
+            height: `${height}px`,
+            transform: `translate(${current.x}px, ${current.y}px) scale(${current.zoom})`,
+          },
+        });
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${mapName || 'org-map'}.png`;
+        a.click();
+        setImportNotice(plan.reason);
+        window.setTimeout(() => setImportNotice(''), 5_000);
+        return;
+      }
+      const vp = getViewportForBounds(
+        bounds,
+        plan.width,
+        plan.height,
+        plan.zoom,
+        plan.zoom,
+        0.08
+      );
       const url = await toPng(el, {
         backgroundColor: '#f8fafc',
-        width: W,
-        height: H,
+        width: plan.width,
+        height: plan.height,
         style: {
-          width: `${W}px`,
-          height: `${H}px`,
-          transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`,
+          width: `${plan.width}px`,
+          height: `${plan.height}px`,
+          transform: `translate(${vp.x}px, ${vp.y}px) scale(${plan.zoom})`,
         },
       });
       const a = document.createElement('a');
       a.href = url;
       a.download = `${mapName || 'org-map'}.png`;
       a.click();
+      if (plan.zoom < 0.6) {
+        setImportNotice(
+          `Large map — exported at ${Math.round(plan.zoom * 100)}% scale`
+        );
+        window.setTimeout(() => setImportNotice(''), 5_000);
+      }
     } catch {
       setImportNotice('PNG export failed — try again.');
       window.setTimeout(() => setImportNotice(''), 5_000);
     }
-  }, [displayNodes, mapName]);
+  }, [displayNodes, mapName, rf]);
 
   const saveName = useCallback(() => {
-    if (!mapId || readOnly) return;
+    if (!mapId || readOnly || fixtureMode) return;
     void api.patchMap(mapId, { name: mapName }).catch(() => {
       saveStateRef.current = 'dirty';
       setSaveState('dirty');
     });
-  }, [mapId, mapName, readOnly]);
+  }, [mapId, mapName, readOnly, fixtureMode]);
 
   const importCrmCsv = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -2334,15 +2506,21 @@ function MapInner() {
         <RailSeparator />
         <RailButton
           icon={<Waypoints size={16} />}
-          label="Canvas"
+          label={isMobile && viewMode === 'roster' ? 'Show canvas' : 'Canvas'}
           active={viewMode === 'canvas'}
-          onClick={() => setViewMode('canvas')}
+          onClick={() => {
+            setViewModeTouched(true);
+            setViewMode('canvas');
+          }}
         />
         <RailButton
           icon={<Rows3 size={16} />}
           label="Roster"
           active={viewMode === 'roster'}
-          onClick={() => setViewMode('roster')}
+          onClick={() => {
+            setViewModeTouched(true);
+            setViewMode('roster');
+          }}
         />
         {!readOnly && (
           <>
@@ -2641,6 +2819,7 @@ function MapInner() {
           fitView
           fitViewOptions={openingFitOptions}
           minZoom={0.2}
+          onlyRenderVisibleElements
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={28} size={1} color="#d9ddd4" />
@@ -2649,11 +2828,16 @@ function MapInner() {
             fitViewOptions={openingFitOptions}
             className="max-sm:!hidden !bottom-4 !left-4"
           />
-          <MiniMap
-            pannable
-            zoomable
-            className="!hidden !bg-slate-50 sm:!block"
-          />
+          {!isMobile && !laneItems.some((node) => node.dragging) && (
+            <MemoMiniMap
+              pannable
+              zoomable
+              nodeStrokeWidth={3}
+              nodeColor={bigMap ? () => '#cbd5e1' : undefined}
+              maskColor={bigMap ? 'rgba(241,245,249,0.72)' : undefined}
+              className="!bg-slate-50"
+            />
+          )}
         </ReactFlow>
 
         <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
@@ -2724,6 +2908,34 @@ function MapInner() {
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
             >
               <Copy size={16} />
+            </button>
+            <select
+              aria-label="Assign buying role to selection"
+              defaultValue=""
+              onChange={(event) => {
+                if (event.target.value) {
+                  assignRole(event.target.value as BuyingRole);
+                  event.currentTarget.value = '';
+                }
+              }}
+              className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 outline-none hover:bg-slate-50 sm:min-h-0"
+            >
+              <option value="" disabled>
+                Assign role
+              </option>
+              {(['none', ...COMMITTEE_ROLES] as BuyingRole[]).map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_META[role].label ||
+                    role.replace('_', ' ').replace(/^./, (letter) => letter.toUpperCase())}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={deleteSelection}
+              title="Delete selection"
+              className="min-h-[44px] min-w-[44px] rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600 sm:min-h-0 sm:min-w-0"
+            >
+              <Trash2 size={16} />
             </button>
           </div>
         )}
@@ -3029,7 +3241,7 @@ function MapInner() {
                             target="_blank"
                             rel="noreferrer"
                             onClick={() => {
-                              if (mapId) {
+                              if (mapId && !fixtureMode) {
                                 void api
                                   .trackEvent(mapId, 'source_opened', {
                                     surface: 'initiative',
