@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Building2, Loader2, Search, Sparkles, Users, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
-import { Building2, Loader2, Search, Sparkles, Users } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { stateFromResearch } from '../lib/layout';
 import { useFocusTrap } from '../lib/useFocusTrap';

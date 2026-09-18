@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react';
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { Building2, Loader2, Sparkles, X } from 'lucide-react';

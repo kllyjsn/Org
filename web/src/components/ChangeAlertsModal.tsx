@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import {
