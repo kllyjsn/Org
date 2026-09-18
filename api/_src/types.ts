@@ -149,6 +149,7 @@ export interface MemberRow {
   workspace_id: string;
   user_id: string;
   role: 'owner' | 'member' | 'viewer';
+  access_scope: 'all' | 'selected';
   created_at: string;
 }
 

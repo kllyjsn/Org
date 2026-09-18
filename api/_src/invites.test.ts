@@ -6,6 +6,7 @@ import {
   isValidEmail,
   newInviteSecret,
   normalizeEmail,
+  parseAccessRequest,
 } from './invites.js';
 
 const NOW = '2026-01-01T00:00:00.000Z';
@@ -55,6 +56,61 @@ test('invite token hashing is deterministic and differs from the secret', () => 
   assert.equal(hashInviteToken(secret), hashInviteToken(secret));
   assert.notEqual(hashInviteToken(secret), secret);
   assert.notEqual(hashInviteToken(secret), hashInviteToken(newInviteSecret()));
+});
+
+test('parseAccessRequest defaults to all-access', () => {
+  assert.deepEqual(parseAccessRequest({}, ['a', 'b']), {
+    ok: true,
+    scope: 'all',
+    mapIds: [],
+  });
+  assert.deepEqual(parseAccessRequest({ accessScope: 'all' }, ['a']), {
+    ok: true,
+    scope: 'all',
+    mapIds: [],
+  });
+  assert.deepEqual(parseAccessRequest(null, ['a']), {
+    ok: true,
+    scope: 'all',
+    mapIds: [],
+  });
+});
+
+test('parseAccessRequest accepts a valid selection and dedupes ids', () => {
+  assert.deepEqual(
+    parseAccessRequest(
+      { accessScope: 'selected', mapIds: ['a', 'b', 'a'] },
+      ['a', 'b', 'c']
+    ),
+    { ok: true, scope: 'selected', mapIds: ['a', 'b'] }
+  );
+});
+
+test('parseAccessRequest rejects an empty selection', () => {
+  for (const body of [
+    { accessScope: 'selected' },
+    { accessScope: 'selected', mapIds: [] },
+    { accessScope: 'selected', mapIds: 'a' },
+    { accessScope: 'selected', mapIds: [42] },
+  ]) {
+    const result = parseAccessRequest(body, ['a', 'b']);
+    assert.equal(result.ok, false, JSON.stringify(body));
+  }
+});
+
+test('parseAccessRequest rejects unknown accounts', () => {
+  assert.deepEqual(
+    parseAccessRequest({ accessScope: 'selected', mapIds: ['a', 'zzz'] }, [
+      'a',
+      'b',
+    ]),
+    { ok: false, error: 'unknown account in selection' }
+  );
+});
+
+test('parseAccessRequest rejects unsupported scopes', () => {
+  const result = parseAccessRequest({ accessScope: 'everything' }, ['a']);
+  assert.equal(result.ok, false);
 });
 
 test('normalizeEmail trims and lowercases; isValidEmail gates input', () => {

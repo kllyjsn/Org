@@ -156,15 +156,28 @@ export const api = {
     }),
   listMembers: (workspaceId: string) =>
     req<{
-      members: { id: string; name: string; email: string; role: string }[];
+      members: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+        access_scope: 'all' | 'selected';
+        map_ids: string[];
+      }[];
       invites: {
         id: string;
         email: string;
         created_at: string;
         expires_at: string;
+        access_scope: 'all' | 'selected';
+        map_ids: string[];
       }[];
     }>(`/api/workspaces/${workspaceId}/members`),
-  addMember: (workspaceId: string, email: string) =>
+  addMember: (
+    workspaceId: string,
+    email: string,
+    access: { accessScope: 'all' | 'selected'; mapIds: string[] }
+  ) =>
     req<{
       ok: true;
       added?: boolean;
@@ -173,8 +186,17 @@ export const api = {
       emailSent?: boolean;
     }>(`/api/workspaces/${workspaceId}/members`, {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, ...access }),
     }),
+  updateMemberAccess: (
+    workspaceId: string,
+    userId: string,
+    access: { accessScope: 'all' | 'selected'; mapIds: string[] }
+  ) =>
+    req<{ ok: true }>(
+      `/api/workspaces/${workspaceId}/members/${userId}/access`,
+      { method: 'PATCH', body: JSON.stringify(access) }
+    ),
   revokeInvite: (workspaceId: string, inviteId: string) =>
     req<{ ok: true }>(
       `/api/workspaces/${workspaceId}/invites/${inviteId}`,
@@ -189,6 +211,8 @@ export const api = {
         expiresAt: string;
         hasAccount: boolean;
         status: 'ok' | 'expired' | 'accepted';
+        accessScope: 'all' | 'selected';
+        accountNames: string[];
       };
     }>(`/api/invites/${token}`),
   acceptInvite: (

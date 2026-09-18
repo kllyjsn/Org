@@ -21,6 +21,40 @@ export function isValidEmail(email: unknown): email is string {
   );
 }
 
+export type AccessScope = 'all' | 'selected';
+
+export function parseAccessRequest(
+  body: unknown,
+  workspaceMapIds: string[]
+): { ok: true; scope: AccessScope; mapIds: string[] } | { ok: false; error: string } {
+  const raw =
+    body && typeof body === 'object'
+      ? (body as Record<string, unknown>).accessScope
+      : undefined;
+  if (raw === undefined || raw === null || raw === 'all') {
+    return { ok: true, scope: 'all', mapIds: [] };
+  }
+  if (raw !== 'selected') {
+    return { ok: false, error: 'accessScope must be "all" or "selected"' };
+  }
+  const ids =
+    body && typeof body === 'object'
+      ? (body as Record<string, unknown>).mapIds
+      : undefined;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { ok: false, error: 'select at least one account' };
+  }
+  const mapIds = [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
+  if (mapIds.length === 0) {
+    return { ok: false, error: 'select at least one account' };
+  }
+  const known = new Set(workspaceMapIds);
+  if (mapIds.some((id) => !known.has(id))) {
+    return { ok: false, error: 'unknown account in selection' };
+  }
+  return { ok: true, scope: 'selected', mapIds };
+}
+
 export interface InviteLike {
   email: string;
   expires_at: string;
