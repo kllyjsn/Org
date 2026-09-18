@@ -139,6 +139,33 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function downloadExport(path: string, fallbackName: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new ApiError(
+      typeof data.error === 'string' ? data.error : `request failed (${res.status})`,
+      res.status
+    );
+  }
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const quoted = disposition.match(/filename="([^"]+)"/i)?.[1];
+  const filename = encoded
+    ? decodeURIComponent(encoded)
+    : quoted ?? fallbackName;
+  triggerBlobDownload(await res.blob(), filename);
+}
+
 export const api = {
   me: () =>
     req<{ user: SessionUser; workspaces: Workspace[] }>('/api/me'),
@@ -439,6 +466,16 @@ export const api = {
 
   listMaps: (workspaceId: string) =>
     req<{ maps: MapListItem[] }>(`/api/maps?workspaceId=${workspaceId}`),
+  downloadMapExport: (mapId: string) =>
+    downloadExport(
+      `/api/maps/${mapId}/export.xlsx`,
+      'Account Plan.xlsx'
+    ),
+  downloadWorkspaceExport: (workspaceId: string) =>
+    downloadExport(
+      `/api/workspaces/${workspaceId}/export.xlsx`,
+      'Territory.xlsx'
+    ),
   createMap: (
     workspaceId: string,
     name: string,

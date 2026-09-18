@@ -1,6 +1,11 @@
 import type { Provider } from './llm.js';
 import { canonicalDepartment } from './sumble.js';
-import type { Confidence, ResearchSource, SellerProfile } from './types.js';
+import type {
+  CompanyProfile,
+  Confidence,
+  ResearchSource,
+  SellerProfile,
+} from './types.js';
 import { initialCheckpoint, partialResult, runToCompletion } from './research-pipeline.js';
 
 export interface ResearchedPerson {
@@ -27,6 +32,7 @@ export interface ResearchedPerson {
 
 export interface ResearchResult {
   companyName: string | null;
+  companyProfile: CompanyProfile | null;
   domain: string;
   people: ResearchedPerson[];
   provider: Provider;
@@ -1041,6 +1047,7 @@ export function fixtureOrg(domain: string): ResearchResult {
   );
   return {
     companyName: domain,
+    companyProfile: null,
     domain,
     people,
     provider: 'fixture',

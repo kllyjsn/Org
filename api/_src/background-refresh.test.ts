@@ -43,6 +43,7 @@ function result(
 ): ResearchResult {
   return {
     companyName: 'Example',
+    companyProfile: null,
     domain: 'example.com',
     provider: 'gemini',
     tier: 'T0',

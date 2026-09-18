@@ -337,6 +337,7 @@ function renderSales(api: ExtensionApi, settings: Settings, tabId: number, ctx: 
     let upserted = 0;
     let known = 0;
     let page = ctx.pagination.page ?? 1;
+    let stopReason: string | null = null;
     const total = ctx.pagination.total;
     const setProgress = () => {
       bar.style.width = total ? `${Math.min(100, (page / total) * 100)}%` : '50%';
@@ -355,7 +356,10 @@ function renderSales(api: ExtensionApi, settings: Settings, tabId: number, ctx: 
           type: 'nextPage',
           previousFirstUrl: people[0]?.linkedinUrl ?? null,
         });
-        if (!next.ok) break;
+        if (!next.ok) {
+          if (next.reason !== 'no next page') stopReason = next.reason ?? 'could not advance';
+          break;
+        }
         await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
         const parsed = await sendToTab<Extract<ContentResponse, { type: 'page' }>>(tabId, { type: 'parse' });
         ctx = parsed.context;
@@ -367,9 +371,12 @@ function renderSales(api: ExtensionApi, settings: Settings, tabId: number, ctx: 
         current = people;
         if (people.length === 0) break;
       }
-      bar.style.width = '100%';
-      result.className = 'ok';
-      result.textContent = `Done — synced ${upserted} leads to ${account?.name} (${known} already known).`;
+      const incomplete = stopReason ?? (total && page < total ? `stopped at page ${page} of ${total}` : null);
+      bar.style.width = incomplete ? `${total ? Math.min(100, (page / total) * 100) : 50}%` : '100%';
+      result.className = incomplete ? 'bad' : 'ok';
+      result.textContent = incomplete
+        ? `Stopped (${incomplete}) — synced ${upserted} leads to ${account?.name} (${known} already known). Scroll/refresh the page and retry.`
+        : `Done — synced ${upserted} leads to ${account?.name} (${known} already known).`;
     } catch (err) {
       result.className = 'bad';
       result.textContent = `${errorMessage(err)} Synced ${upserted} so far.`;

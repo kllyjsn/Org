@@ -41,6 +41,7 @@ import {
   Compass,
   Copy,
   Download,
+  FileSpreadsheet,
   FileUp,
   History,
   LayoutGrid,
@@ -300,6 +301,7 @@ function MapInner() {
   const [presence, setPresence] = useState<MapPresence[]>([]);
   const [selfId, setSelfId] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState('');
+  const [exportingAccountPlan, setExportingAccountPlan] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [past, setPast] = useState<CanvasSnapshot[]>([]);
@@ -2207,6 +2209,25 @@ function MapInner() {
     }
   }, [displayNodes, mapName, rf]);
 
+  const exportAccountPlan = useCallback(async () => {
+    if (!mapId || exportingAccountPlan) return;
+    setExportingAccountPlan(true);
+    setImportNotice('Exporting account plan…');
+    try {
+      await api.downloadMapExport(mapId);
+      setImportNotice('Account plan exported.');
+    } catch (error) {
+      setImportNotice(
+        error instanceof Error
+          ? error.message
+          : 'Account plan export failed — try again.'
+      );
+    } finally {
+      setExportingAccountPlan(false);
+      window.setTimeout(() => setImportNotice(''), 5_000);
+    }
+  }, [exportingAccountPlan, mapId]);
+
   const saveName = useCallback(() => {
     if (!mapId || readOnly || fixtureMode) return;
     void api.patchMap(mapId, { name: mapName }).catch(() => {
@@ -2547,6 +2568,7 @@ function MapInner() {
               Date.now() +
                 (meta.refreshCadence === 'monthly' ? 30 : 7) * 86_400_000
             ).toISOString(),
+            companyProfile: result.companyProfile ?? meta.companyProfile ?? null,
             initiatives: (
               result.initiatives.length > 0
                 ? result.initiatives
@@ -2819,6 +2841,16 @@ function MapInner() {
           icon={<Download size={16} />}
           label="Export PNG"
           onClick={() => void exportPng()}
+        />
+        <RailButton
+          icon={<FileSpreadsheet size={16} />}
+          label={
+            exportingAccountPlan
+              ? 'Exporting account plan…'
+              : 'Export account plan (.xlsx)'
+          }
+          onClick={() => void exportAccountPlan()}
+          disabled={!mapId || exportingAccountPlan}
         />
         <RailButton
           icon={<MessageSquare size={16} />}
