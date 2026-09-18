@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   computeStrategy,
   EMPTY_PLAN,
+  patchStakeholder,
   renderBrief,
   taskId,
 } from './accountStrategy';
@@ -153,4 +154,42 @@ test('renders markdown headings and stakeholder table rows', () => {
     brief,
     /\| Casey \| champion \| advocate \| Ask for an intro \|/
   );
+});
+
+test('patchStakeholder: manual stance edit claims provenance, other patches do not', () => {
+  const withStance = patchStakeholder(
+    {
+      ...EMPTY_PLAN,
+      stakeholders: {
+        p1: {
+          stance: 'advocate',
+          nextStep: '',
+          note: '',
+          stanceSource: 'transcript',
+        },
+      },
+    },
+    'p1',
+    { stance: 'skeptic' }
+  );
+  assert.equal(withStance.stakeholders.p1.stance, 'skeptic');
+  assert.equal(withStance.stakeholders.p1.stanceSource, 'manual');
+
+  const withNote = patchStakeholder(
+    {
+      ...EMPTY_PLAN,
+      stakeholders: {
+        p1: {
+          stance: 'advocate',
+          nextStep: '',
+          note: '',
+          stanceSource: 'transcript',
+        },
+      },
+    },
+    'p1',
+    { note: 'asked about pricing' }
+  );
+  assert.equal(withNote.stakeholders.p1.stance, 'advocate');
+  assert.equal(withNote.stakeholders.p1.stanceSource, 'transcript');
 });

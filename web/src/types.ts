@@ -85,10 +85,29 @@ export interface MapMeta {
 
 export type Stance = 'advocate' | 'neutral' | 'skeptic' | 'unknown';
 
+export type StanceSignal =
+  | 'support'
+  | 'objection'
+  | 'question'
+  | 'budget'
+  | 'timeline'
+  | 'authority'
+  | 'competitor';
+
+export interface StanceEvidence {
+  quote: string;
+  signal: StanceSignal;
+  transcriptId: string;
+  title: string | null;
+  occurredAt: string | null;
+}
+
 export interface StakeholderPlanEntry {
   stance: Stance;
   nextStep: string;
   note: string;
+  evidence?: StanceEvidence[];
+  stanceSource?: 'manual' | 'transcript';
 }
 
 export interface StrategyTask {
@@ -515,4 +534,42 @@ export interface NotificationsResponse {
   emailConfigured: boolean;
   encryptionConfigured: boolean;
   recent: NotificationRecent[];
+}
+
+export interface TranscriptQuote {
+  text: string;
+  signal: StanceSignal;
+}
+
+export interface TranscriptSpeaker {
+  speakerLabel: string;
+  matchedName: string | null;
+  matchedPersonId: string | null;
+  inferredTitle: string | null;
+  stance: Stance;
+  confidence: Confidence;
+  quotes: TranscriptQuote[];
+  summary: string;
+}
+
+export interface TranscriptAnalysis {
+  speakers: TranscriptSpeaker[];
+  nextSteps: string[];
+  risks: string[];
+  provider: string | null;
+  analyzedAt: string;
+}
+
+export interface CallTranscript {
+  id: string;
+  mapId: string;
+  source: 'paste' | 'upload' | 'gong';
+  externalId: string | null;
+  title: string | null;
+  occurredAt: string | null;
+  analysis: TranscriptAnalysis | null;
+  analysisError: string | null;
+  appliedAt: string | null;
+  createdAt: string;
+  transcriptChars: number;
 }

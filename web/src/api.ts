@@ -1,5 +1,6 @@
 import type {
   AccountBriefing,
+  CallTranscript,
   StrategyInsights,
   AccountAgentAnswer,
   AccountAgentMessage,
@@ -162,6 +163,52 @@ export const api = {
     req<{ ok: true }>(`/api/workspaces/${workspaceId}/notifications/prefs`, {
       method: 'PATCH',
       body: JSON.stringify(prefs),
+    }),
+
+  listTranscripts: (mapId: string) =>
+    req<{ transcripts: CallTranscript[]; gongConfigured: boolean }>(
+      `/api/maps/${mapId}/transcripts`
+    ),
+  getTranscript: (mapId: string, tid: string) =>
+    req<{ transcript: CallTranscript & { transcript: string } }>(
+      `/api/maps/${mapId}/transcripts/${tid}`
+    ),
+  addTranscript: (
+    mapId: string,
+    input: {
+      source: 'paste' | 'upload';
+      title?: string;
+      occurredAt?: string;
+      text: string;
+      filename?: string;
+    }
+  ) =>
+    req<{ transcript: CallTranscript }>(`/api/maps/${mapId}/transcripts`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  importGongCalls: (mapId: string, days = 30) =>
+    req<{ imported: number; transcripts: CallTranscript[] }>(
+      `/api/maps/${mapId}/transcripts/gong/import`,
+      { method: 'POST', body: JSON.stringify({ days }) }
+    ),
+  reanalyzeTranscript: (mapId: string, tid: string) =>
+    req<{ transcript: CallTranscript }>(
+      `/api/maps/${mapId}/transcripts/${tid}/reanalyze`,
+      { method: 'POST' }
+    ),
+  applyTranscript: (
+    mapId: string,
+    tid: string,
+    overrides?: Record<string, string | null>
+  ) =>
+    req<{ state: MapState }>(
+      `/api/maps/${mapId}/transcripts/${tid}/apply`,
+      { method: 'POST', body: JSON.stringify({ overrides: overrides ?? {} }) }
+    ),
+  deleteTranscript: (mapId: string, tid: string) =>
+    req<{ ok: true }>(`/api/maps/${mapId}/transcripts/${tid}`, {
+      method: 'DELETE',
     }),
 
   sendFeedback: (input: {

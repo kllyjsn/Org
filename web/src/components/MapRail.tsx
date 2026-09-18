@@ -17,6 +17,7 @@ import {
   Rows3,
   Share2,
   Sparkles,
+  PhoneCall,
   Undo2,
   UserCheck,
   UserPlus,
@@ -33,6 +34,7 @@ export interface MapRailProps {
   onBriefing: () => void;
   onStrategy: () => void;
   onMeetings: () => void;
+  onCalls: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -64,6 +66,7 @@ export default function MapRail({
   onBriefing,
   onStrategy,
   onMeetings,
+  onCalls,
   onUndo,
   onRedo,
   canUndo,
@@ -133,6 +136,11 @@ export default function MapRail({
             icon={<UserCheck size={16} />}
             label="Meetings"
             onClick={onMeetings}
+          />
+          <RailButton
+            icon={<PhoneCall size={16} />}
+            label="Calls"
+            onClick={onCalls}
           />
           <RailSeparator />
           <RailButton

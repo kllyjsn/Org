@@ -71,6 +71,7 @@ import type { LaneHeaderData } from '../components/LaneHeaderNode';
 import MoreNode from '../components/MoreNode';
 import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
+import CallsModal from '../components/CallsModal';
 import MeetingsImportModal from '../components/MeetingsImportModal';
 import MapRail from '../components/MapRail';
 import RosterView from '../components/RosterView';
@@ -207,6 +208,7 @@ function MapInner() {
   const [viewMode, setViewMode] = useState<'canvas' | 'roster'>('canvas');
   useDocumentTitle(`${mapName || 'Map'} — TopDown`);
   const [showMeetings, setShowMeetings] = useState(false);
+  const [showCalls, setShowCalls] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -1052,6 +1054,21 @@ function MapInner() {
     [setNodes]
   );
 
+  // Server-applied transcript apply: swap the whole state in place — no
+  // undo entry or dirty flag since the route already persisted it.
+  const applyTranscriptState = useCallback(
+    (state: MapState) => {
+      const flow = toFlow(state, readOnly);
+      nodesRef.current = flow.nodes;
+      edgesRef.current = flow.edges;
+      setNodes(flow.nodes);
+      setEdges(flow.edges);
+      metaRef.current = state.meta;
+      setMeta(state.meta);
+    },
+    [readOnly, setNodes, setEdges]
+  );
+
   const deletePerson = useCallback(
     (personId: string) => {
       recordHistory();
@@ -1425,6 +1442,7 @@ function MapInner() {
       [showFeedback, () => setShowFeedback(false)],
       [showDeepResearch, () => setShowDeepResearch(false)],
       [showMeetings, () => setShowMeetings(false)],
+      [showCalls, () => setShowCalls(false)],
       [showShare, () => setShowShare(false)],
       [showHistory, () => setShowHistory(false)],
       [showInitiatives, () => setShowInitiatives(false)],
@@ -1449,6 +1467,7 @@ function MapInner() {
     showFeedback,
     showDeepResearch,
     showMeetings,
+    showCalls,
     showShare,
     showHistory,
     showInitiatives,
@@ -2334,6 +2353,7 @@ function MapInner() {
         }}
         onStrategy={() => setShowStrategy(true)}
         onMeetings={() => setShowMeetings(true)}
+        onCalls={() => setShowCalls(true)}
         onUndo={undo}
         onRedo={redo}
         canUndo={past.length > 0}
@@ -2779,6 +2799,14 @@ function MapInner() {
           people={people}
           onApply={applyMeetings}
           onClose={() => setShowMeetings(false)} />
+      )}
+      {showCalls && mapId && (
+        <CallsModal
+          mapId={mapId}
+          people={people}
+          readOnly={readOnly}
+          onApply={applyTranscriptState}
+          onClose={() => setShowCalls(false)} />
       )}
       {showDeepResearch && (
         <DeepResearchModal
