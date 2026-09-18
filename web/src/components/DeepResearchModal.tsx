@@ -2,14 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Building2, Loader2, Search, Sparkles, UsersRound, X } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useFocusTrap } from '../lib/useFocusTrap';
-import type { Person, ResearchResult } from '../types';
-
-const STAGES = [
-  'Scanning company and public profiles…',
-  'Following names into teams and reporting lines…',
-  'Checking titles against recent evidence…',
-  'Resolving the strongest additions…',
-];
+import type { Person, ResearchEvent, ResearchResult } from '../types';
 
 export default function DeepResearchModal({
   domain,
@@ -34,24 +27,21 @@ export default function DeepResearchModal({
 }) {
   const [focus, setFocus] = useState(initialFocus || selected?.name || '');
   const [researching, setResearching] = useState(false);
-  const [stage, setStage] = useState(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [lastEvent, setLastEvent] = useState<ResearchEvent | null>(null);
+  const [partial, setPartial] = useState<ResearchResult | null>(null);
   const [result, setResult] = useState<ResearchResult | null>(null);
   const [error, setError] = useState('');
   const [merged, setMerged] = useState('');
-  const timer = useRef<number | null>(null);
+  const unsubscribe = useRef<(() => void) | null>(null);
   const trapRef = useRef<HTMLDivElement>(null);
   useFocusTrap(trapRef);
 
   useEffect(() => {
-    if (!researching) return;
-    timer.current = window.setInterval(
-      () => setStage((value) => (value + 1) % STAGES.length),
-      1_800
-    );
     return () => {
-      if (timer.current) window.clearInterval(timer.current);
+      unsubscribe.current?.();
     };
-  }, [researching]);
+  }, []);
 
   const suggestions = useMemo(() => {
     const values = [
@@ -67,26 +57,57 @@ export default function DeepResearchModal({
     if (!fullAccount && !focus.trim()) return;
     setResearching(true);
     setResult(null);
+    setPartial(null);
+    setLastEvent(null);
+    setJobId(null);
     setMerged('');
     setError('');
-    setStage(0);
     try {
-      setResult(
-        await api.research(
-          domain,
-          fullAccount ? undefined : focus.trim(),
-          fullAccount ? knownSources : undefined,
-          workspaceId
-        )
+      const { jobId: nextJobId } = await api.startResearch(
+        domain,
+        fullAccount ? undefined : focus.trim(),
+        fullAccount ? knownSources : undefined,
+        workspaceId
       );
+      setJobId(nextJobId);
+      unsubscribe.current = api.subscribeResearch(nextJobId, {
+        onEvent: setLastEvent,
+        onPartial: setPartial,
+        onDone: (nextResult) => {
+          setResult(nextResult);
+          setPartial(nextResult);
+          setResearching(false);
+          setJobId(null);
+          unsubscribe.current?.();
+        },
+        onError: (message) => {
+          setError(message);
+          setResearching(false);
+          setJobId(null);
+          unsubscribe.current?.();
+        },
+      });
     } catch (err) {
       setError(
         err instanceof ApiError
           ? err.message
           : 'Deep research failed. Try a narrower person or team.'
       );
-    } finally {
       setResearching(false);
+    }
+  };
+
+  const cancel = async () => {
+    if (!jobId) return;
+    const activeJobId = jobId;
+    unsubscribe.current?.();
+    unsubscribe.current = null;
+    try {
+      await api.cancelResearch(activeJobId);
+      setResearching(false);
+      setJobId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'failed to cancel research');
     }
   };
 
@@ -181,18 +202,23 @@ export default function DeepResearchModal({
           >
             <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
               <span>Deep research · {domain}</span>
-              <span>{stage + 1} / {STAGES.length}</span>
+              <span>
+                {partial?.people.length ?? 0} people ·{' '}
+                {new Set(
+                  (partial?.people ?? []).flatMap((person) => person.sources)
+                ).size}{' '}
+                sources found
+              </span>
             </div>
-            <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-[#c9f04b] transition-all duration-500"
-                style={{ width: `${((stage + 1) / STAGES.length) * 100}%` }}
-              />
-            </div>
-            <p className="flex items-center gap-2 text-sm text-slate-200">
-              <Loader2 size={14} className="animate-spin text-[#c9f04b]" />
-              {STAGES[stage]}
+            <p className="text-sm text-slate-200">
+              {lastEvent?.message ?? 'Starting research…'}
             </p>
+            <button
+              onClick={() => void cancel()}
+              className="mt-3 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white"
+            >
+              Cancel
+            </button>
           </div>
         )}
 

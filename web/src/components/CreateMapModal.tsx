@@ -3,7 +3,12 @@ import { Building2, Loader2, Search, Sparkles, Users } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { stateFromResearch } from '../lib/layout';
 import { useFocusTrap } from '../lib/useFocusTrap';
-import type { MapState, Person, ResearchResult } from '../types';
+import type {
+  MapState,
+  Person,
+  ResearchEvent,
+  ResearchResult,
+} from '../types';
 
 function templateState(
   domain: string,
@@ -51,13 +56,6 @@ function templateState(
   };
 }
 
-const STAGES = [
-  'Scanning leadership, product, and team pages…',
-  'Following evidence across the public web…',
-  'Resolving teams, titles, and reporting lines…',
-  'Connecting recent initiatives to the org…',
-];
-
 export default function CreateMapModal({
   workspaceId,
   onClose,
@@ -69,44 +67,76 @@ export default function CreateMapModal({
 }) {
   const [domain, setDomain] = useState('');
   const [researching, setResearching] = useState(false);
-  const [stage, setStage] = useState(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [events, setEvents] = useState<ResearchEvent[]>([]);
+  const [partial, setPartial] = useState<ResearchResult | null>(null);
   const [result, setResult] = useState<ResearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const timer = useRef<number | null>(null);
+  const unsubscribe = useRef<(() => void) | null>(null);
   const researchStartedAt = useRef<string | null>(null);
   const trapRef = useRef<HTMLDivElement>(null);
   useFocusTrap(trapRef);
 
   useEffect(() => {
-    if (!researching) return;
-    timer.current = window.setInterval(
-      () => setStage((s) => (s + 1) % STAGES.length),
-      1800
-    );
     return () => {
-      if (timer.current) window.clearInterval(timer.current);
+      unsubscribe.current?.();
     };
-  }, [researching]);
+  }, []);
 
   const research = async () => {
     setError(null);
     setResult(null);
+    setPartial(null);
+    setEvents([]);
     setResearching(true);
-    setStage(0);
     researchStartedAt.current = new Date().toISOString();
     try {
-      const r = await api.research(
+      const { jobId: nextJobId } = await api.startResearch(
         domain.trim(),
         undefined,
         undefined,
         workspaceId
       );
-      setResult(r);
+      setJobId(nextJobId);
+      unsubscribe.current = api.subscribeResearch(nextJobId, {
+        onEvent: (event) =>
+          setEvents((current) => [...current, event].slice(-3)),
+        onPartial: setPartial,
+        onDone: (nextResult) => {
+          setResult(nextResult);
+          setPartial(nextResult);
+          setResearching(false);
+          setJobId(null);
+          unsubscribe.current?.();
+        },
+        onError: (message) => {
+          setError(message);
+          setResearching(false);
+          setJobId(null);
+          unsubscribe.current?.();
+        },
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'research failed');
-    } finally {
       setResearching(false);
+    } finally {
+      researchStartedAt.current ??= new Date().toISOString();
+    }
+  };
+
+  const cancelResearch = async (usePartial = false) => {
+    if (!jobId) return;
+    const activeJobId = jobId;
+    unsubscribe.current?.();
+    unsubscribe.current = null;
+    try {
+      await api.cancelResearch(activeJobId);
+      if (usePartial && partial) setResult({ ...partial, complete: false });
+      setResearching(false);
+      setJobId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'failed to cancel research');
     }
   };
 
@@ -229,17 +259,51 @@ export default function CreateMapModal({
           >
             <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
               <span>Live research</span>
-              <span>{stage + 1} / {STAGES.length}</span>
+              <span>
+                {partial?.people.length ?? 0} people ·{' '}
+                {new Set(
+                  (partial?.people ?? []).flatMap((person) =>
+                    person.sources
+                  )
+                ).size}{' '}
+                sources found
+              </span>
             </div>
-            <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-[#c9f04b] transition-all duration-500"
-                style={{ width: `${((stage + 1) / STAGES.length) * 100}%` }}
-              />
+            <div className="space-y-1 font-mono text-[11px] text-slate-300">
+              {events.map((event, index) => (
+                <div key={`${event.at}-${index}`}>{event.message}</div>
+              ))}
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Loader2 size={14} className="animate-spin text-[#c9f04b]" />
-              {STAGES[stage]}
+            {partial && partial.people.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs text-slate-300">
+                {partial.people.slice(0, 8).map((person, index) => (
+                  <li key={`${person.name}-${index}`}>
+                    {person.name} — {person.title}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <Loader2 size={14} className="animate-spin text-[#c9f04b]" />
+                Researching…
+              </div>
+              <div className="flex gap-2">
+                {partial && partial.people.length >= 5 && (
+                  <button
+                    onClick={() => void cancelResearch(true)}
+                    className="rounded-lg bg-[#c9f04b] px-3 py-1.5 text-xs font-semibold text-slate-950"
+                  >
+                    Use what we have so far
+                  </button>
+                )}
+                <button
+                  onClick={() => void cancelResearch()}
+                  className="rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}

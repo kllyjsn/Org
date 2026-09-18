@@ -221,6 +221,39 @@ export interface ResearchResult {
   initiatives: StrategicInitiative[];
   /** Stored map source URLs the server verified as dead (404/410). */
   deadSources?: string[];
+  complete: boolean;
+}
+
+export type ResearchStep =
+  | 'discover'
+  | 'sumble'
+  | 'passes'
+  | 'initiatives'
+  | 'followup'
+  | 'dead_sources'
+  | 'verify'
+  | 'done';
+
+export interface ResearchEvent {
+  at: string;
+  step: ResearchStep;
+  level: 'info' | 'warn';
+  message: string;
+  peopleCount?: number;
+}
+
+export interface ResearchJob {
+  id: string;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  step: ResearchStep;
+  domain: string;
+  focus: string | null;
+  events: ResearchEvent[];
+  partial: ResearchResult | null;
+  result: ResearchResult | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ShareLink {
