@@ -1757,9 +1757,9 @@ async function materializeRosterRows(
     confidenceByRosterId?: Map<string, Confidence>;
     groups?: MapGroup[];
   } = {}
-): Promise<{ state: MapState; added: number }> {
+): Promise<{ map: MapRow; added: number }> {
   const pending = rows.filter((row) => row.status !== 'added');
-  if (pending.length === 0) return { state: map.state as MapState, added: 0 };
+  if (pending.length === 0) return { map, added: 0 };
   const state = map.state as MapState;
   const existing = state.people;
   const baseX = existing.length ? Math.min(...existing.map((person) => person.x)) : 0;
@@ -1864,7 +1864,7 @@ async function materializeRosterRows(
     edges,
     ...(nextGroups.length ? { groups: nextGroups } : {}),
   };
-  await saveMapState(map, nextState, userId);
+  const savedMap = await saveMapState(map, nextState, userId);
   await setRosterStatus(
     map.workspace_id,
     map.domain,
@@ -1874,7 +1874,7 @@ async function materializeRosterRows(
       pending.map((row, index) => [row.id, additions[index].id])
     )
   );
-  return { state: nextState, added: additions.length };
+  return { map: savedMap, added: additions.length };
 }
 
 app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
@@ -1895,7 +1895,7 @@ app.post('/api/maps/:id/roster/add', requireAuth, async (c) => {
   const pending = rows.filter((row) => row.status !== 'added');
   if (pending.length === 0) return c.json({ map: { ...map, role }, added: 0 });
   const materialized = await materializeRosterRows(map, user.id, pending);
-  return c.json({ map: { ...map, state: materialized.state, role }, added: materialized.added });
+  return c.json({ map: { ...materialized.map, role }, added: materialized.added });
 });
 
 async function allSuggestionRoster(
@@ -2036,7 +2036,7 @@ app.post('/api/maps/:id/suggest-chart/apply', requireAuth, async (c) => {
     }];
   });
   let added = 0;
-  let responseMap: MapState = map.state as MapState;
+  let responseMap = map;
   if (acceptedPeople.length > 0) {
     const acceptedIds = acceptedPeople.map((person) => person.rosterId);
     const rows = await query<RosterPersonRow>(
@@ -2059,7 +2059,7 @@ app.post('/api/maps/:id/suggest-chart/apply', requireAuth, async (c) => {
       confidenceByRosterId: new Map(acceptedPeople.map((person) => [person.rosterId, person.confidence])),
       groups,
     });
-    responseMap = materialized.state;
+    responseMap = materialized.map;
     added = materialized.added;
   }
   const declineRows = await query<{ id: string }>(
@@ -2076,7 +2076,7 @@ app.post('/api/maps/:id/suggest-chart/apply', requireAuth, async (c) => {
     );
   }
   return c.json({
-    map: { ...map, state: responseMap, role },
+    map: { ...responseMap, role },
     added,
     declined: declineRows.length,
   });

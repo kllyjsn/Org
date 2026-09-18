@@ -99,11 +99,21 @@ const REGION_WORDS: Record<string, string[]> = {
   ],
 };
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const REGION_PATTERNS = Object.fromEntries(
+  Object.entries(REGION_WORDS).map(([region, words]) => [
+    region,
+    new RegExp(`\\b(${words.map(escapeRegex).join('|')})\\b`, 'i'),
+  ])
+) as Record<string, RegExp>;
+
 function regionFor(row: RosterPersonRow): string | null {
   for (const text of [row.location ?? '', row.title ?? '']) {
-    const lower = text.toLowerCase();
-    for (const [region, words] of Object.entries(REGION_WORDS)) {
-      if (words.some((word) => lower.includes(word))) return region;
+    for (const [region, pattern] of Object.entries(REGION_PATTERNS)) {
+      if (pattern.test(text)) return region;
     }
   }
   return null;
@@ -172,28 +182,13 @@ export function buildChartSuggestion(input: SuggestChartInput): ChartSuggestion 
     if (
       options.personasOnly &&
       personas.length > 0 &&
-      !personas.some((persona) => {
-        if (
-          !atLeast(seniority, persona.minSeniority) ||
-          (persona.functions.length > 0 && !persona.functions.includes(fn) &&
-            !persona.titleKeywords.some((keyword) =>
-              (row.title ?? '').toLowerCase().includes(keyword.toLowerCase())
-            ))
-        ) return false;
-        const directMatch =
-          persona.functions.length === 0 ||
-          persona.functions.includes(fn) ||
-          persona.titleKeywords.some((keyword) =>
-            (row.title ?? '').toLowerCase().includes(keyword.toLowerCase())
-          );
-        return directMatch || personMatchesPersona(persona, {
+      !personas.some((persona) => personMatchesPersona(persona, {
           id: row.id,
           name: row.name,
           title: row.title ?? '',
           department: functionToDepartment(fn),
           jobLevel: seniorityToJobLevel(seniority),
-        }) || persona.functions.length === 0 || persona.functions.includes(fn);
-      })
+        }))
     ) return [];
     return [{ row, fn, seniority, groupId: '', region: regionFor(row) }];
   });
@@ -337,11 +332,10 @@ export function buildChartSuggestion(input: SuggestChartInput): ChartSuggestion 
       const sameFnMap = input.mapPeople
         .filter((person) => personDepartmentToFn(person.department, person.title) === fn)
         .filter((person) => {
+          const needle = (person.team ?? person.department ?? '').toLowerCase();
           return input.mapEdges.some(
             (edge) => edge.kind === 'reports' && edge.from === person.id
-          ) || (row.title ?? '').toLowerCase().includes(
-            (person.team ?? person.department ?? '').toLowerCase()
-          );
+          ) || (needle.length >= 3 && (row.title ?? '').toLowerCase().includes(needle));
         })
         .map((person) => ({
           person,
@@ -401,14 +395,26 @@ export function buildChartSuggestion(input: SuggestChartInput): ChartSuggestion 
   }
   for (const group of groups) {
     if (group.id === 'grp:leadership') continue;
-    const members = resultByGroup.get(group.id) ?? [];
+    const descendantIds = new Set([group.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const child of groups) {
+        if (child.parentGroupId && descendantIds.has(child.parentGroupId) &&
+            !descendantIds.has(child.id)) {
+          descendantIds.add(child.id);
+          changed = true;
+        }
+      }
+    }
+    const members = [...descendantIds].flatMap((id) => resultByGroup.get(id) ?? []);
     const sourced = members.filter(
       (person) =>
         (person.evidence.kind === 'sumble_relationship' ||
           person.evidence.kind === 'research_reportsTo') &&
         Boolean(person.reportsToRosterId || person.reportsToPersonId)
     ).length;
-    group.confidence = sourced >= members.length / 2
+    group.confidence = members.length > 0 && sourced >= members.length / 2
       ? 'high'
       : sourced > 0 ? 'medium' : 'low';
   }

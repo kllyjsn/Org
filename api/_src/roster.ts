@@ -255,12 +255,32 @@ export async function setRosterStatus(
   onlyFromDismissed = false
 ) {
   const domain = domainInput.trim().toLowerCase();
-  for (const id of ids.slice(0, 2000)) {
+  const boundedIds = ids.slice(0, 2000);
+  const linkedIds = boundedIds.filter((id) => mapPersonIds?.has(id));
+  const unlinkedIds = boundedIds.filter((id) => !mapPersonIds?.has(id));
+  const statusClause = onlyFromDismissed ? "AND status = 'dismissed'" : '';
+  if (unlinkedIds.length > 0) {
+    await query(
+      `UPDATE roster_people
+       SET status = $1, map_person_id = COALESCE($2, map_person_id), last_seen_at = $3
+       WHERE workspace_id = $4 AND domain = $5 AND id = ANY($6::text[])
+       ${statusClause}`,
+      [
+        status,
+        null,
+        now(),
+        workspaceId,
+        domain,
+        unlinkedIds,
+      ]
+    );
+  }
+  for (const id of linkedIds) {
     await query(
       `UPDATE roster_people
        SET status = $1, map_person_id = COALESCE($2, map_person_id), last_seen_at = $3
        WHERE workspace_id = $4 AND domain = $5 AND id = $6
-       ${onlyFromDismissed ? "AND status = 'dismissed'" : ''}`,
+       ${statusClause}`,
       [
         status,
         mapPersonIds?.get(id) ?? null,

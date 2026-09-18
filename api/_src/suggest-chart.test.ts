@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { rowsFromCsv } from './csv.js';
+import type { Persona } from './personas.js';
 import { seniorityRank } from './taxonomy.js';
 import {
   applyLlmPatch,
@@ -74,6 +75,82 @@ test('groups nest and regional grouping requires guidance', () => {
   assert.ok(regional.groups.some((group) => group.id === 'grp:fn:sales:EMEA'));
   assert.equal(
     regional.groups.find((group) => group.id === 'grp:fn:sales:EMEA')!.parentGroupId,
+    'grp:fn:sales'
+  );
+});
+
+test('personasOnly uses canonical persona matching', () => {
+  const persona: Persona = {
+    id: 'sales-vp',
+    name: 'Sales VP',
+    functions: ['sales'],
+    minSeniority: 'vp',
+    titleKeywords: [],
+    buyingRole: null,
+    required: true,
+    sortOrder: 0,
+  };
+  const suggestion = buildChartSuggestion({
+    roster: makeRosterFixture(),
+    ...emptyMap,
+    personas: [persona],
+    options: { personasOnly: true },
+  });
+  assert.ok(suggestion.people.length > 0);
+  assert.ok(suggestion.people.every((person) =>
+    person.function === 'sales' &&
+    seniorityRank(person.seniority) <= seniorityRank('vp')
+  ));
+});
+
+test('region matching uses word boundaries', () => {
+  const fixture = makeRosterFixture(1);
+  const rows = [
+    {
+      ...fixture[0],
+      id: 'austin',
+      person_key: 'austin',
+      name: 'Austin Sales',
+      title: 'VP Sales',
+      function: 'sales',
+      seniority: 'vp',
+      location: 'Austin, TX',
+      manager_key: null,
+    },
+    {
+      ...fixture[0],
+      id: 'new-york',
+      person_key: 'new-york',
+      name: 'New York Sales',
+      title: 'Manager, Sales',
+      function: 'sales',
+      seniority: 'manager',
+      location: 'New York, NY',
+      manager_key: null,
+    },
+    {
+      ...fixture[0],
+      id: 'business-development',
+      person_key: 'business-development',
+      name: 'Business Development',
+      title: 'Business Development',
+      function: 'sales',
+      seniority: 'manager',
+      location: null,
+      manager_key: null,
+    },
+  ];
+  const suggestion = buildChartSuggestion({
+    roster: rows,
+    ...emptyMap,
+    options: { guidance: 'group by region' },
+  });
+  assert.equal(
+    suggestion.people.find((person) => person.rosterId === 'austin')?.groupId,
+    'grp:fn:sales:AMER'
+  );
+  assert.equal(
+    suggestion.people.find((person) => person.rosterId === 'business-development')?.groupId,
     'grp:fn:sales'
   );
 });
