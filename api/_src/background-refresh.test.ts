@@ -48,6 +48,7 @@ function result(
     tier: 'T0',
     demo: false,
     initiatives: [],
+    complete: true,
     people: [
       {
         name: 'Ada Lovelace',
