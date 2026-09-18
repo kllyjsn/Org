@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Building2, Loader2, Search, Sparkles, Users, X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { api, ApiError } from '../api';
 import { stateFromResearch } from '../lib/layout';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -70,6 +72,7 @@ export default function CreateMapModal({
   const [domain, setDomain] = useState('');
   const [researching, setResearching] = useState(false);
   const [stage, setStage] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<ResearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -81,11 +84,16 @@ export default function CreateMapModal({
   useEffect(() => {
     if (!researching) return;
     timer.current = window.setInterval(
-      () => setStage((s) => (s + 1) % STAGES.length),
-      1800
+      () => setStage((s) => Math.min(s + 1, STAGES.length - 1)),
+      9_000
+    );
+    const elapsedTimer = window.setInterval(
+      () => setElapsed((value) => value + 1),
+      1_000
     );
     return () => {
       if (timer.current) window.clearInterval(timer.current);
+      window.clearInterval(elapsedTimer);
     };
   }, [researching]);
 
@@ -94,6 +102,7 @@ export default function CreateMapModal({
     setResult(null);
     setResearching(true);
     setStage(0);
+    setElapsed(0);
     researchStartedAt.current = new Date().toISOString();
     try {
       const r = await api.research(
@@ -164,12 +173,23 @@ export default function CreateMapModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-map-modal-title"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-sheet p-5 shadow-2xl sm:rounded-3xl sm:p-7"
       >
         <div className="mb-2 flex items-center justify-between">
@@ -232,12 +252,18 @@ export default function CreateMapModal({
           >
             <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
               <span>Live research</span>
-              <span>{stage + 1} / {STAGES.length}</span>
+              <span>{stage + 1} / {STAGES.length} · {elapsed}s</span>
             </div>
-            <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={STAGES.length}
+              aria-valuenow={stage + 1}
+              className="mb-3 h-1 overflow-hidden rounded-full bg-white/10"
+            >
               <div
-                className="h-full rounded-full bg-accent transition-all duration-500"
-                style={{ width: `${((stage + 1) / STAGES.length) * 100}%` }}
+                className="h-full w-full origin-left rounded-full bg-accent transition-transform duration-500"
+                style={{ transform: `scaleX(${(stage + 0.5) / STAGES.length})` }}
               />
             </div>
             <div className="flex items-center gap-2 text-sm">
@@ -355,7 +381,7 @@ export default function CreateMapModal({
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

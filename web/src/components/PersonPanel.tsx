@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'framer-motion';
+import { panelTransition } from '../lib/motion';
 import { Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { ROLE_META } from '../lib/colors';
@@ -158,7 +159,7 @@ export default function PersonPanel({
       initial={{ x: 340, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 340, opacity: 0 }}
-      transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+      transition={panelTransition}
       className="absolute inset-x-0 bottom-0 z-30 flex h-[82%] flex-col rounded-t-3xl border-t border-slate-200 bg-sheet shadow-[0_-20px_60px_rgba(15,23,42,.15)] sm:inset-y-0 sm:left-auto sm:h-full sm:w-[360px] sm:rounded-none sm:border-l sm:border-t-0 sm:shadow-[-20px_0_60px_rgba(15,23,42,.12)]"
     >
       <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300 sm:hidden" />

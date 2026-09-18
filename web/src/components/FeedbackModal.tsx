@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { Loader2, MessageSquare, X } from 'lucide-react';
 import { api, ApiError } from '../api';
 import type { FeedbackCategory } from '../types';
@@ -54,7 +55,12 @@ export default function FeedbackModal({
   };
 
   return (
-    <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
       className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose();
@@ -65,9 +71,10 @@ export default function FeedbackModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-modal-title"
-        initial={{ y: 24, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', damping: 26, stiffness: 260 }}
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-sheet p-5 shadow-2xl sm:rounded-3xl sm:p-7"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -145,6 +152,6 @@ export default function FeedbackModal({
           {sent ? 'Thanks — sent.' : 'Send to the team'}
         </button>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

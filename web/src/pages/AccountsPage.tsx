@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -624,6 +625,7 @@ export default function AccountsPage() {
         </div>
       </main>
 
+      <AnimatePresence>
       {showCreate && workspaceId && (
         <CreateMapModal
           workspaceId={workspaceId}
@@ -631,6 +633,7 @@ export default function AccountsPage() {
           onCreated={(id) => navigate(`/app/maps/${id}`)}
         />
       )}
+      </AnimatePresence>
       {showMembers && workspaceId && (
         <MembersModal
           workspaceId={workspaceId}
@@ -643,21 +646,28 @@ export default function AccountsPage() {
           onClose={() => setShowPricing(false)}
         />
       )}
+      <AnimatePresence>
       {showValue && workspaceId && (
         <ValueDashboardModal
           workspaceId={workspaceId}
           onClose={() => setShowValue(false)}
         />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {showFeedback && (
         <FeedbackModal
           workspaceId={workspaceId}
           onClose={() => setShowFeedback(false)}
         />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {showFeedbackInbox && (
         <FeedbackInboxModal onClose={() => setShowFeedbackInbox(false)} />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {showSellerProfile && workspaceId && (
         <SellerProfileModal
           workspaceId={workspaceId}
@@ -669,6 +679,7 @@ export default function AccountsPage() {
           }}
         />
       )}
+      </AnimatePresence>
       </div>
     </div>
   );
