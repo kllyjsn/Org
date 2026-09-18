@@ -110,12 +110,12 @@ export default function MeetingsImportModal({
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
               Meetings import
             </div>
-            <h3
+            <h2
               id="meetings-import-modal-title"
               className="text-lg font-semibold tracking-tight text-slate-950"
             >
               Who have you met with?
-            </h3>
+            </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               Paste a Granola-style export — names matched to the map are
               marked Met; the rest can be added as new people.

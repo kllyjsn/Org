@@ -167,9 +167,9 @@ export default function PersonPanel({
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
             {readOnly ? 'Stakeholder intelligence' : 'Stakeholder profile'}
           </div>
-          <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-950">
             {person.name}
-          </h3>
+          </h2>
           <p className="line-clamp-2 text-xs leading-5 text-slate-500">
             {person.title}
           </p>
