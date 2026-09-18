@@ -99,9 +99,9 @@ export function buildAccountContext(state: MapState) {
 
   return {
     context: {
-      company: state.meta.companyName,
-      domain: state.meta.domain,
-      researchedAt: state.meta.researchedAt,
+      company: state.meta?.companyName,
+      domain: state.meta?.domain,
+      researchedAt: state.meta?.researchedAt,
       people,
       initiatives,
     },

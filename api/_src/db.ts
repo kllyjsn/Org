@@ -122,6 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_maps_workspace ON maps(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_comments_map ON comments(map_id);
 CREATE INDEX IF NOT EXISTS idx_map_versions_map ON map_versions(map_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_map_presence_map ON map_presence(map_id, last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_share_links_map ON share_links(map_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_workspace_time
   ON analytics_events(workspace_id, occurred_at DESC);

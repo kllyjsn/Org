@@ -97,13 +97,6 @@ export interface UserRow {
   created_at: string;
 }
 
-export interface SessionRow {
-  token: string;
-  user_id: string;
-  created_at: string;
-  expires_at: string;
-}
-
 export interface WorkspaceRow {
   id: string;
   name: string;
@@ -156,11 +149,3 @@ export interface ShareLinkRow {
   created_at: string;
 }
 
-export interface CommentRow {
-  id: string;
-  map_id: string;
-  person_id: string | null;
-  author_id: string;
-  body: string;
-  created_at: string;
-}

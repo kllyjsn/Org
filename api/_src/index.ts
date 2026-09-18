@@ -37,8 +37,11 @@ import {
   publicUser,
 } from './auth.js';
 import type {
+  MapEdge,
   MapRow,
   MapState,
+  Person,
+  StrategicInitiative,
   UserRow,
   MemberRow,
   ShareLinkRow,
@@ -172,10 +175,10 @@ async function recordAnalytics(
 
 function mapRefinementCounts(previous: MapState, next: MapState) {
   const nextPeople = new Map(
-    (next.people ?? []).map((person) => [person.id, person])
+    (next.people ?? []).filter(Boolean).map((person) => [person.id, person])
   );
   let fieldChanges = 0;
-  for (const person of previous.people ?? []) {
+  for (const person of (previous.people ?? []).filter(Boolean)) {
     const updated = nextPeople.get(person.id);
     if (!updated) continue;
     for (const field of [
@@ -193,8 +196,12 @@ function mapRefinementCounts(previous: MapState, next: MapState) {
     [edge.from, edge.to, edge.kind, edge.inferred ? 'inferred' : 'sourced'].join(
       ':'
     );
-  const previousEdges = new Set((previous.edges ?? []).map(edgeKey));
-  const nextEdges = new Set((next.edges ?? []).map(edgeKey));
+  const previousEdges = new Set(
+    (previous.edges ?? []).filter(Boolean).map(edgeKey)
+  );
+  const nextEdges = new Set(
+    (next.edges ?? []).filter(Boolean).map(edgeKey)
+  );
   const relationshipChanges =
     [...previousEdges].filter((key) => !nextEdges.has(key)).length +
     [...nextEdges].filter((key) => !previousEdges.has(key)).length;
@@ -207,18 +214,34 @@ function sanitizeState(input: unknown): MapState {
   // (canvas, share links, analysis) and missing person/initiative fields
   // crash them.
   const people = (Array.isArray(s.people) ? s.people.slice(0, 500) : []).map(
-    (person) => ({
-      ...person,
-      name: person.name ?? '',
-      title: person.title ?? '',
-      role: person.role ?? 'none',
-      notes: person.notes ?? '',
-      sources: Array.isArray(person.sources) ? person.sources : [],
-      metWith: person.metWith === true,
-      confidence: person.confidence ?? 'low',
-    })
-  ) as MapState['people'];
-  const edges = Array.isArray(s.edges) ? s.edges.slice(0, 2000) : [];
+    (p) => {
+      const person = (p ?? {}) as Partial<Person>;
+      return {
+        ...person,
+        name: person.name ?? '',
+        title: person.title ?? '',
+        role: person.role ?? 'none',
+        notes: person.notes ?? '',
+        sources: Array.isArray(person.sources) ? person.sources : [],
+        email: person.email ?? null,
+        linkedin: person.linkedin ?? null,
+        metWith: person.metWith === true,
+        confidence: person.confidence ?? 'low',
+        x: typeof person.x === 'number' ? person.x : 0,
+        y: typeof person.y === 'number' ? person.y : 0,
+      } as Person;
+    }
+  );
+  const edges = (Array.isArray(s.edges) ? s.edges.slice(0, 2000) : []).map(
+    (e) => {
+      const edge = (e ?? {}) as Partial<MapEdge>;
+      return {
+        ...edge,
+        kind: edge.kind === 'influence' ? 'influence' : 'reports',
+        label: edge.label ?? null,
+      } as MapEdge;
+    }
+  );
   const meta = (s.meta ?? {}) as MapState['meta'];
   return {
     people,
@@ -238,21 +261,34 @@ function sanitizeState(input: unknown): MapState {
       initiatives: (Array.isArray(meta.initiatives)
         ? meta.initiatives.slice(0, 20)
         : []
-      ).map((initiative) => ({
-        ...initiative,
-        name: initiative.name ?? 'Unnamed',
-        summary: initiative.summary ?? '',
-        evidence: Array.isArray(initiative.evidence) ? initiative.evidence : [],
-        relevantPeople: Array.isArray(initiative.relevantPeople)
-          ? initiative.relevantPeople
-          : [],
-        relevantTeams: Array.isArray(initiative.relevantTeams)
-          ? initiative.relevantTeams
-          : [],
-        salesAngles: Array.isArray(initiative.salesAngles)
-          ? initiative.salesAngles
-          : [],
-      })),
+      ).map((i) => {
+        const initiative = (i ?? {}) as Partial<StrategicInitiative>;
+        return {
+          ...initiative,
+          name: initiative.name ?? 'Unnamed',
+          summary: initiative.summary ?? '',
+          category:
+            initiative.category === 'growth' ||
+            initiative.category === 'operations' ||
+            initiative.category === 'technology' ||
+            initiative.category === 'market' ||
+            initiative.category === 'product'
+              ? initiative.category
+              : 'product',
+          evidence: Array.isArray(initiative.evidence)
+            ? initiative.evidence
+            : [],
+          relevantPeople: Array.isArray(initiative.relevantPeople)
+            ? initiative.relevantPeople
+            : [],
+          relevantTeams: Array.isArray(initiative.relevantTeams)
+            ? initiative.relevantTeams
+            : [],
+          salesAngles: Array.isArray(initiative.salesAngles)
+            ? initiative.salesAngles
+            : [],
+        } as StrategicInitiative;
+      }),
     },
   };
 }
@@ -270,6 +306,7 @@ app.get('/api/cron/refresh', async (c) => {
     return bad(c, 'unauthorized', 401);
   }
   try {
+    await query('DELETE FROM sessions WHERE expires_at < $1', [now()]);
     return c.json(await refreshNextDueMap());
   } catch (error) {
     console.error('background refresh failed', error);
