@@ -102,9 +102,21 @@ test('deriveTouchStats: counts and future meetings do not set metWith', () => {
   assert.equal(p1.meetingCount, 2);
   assert.equal(p1.emailThreadCount, 1);
   assert.equal(p1.metWith, true); // one meeting already happened
-  assert.equal(p1.lastTouchAt, '2026-04-01T10:00:00Z');
+  // The April meeting is still scheduled — last touch is the past email.
+  assert.equal(p1.lastTouchAt, '2026-03-05T10:00:00Z');
   const p2 = stats.get('p2')!;
   assert.equal(p2.metWith, false); // only a future meeting
+});
+
+test('deriveTouchStats: a future-only meeting leaves lastTouchAt null but still counts', () => {
+  const stats = deriveTouchStats(
+    [{ personId: 'p1', kind: 'meeting', occurredAt: '2026-04-01T10:00:00Z' }],
+    Date.parse('2026-03-10T00:00:00.000Z')
+  );
+  const p1 = stats.get('p1')!;
+  assert.equal(p1.meetingCount, 1);
+  assert.equal(p1.metWith, false);
+  assert.equal(p1.lastTouchAt, null);
 });
 
 test('applyTouchStats: preserves metWith=true and only touches changed people', () => {

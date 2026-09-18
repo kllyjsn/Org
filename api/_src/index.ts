@@ -1020,7 +1020,7 @@ app.get('/api/integrations/callback', async (c) => {
        ON CONFLICT (workspace_id, user_id, provider) DO UPDATE SET
          account_email = EXCLUDED.account_email,
          access_token = EXCLUDED.access_token,
-         refresh_token = EXCLUDED.refresh_token,
+         refresh_token = COALESCE(EXCLUDED.refresh_token, integrations.refresh_token),
          expires_at = EXCLUDED.expires_at,
          scopes = EXCLUDED.scopes,
          status = 'connected',

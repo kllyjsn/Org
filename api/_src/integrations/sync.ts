@@ -95,7 +95,12 @@ export function deriveTouchStats(
     const stat =
       stats.get(touch.personId) ??
       { lastTouchAt: null, meetingCount: 0, emailThreadCount: 0, metWith: false };
-    if (!stat.lastTouchAt || touch.occurredAt > stat.lastTouchAt) {
+    // "Last touch" is about the past — a scheduled future meeting still
+    // counts toward meetingCount but isn't contact that has happened yet.
+    if (
+      Date.parse(touch.occurredAt) <= nowMs &&
+      (!stat.lastTouchAt || touch.occurredAt > stat.lastTouchAt)
+    ) {
       stat.lastTouchAt = touch.occurredAt;
     }
     if (touch.kind === 'meeting') {
