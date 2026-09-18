@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { query, now } from './db.js';
 import { matchPerson } from './identity.js';
+import { compareMapStates } from './changes.js';
+import { enqueueChangeAlert } from './notifications/dispatch.js';
 import { researchOrg, type ResearchResult } from './research.js';
 import type { MapRow, MapState, Person, SellerProfile } from './types.js';
 
@@ -187,5 +189,13 @@ export async function refreshNextDueMap(): Promise<{
      WHERE id = $4`,
     [JSON.stringify(state), state.meta.companyName, timestamp, map.id]
   );
+  const alerts = compareMapStates(map.state as MapState, state);
+  if (alerts.length > 0) {
+    try {
+      await enqueueChangeAlert(map, map.state as MapState, state, alerts);
+    } catch (error) {
+      console.error('change alert enqueue failed', error);
+    }
+  }
   return { refreshed: true, mapId: map.id, domain: map.domain };
 }

@@ -55,6 +55,10 @@ CREATE TABLE IF NOT EXISTS maps (
   updated_at TEXT NOT NULL
 );
 ALTER TABLE maps ADD COLUMN IF NOT EXISTS is_live_opportunity BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE maps ADD COLUMN IF NOT EXISTS outcome TEXT NOT NULL DEFAULT 'open';
+ALTER TABLE maps ADD COLUMN IF NOT EXISTS outcome_at TEXT;
+ALTER TABLE maps ADD COLUMN IF NOT EXISTS outcome_coverage JSONB;
+ALTER TABLE maps ADD COLUMN IF NOT EXISTS stage TEXT;
 CREATE TABLE IF NOT EXISTS share_links (
   token TEXT PRIMARY KEY,
   map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
@@ -171,6 +175,71 @@ CREATE TABLE IF NOT EXISTS touchpoints (
 );
 CREATE INDEX IF NOT EXISTS idx_touchpoints_map ON touchpoints(map_id);
 CREATE INDEX IF NOT EXISTS idx_integrations_workspace ON integrations(workspace_id);
+-- CRM providers join google/microsoft; the inline CHECK can't be altered,
+-- so swap it for a named constraint covering the full set.
+DO $$
+DECLARE c RECORD;
+BEGIN
+  FOR c IN
+    SELECT conname FROM pg_constraint
+    WHERE conrelid = 'integrations'::regclass AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%provider%'
+  LOOP
+    EXECUTE format('ALTER TABLE integrations DROP CONSTRAINT %I', c.conname);
+  END LOOP;
+END $$;
+ALTER TABLE integrations
+  ADD CONSTRAINT integrations_provider_check
+  CHECK (provider IN ('google','microsoft','hubspot','salesforce'));
+ALTER TABLE integrations ADD COLUMN IF NOT EXISTS instance_url TEXT;
+ALTER TABLE workspace_members
+  ADD COLUMN IF NOT EXISTS notify_email BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE workspace_members
+  ADD COLUMN IF NOT EXISTS notify_briefs BOOLEAN NOT NULL DEFAULT TRUE;
+CREATE TABLE IF NOT EXISTS notification_channels (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('slack_webhook','email')),
+  target TEXT NOT NULL,
+  label TEXT,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS notification_outbox (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  map_id TEXT REFERENCES maps(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('change_alert','pre_meeting_brief','weekly_coverage')),
+  dedupe_key TEXT UNIQUE NOT NULL,
+  payload JSONB NOT NULL,
+  scheduled_for TEXT NOT NULL,
+  sent_at TEXT,
+  attempts INT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notification_channels_workspace
+  ON notification_channels(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_due
+  ON notification_outbox(sent_at, scheduled_for);
+CREATE TABLE IF NOT EXISTS call_transcripts (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source IN ('paste','upload','gong')),
+  external_id TEXT,
+  title TEXT,
+  occurred_at TEXT,
+  transcript TEXT NOT NULL,
+  analysis JSONB,
+  analysis_error TEXT,
+  applied_at TEXT,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  UNIQUE(map_id, source, external_id)
+);
+CREATE INDEX IF NOT EXISTS idx_call_transcripts_map ON call_transcripts(map_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
 CREATE INDEX IF NOT EXISTS research_jobs_status_idx
   ON research_jobs (status, created_at);

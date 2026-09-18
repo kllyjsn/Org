@@ -13,7 +13,12 @@ export type ProductEventName =
   | 'deep_research_completed'
   | 'comment_added'
   | 'person_verified'
+  | 'transcript_analyzed'
+  | 'transcript_applied'
   | 'share_created'
+  | 'crm_pulled'
+  | 'crm_pushed'
+  | 'outcome_set'
   | 'live_opportunity_set';
 
 type EventProperties = Record<string, string | number | boolean | null>;

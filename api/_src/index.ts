@@ -22,15 +22,45 @@ import {
 } from './research.js';
 import { applyVerification, toResearchedPerson } from './verify-person.js';
 import {
+  decryptSecret,
   encryptionKeyConfigured,
   encryptSecret,
   signPayload,
   signatureMatches,
 } from './crypto.js';
-import { adapterFor, providerStatus } from './integrations/registry.js';
+import {
+  crmAdapterFor,
+  oauthAdapterFor,
+  providerStatus,
+} from './integrations/registry.js';
+import {
+  applyPushResults,
+  contactsToPush,
+  mergeCrmContacts,
+} from './integrations/crm-sync.js';
+import type { CrmSession } from './integrations/crm-types.js';
+import { committeeCoverage } from './notifications/coverage.js';
+import {
+  mapPortfolioRow,
+  portfolioSummary,
+  type DealStage,
+  type PortfolioInput,
+} from './portfolio.js';
+import { analyzeTranscript } from './transcripts/analyze.js';
+import { applyAnalysisToPeople, applyAnalysisToStrategy } from './transcripts/apply.js';
+import { configured as gongConfigured, fetchTranscript, listCalls } from './transcripts/gong.js';
+import { normalizeTranscript } from './transcripts/parse.js';
+import {
+  enqueuePreMeetingBriefs,
+  enqueueWeeklyCoverage,
+  notificationsConfigured,
+  sendDue,
+  sendThroughChannel,
+} from './notifications/dispatch.js';
 import {
   syncIntegration,
   syncNextDueIntegration,
+  withFreshToken,
   type IntegrationRow,
 } from './integrations/sync.js';
 import { initialCheckpoint } from './research-pipeline.js';
@@ -76,6 +106,8 @@ import type {
   WorkspaceRow,
   SellerProfile,
   AccountStrategyPlan,
+  StanceSignal,
+  TranscriptAnalysis,
 } from './types.js';
 
 type Vars = { user: UserRow };
@@ -261,6 +293,43 @@ function sanitizeStrategyPlan(
           row.stance === 'unknown'
             ? row.stance
             : 'unknown';
+        const SIGNALS = new Set([
+          'support',
+          'objection',
+          'question',
+          'budget',
+          'timeline',
+          'authority',
+          'competitor',
+        ]);
+        const evidence = Array.isArray(row.evidence)
+          ? row.evidence
+              .slice(0, 8)
+              .map((item) => {
+                const e =
+                  item && typeof item === 'object'
+                    ? (item as Record<string, unknown>)
+                    : {};
+                const signal: StanceSignal =
+                  typeof e.signal === 'string' && SIGNALS.has(e.signal)
+                    ? (e.signal as StanceSignal)
+                    : 'question';
+                return {
+                  quote:
+                    typeof e.quote === 'string' ? e.quote.slice(0, 2000) : '',
+                  signal,
+                  transcriptId:
+                    typeof e.transcriptId === 'string'
+                      ? e.transcriptId.slice(0, 200)
+                      : '',
+                  title:
+                    typeof e.title === 'string' ? e.title.slice(0, 300) : null,
+                  occurredAt:
+                    typeof e.occurredAt === 'string' ? e.occurredAt : null,
+                };
+              })
+              .filter((item) => item.quote !== '')
+          : [];
         return [
           id,
           {
@@ -270,6 +339,10 @@ function sanitizeStrategyPlan(
                 ? row.nextStep.slice(0, 500)
                 : '',
             note: typeof row.note === 'string' ? row.note.slice(0, 500) : '',
+            ...(evidence.length > 0 ? { evidence } : {}),
+            ...(row.stanceSource === 'manual' || row.stanceSource === 'transcript'
+              ? { stanceSource: row.stanceSource as 'manual' | 'transcript' }
+              : {}),
           },
         ];
       })
@@ -397,6 +470,25 @@ function sanitizeState(input: unknown): MapState {
         } as StrategicInitiative;
       }),
       ...(strategy ? { strategy } : {}),
+      ...(meta.crm && typeof meta.crm === 'object'
+        ? {
+            crm: {
+              provider:
+                meta.crm.provider === 'salesforce' ? 'salesforce' : 'hubspot',
+              accountId: String(meta.crm.accountId ?? ''),
+              accountName: String(meta.crm.accountName ?? ''),
+              opportunityId: meta.crm.opportunityId ?? null,
+              opportunityName: meta.crm.opportunityName ?? null,
+              stage: meta.crm.stage ?? null,
+              amount:
+                typeof meta.crm.amount === 'number' ? meta.crm.amount : null,
+              closeDate: meta.crm.closeDate ?? null,
+              linkedAt: meta.crm.linkedAt ?? '',
+              lastPulledAt: meta.crm.lastPulledAt ?? null,
+              lastPushedAt: meta.crm.lastPushedAt ?? null,
+            },
+          }
+        : {}),
     },
   };
 }
@@ -424,10 +516,31 @@ app.get('/api/cron/refresh', async (c) => {
       console.error('integration sync failed', error);
       return { synced: false };
     });
-    return c.json({ ...refresh, integrationSync });
+    const notifications = await sendDue().catch((error) => {
+      console.error('notification dispatch failed', error);
+      return { sent: 0, failed: 0 };
+    });
+    return c.json({ ...refresh, integrationSync, notifications });
   } catch (error) {
     console.error('background refresh failed', error);
     return bad(c, 'background refresh failed', 500);
+  }
+});
+
+app.get('/api/cron/notify', async (c) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return bad(c, 'notifications are not configured', 503);
+  if (c.req.header('authorization') !== `Bearer ${secret}`) {
+    return bad(c, 'unauthorized', 401);
+  }
+  try {
+    const briefs = await enqueuePreMeetingBriefs();
+    const weekly = await enqueueWeeklyCoverage();
+    const sent = await sendDue();
+    return c.json({ briefs, weekly, sent });
+  } catch (error) {
+    console.error('notify cron failed', error);
+    return bad(c, 'notification dispatch failed', 500);
   }
 });
 
@@ -966,7 +1079,7 @@ app.post(
     if (!canWrite(await workspaceRoleFor(user, wsId))) {
       return bad(c, 'insufficient role', 403);
     }
-    const adapter = adapterFor(param(c, 'provider'));
+    const adapter = oauthAdapterFor(param(c, 'provider'));
     if (!adapter || !adapter.configured() || !integrationsConfigured()) {
       return bad(c, 'integrations are not configured', 503);
     }
@@ -1005,7 +1118,7 @@ app.get('/api/integrations/callback', async (c) => {
   } catch {
     return fail();
   }
-  const adapter = adapterFor(state.provider ?? '');
+  const adapter = oauthAdapterFor(state.provider ?? '');
   if (!adapter || !state.ws || !state.uid) return fail(state.provider ?? '');
   if (!state.exp || state.exp < Date.now()) return fail(adapter.id);
 
@@ -1015,14 +1128,15 @@ app.get('/api/integrations/callback', async (c) => {
     await query(
       `INSERT INTO integrations
         (id, workspace_id, user_id, provider, account_email, access_token,
-         refresh_token, expires_at, scopes, status, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'connected',$10)
+         refresh_token, expires_at, scopes, instance_url, status, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'connected',$11)
        ON CONFLICT (workspace_id, user_id, provider) DO UPDATE SET
          account_email = EXCLUDED.account_email,
          access_token = EXCLUDED.access_token,
          refresh_token = COALESCE(EXCLUDED.refresh_token, integrations.refresh_token),
          expires_at = EXCLUDED.expires_at,
          scopes = EXCLUDED.scopes,
+         instance_url = COALESCE(EXCLUDED.instance_url, integrations.instance_url),
          status = 'connected',
          last_error = NULL`,
       [
@@ -1035,6 +1149,7 @@ app.get('/api/integrations/callback', async (c) => {
         tokens.refreshToken ? encryptSecret(tokens.refreshToken) : null,
         tokens.expiresAt,
         tokens.scopes,
+        tokens.instanceUrl ?? null,
         now(),
       ]
     );
@@ -1042,7 +1157,7 @@ app.get('/api/integrations/callback', async (c) => {
       'SELECT id FROM integrations WHERE workspace_id = $1 AND user_id = $2 AND provider = $3',
       [state.ws, state.uid, adapter.id]
     );
-    if (rows[0]) {
+    if (rows[0] && adapter.kind !== 'crm') {
       void syncIntegration(rows[0].id).catch((error) =>
         console.error('initial integration sync failed', error)
       );
@@ -1104,6 +1219,934 @@ app.delete('/api/integrations/:id', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------- crm ----------
+
+/** Caller must have a usable CRM integration in the row's workspace. */
+async function crmIntegrationForUser(
+  user: UserRow,
+  integrationId: string
+): Promise<[IntegrationRow | null, string | null]> {
+  const rows = await query<IntegrationRow>(
+    'SELECT * FROM integrations WHERE id = $1',
+    [integrationId]
+  );
+  const integration = rows[0];
+  if (!integration || !crmAdapterFor(integration.provider)) {
+    return [null, null];
+  }
+  const role = await workspaceRoleFor(user, integration.workspace_id);
+  return [integration, role];
+}
+
+async function crmSessionFor(
+  integration: IntegrationRow
+): Promise<{ session: CrmSession; adapter: ReturnType<typeof crmAdapterFor> }> {
+  const adapter = crmAdapterFor(integration.provider);
+  if (!adapter) throw new Error(`unknown provider ${integration.provider}`);
+  const { accessToken, instanceUrl } = await withFreshToken(integration);
+  return { session: { accessToken, instanceUrl }, adapter };
+}
+
+app.get('/api/integrations/:id/crm/accounts', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [integration, role] = await crmIntegrationForUser(user, param(c, 'id'));
+  if (!integration) return bad(c, 'not a CRM connection', 404);
+  if (!role) return bad(c, 'not a member', 403);
+  const { session, adapter } = await crmSessionFor(integration);
+  const q = c.req.query('q') ?? '';
+  return c.json({ accounts: await adapter!.searchAccounts(session, q) });
+});
+
+app.get(
+  '/api/integrations/:id/crm/accounts/:accountId/opportunities',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const [integration, role] = await crmIntegrationForUser(
+      user,
+      param(c, 'id')
+    );
+    if (!integration) return bad(c, 'not a CRM connection', 404);
+    if (!role) return bad(c, 'not a member', 403);
+    const { session, adapter } = await crmSessionFor(integration);
+    return c.json({
+      opportunities: await adapter!.listOpportunities(
+        session,
+        param(c, 'accountId')
+      ),
+    });
+  }
+);
+
+async function persistMapState(
+  map: MapRow,
+  state: MapState,
+  userId: string
+): Promise<void> {
+  await query(
+    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), map.id, map.name, JSON.stringify(map.state), userId, now()]
+  );
+  await query(
+    'UPDATE maps SET state = $1, updated_at = $2 WHERE id = $3',
+    [JSON.stringify(state), now(), map.id]
+  );
+  await query(
+    `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
+     (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
+    [map.id]
+  );
+}
+
+app.post('/api/maps/:id/crm/link', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const body = await c.req.json().catch(() => null);
+  const integration = await query<IntegrationRow>(
+    'SELECT * FROM integrations WHERE id = $1 AND workspace_id = $2',
+    [typeof body?.integrationId === 'string' ? body.integrationId : '', map.workspace_id]
+  );
+  const row = integration[0];
+  const adapter = row ? crmAdapterFor(row.provider) : null;
+  if (!row || !adapter) return bad(c, 'not a CRM connection', 400);
+  const state = map.state as MapState;
+  const nextState: MapState = {
+    ...state,
+    meta: {
+      ...state.meta,
+      crm: {
+        provider: adapter.id,
+        accountId: String(body?.accountId ?? ''),
+        accountName: String(body?.accountName ?? ''),
+        opportunityId:
+          typeof body?.opportunityId === 'string' ? body.opportunityId : null,
+        opportunityName:
+          typeof body?.opportunityName === 'string' ? body.opportunityName : null,
+        stage: typeof body?.stage === 'string' ? body.stage : null,
+        amount: typeof body?.amount === 'number' ? body.amount : null,
+        closeDate: typeof body?.closeDate === 'string' ? body.closeDate : null,
+        linkedAt: now(),
+        lastPulledAt: state.meta?.crm?.lastPulledAt ?? null,
+        lastPushedAt: state.meta?.crm?.lastPushedAt ?? null,
+      },
+    },
+  };
+  await persistMapState(map, nextState, user.id);
+  return c.json({ state: nextState });
+});
+
+app.delete('/api/maps/:id/crm/link', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const state = map.state as MapState;
+  const meta = { ...state.meta };
+  delete meta.crm;
+  const nextState = { ...state, meta };
+  await persistMapState(map, nextState, user.id);
+  return c.json({ state: nextState });
+});
+
+app.get('/api/maps/:id/crm/status', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const state = map.state as MapState;
+  const integrations = await query<IntegrationRow>(
+    `SELECT * FROM integrations WHERE workspace_id = $1 AND status = 'connected'`,
+    [map.workspace_id]
+  );
+  return c.json({
+    crm: state.meta?.crm ?? null,
+    connections: integrations
+      .map((row) => {
+        const adapter = crmAdapterFor(row.provider);
+        return adapter
+          ? {
+              id: row.id,
+              provider: adapter.id,
+              label: adapter.label,
+              configured: adapter.configured(),
+            }
+          : null;
+      })
+      .filter(Boolean),
+  });
+});
+
+app.post('/api/maps/:id/crm/pull', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const state = map.state as MapState;
+  const link = state.meta?.crm;
+  if (!link) return bad(c, 'map is not linked to a CRM account', 400);
+  const body = await c.req.json().catch(() => null);
+  const integrations = await query<IntegrationRow>(
+    `SELECT * FROM integrations WHERE workspace_id = $1 AND provider = $2 AND status = 'connected' ORDER BY last_synced_at DESC NULLS LAST LIMIT 1`,
+    [map.workspace_id, link.provider]
+  );
+  const integration = integrations[0];
+  if (!integration) return bad(c, `no connected ${link.provider} account`, 400);
+  const { session, adapter } = await crmSessionFor(integration);
+  const contacts = await adapter!.listContacts(
+    session,
+    link.accountId,
+    link.opportunityId ?? undefined
+  );
+  const merged = mergeCrmContacts(state, contacts, adapter!.id, {
+    createUnmatched: body?.createUnmatched === true,
+  });
+  const nextState: MapState = {
+    ...merged.state,
+    meta: { ...merged.state.meta, crm: { ...link, lastPulledAt: now() } },
+  };
+  await persistMapState(map, nextState, user.id);
+  await recordAnalytics({
+    eventName: 'crm_pulled',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: {
+      provider: link.provider,
+      matched: merged.matched,
+      created: merged.created,
+    },
+  });
+  return c.json({
+    state: nextState,
+    matched: merged.matched,
+    created: merged.created,
+    updated: merged.updated,
+  });
+});
+
+app.post('/api/maps/:id/crm/push', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const state = map.state as MapState;
+  const link = state.meta?.crm;
+  if (!link) return bad(c, 'map is not linked to a CRM account', 400);
+  const integrations = await query<IntegrationRow>(
+    `SELECT * FROM integrations WHERE workspace_id = $1 AND provider = $2 AND status = 'connected' ORDER BY last_synced_at DESC NULLS LAST LIMIT 1`,
+    [map.workspace_id, link.provider]
+  );
+  const integration = integrations[0];
+  if (!integration) return bad(c, `no connected ${link.provider} account`, 400);
+  const { session, adapter } = await crmSessionFor(integration);
+  await adapter!.ensureSchema(session);
+  const rows = contactsToPush(state).slice(0, 100);
+  const results: { personId: string; crmId: string; url: string | null }[] = [];
+  const failed: { personId: string; error: string }[] = [];
+  for (const row of rows) {
+    try {
+      const pushed = await adapter!.pushContact(session, row, {
+        accountId: link.accountId,
+        opportunityId: link.opportunityId,
+      });
+      results.push({ personId: row.personId, ...pushed });
+    } catch (error) {
+      failed.push({
+        personId: row.personId,
+        error: error instanceof Error ? error.message : 'push failed',
+      });
+    }
+  }
+  const nextState: MapState = applyPushResults(
+    {
+      ...state,
+      meta: { ...state.meta, crm: { ...link, lastPushedAt: now() } },
+    },
+    results,
+    adapter!.id
+  );
+  await persistMapState(map, nextState, user.id);
+  await recordAnalytics({
+    eventName: 'crm_pushed',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: {
+      provider: link.provider,
+      pushed: results.length,
+      failed: failed.length,
+    },
+  });
+  return c.json({ state: nextState, pushed: results.length, failed });
+});
+
+// ---------- portfolio ----------
+
+// O(maps) in-process rollup — fine at current map counts.
+app.get('/api/workspaces/:id/portfolio', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!(await workspaceRoleFor(user, workspaceId))) {
+    return bad(c, 'not a member', 403);
+  }
+  const maps = await query<PortfolioInput>(
+    `SELECT id, name, domain, company_name, is_live_opportunity, outcome,
+            outcome_at, outcome_coverage, stage, state, updated_at, created_by
+     FROM maps WHERE workspace_id = $1`,
+    [workspaceId]
+  );
+  const rows = maps.map((m) => mapPortfolioRow(m));
+  return c.json({
+    rows,
+    summary: portfolioSummary(rows),
+    generatedAt: now(),
+  });
+});
+
+app.patch('/api/maps/:id/outcome', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const body = await c.req.json().catch(() => null);
+  const outcome = body?.outcome;
+  const stage: DealStage | null =
+    body?.stage === 'discovery' ||
+    body?.stage === 'evaluation' ||
+    body?.stage === 'proposal' ||
+    body?.stage === 'negotiation' ||
+    body?.stage === 'closed'
+      ? body.stage
+      : null;
+  if (outcome !== 'open' && outcome !== 'won' && outcome !== 'lost') {
+    return bad(c, 'outcome must be open, won, or lost');
+  }
+  const state = map.state as MapState;
+  const closing = outcome !== 'open';
+  await query(
+    `UPDATE maps SET outcome = $1, outcome_at = $2, outcome_coverage = $3,
+            stage = $4, updated_at = $5 WHERE id = $6`,
+    [
+      outcome,
+      closing ? now() : null,
+      // snapshot committee coverage at the moment the outcome is set
+      closing ? JSON.stringify(committeeCoverage(state)) : null,
+      stage,
+      now(),
+      map.id,
+    ]
+  );
+  if (closing || map.outcome !== 'open') {
+    await recordAnalytics({
+      eventName: 'outcome_set',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: {
+        outcome,
+        score: closing ? committeeCoverage(state).score : null,
+      },
+    });
+  }
+  return c.json({ ok: true, outcome, stage });
+});
+
+// ---------- notifications ----------
+
+interface ChannelRow {
+  id: string;
+  workspace_id: string;
+  kind: 'slack_webhook' | 'email';
+  target: string;
+  label: string | null;
+  enabled: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+/** Slack webhook URLs never leave the API — only a location hint. */
+function targetHint(channel: ChannelRow): string {
+  if (channel.kind !== 'slack_webhook') return 'workspace members';
+  try {
+    const url = new URL(decryptSecret(channel.target));
+    const tail = url.pathname.slice(-4);
+    return `${url.hostname}/…${tail}`;
+  } catch {
+    return 'slack webhook';
+  }
+}
+
+app.get('/api/workspaces/:id/notifications', requireAuth, async (c) => {
+  const user = c.get('user');
+  const wsId = param(c, 'id');
+  if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
+  const channels = await query<ChannelRow>(
+    `SELECT * FROM notification_channels
+     WHERE workspace_id = $1 ORDER BY created_at`,
+    [wsId]
+  );
+  const prefs = await query<{
+    notify_email: boolean;
+    notify_briefs: boolean;
+  }>(
+    `SELECT notify_email, notify_briefs FROM workspace_members
+     WHERE workspace_id = $1 AND user_id = $2`,
+    [wsId, user.id]
+  );
+  const recent = await query<{
+    kind: string;
+    payload: { title?: string };
+    scheduled_for: string;
+    sent_at: string | null;
+    last_error: string | null;
+  }>(
+    `SELECT kind, payload, scheduled_for, sent_at, last_error
+     FROM notification_outbox
+     WHERE workspace_id = $1 ORDER BY scheduled_for DESC LIMIT 10`,
+    [wsId]
+  );
+  const configured = notificationsConfigured();
+  return c.json({
+    channels: channels.map((channel) => ({
+      id: channel.id,
+      kind: channel.kind,
+      label: channel.label,
+      enabled: channel.enabled,
+      createdAt: channel.created_at,
+      targetHint: targetHint(channel),
+    })),
+    prefs: {
+      notifyEmail: prefs[0]?.notify_email ?? true,
+      notifyBriefs: prefs[0]?.notify_briefs ?? true,
+    },
+    emailConfigured: configured.email,
+    encryptionConfigured: configured.encryption,
+    recent: recent.map((row) => ({
+      kind: row.kind,
+      title: row.payload?.title ?? '',
+      scheduledFor: row.scheduled_for,
+      sentAt: row.sent_at,
+      lastError: row.last_error,
+    })),
+  });
+});
+
+app.post(
+  '/api/workspaces/:id/notifications/channels',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    if (!canWrite(await workspaceRoleFor(user, wsId))) {
+      return bad(c, 'insufficient role', 403);
+    }
+    const body = await c.req.json().catch(() => null);
+    const kind = body?.kind;
+    if (kind === 'email') {
+      // One email channel row per workspace.
+      await query(
+        `INSERT INTO notification_channels
+          (id, workspace_id, kind, target, label, created_by, enabled, created_at)
+         VALUES ($1,$2,'email','members','Workspace email',$3,TRUE,$4)
+         ON CONFLICT DO NOTHING`,
+        [randomUUID(), wsId, user.id, now()]
+      );
+      return c.json({ ok: true });
+    }
+    if (kind !== 'slack_webhook') return bad(c, 'unknown channel kind', 400);
+    const url = typeof body?.url === 'string' ? body.url.trim() : '';
+    if (!url.startsWith('https://hooks.slack.com/')) {
+      return bad(c, 'must be a https://hooks.slack.com/ webhook URL', 400);
+    }
+    if (!notificationsConfigured().encryption) {
+      return bad(c, 'notifications are not configured', 503);
+    }
+    const label =
+      typeof body?.label === 'string' ? body.label.trim().slice(0, 120) : null;
+    await query(
+      `INSERT INTO notification_channels
+        (id, workspace_id, kind, target, label, created_by, enabled, created_at)
+       VALUES ($1,$2,'slack_webhook',$3,$4,$5,TRUE,$6)`,
+      [randomUUID(), wsId, encryptSecret(url), label, user.id, now()]
+    );
+    return c.json({ ok: true });
+  }
+);
+
+/** Channel must live in a workspace the caller can write to. */
+async function channelForUser(
+  user: UserRow,
+  channelId: string
+): Promise<[ChannelRow | null, boolean]> {
+  const rows = await query<ChannelRow>(
+    'SELECT * FROM notification_channels WHERE id = $1',
+    [channelId]
+  );
+  const channel = rows[0];
+  if (!channel) return [null, false];
+  return [channel, canWrite(await workspaceRoleFor(user, channel.workspace_id))];
+}
+
+app.post(
+  '/api/workspaces/:id/notifications/channels/:channelId/test',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    if (!canWrite(await workspaceRoleFor(user, wsId))) {
+      return bad(c, 'insufficient role', 403);
+    }
+    const [channel, allowed] = await channelForUser(
+      user,
+      param(c, 'channelId')
+    );
+    if (!channel || channel.workspace_id !== wsId) {
+      return bad(c, 'not found', 404);
+    }
+    if (!allowed) return bad(c, 'insufficient role', 403);
+    try {
+      await sendThroughChannel(channel.id, {
+        title: 'TopDown connected',
+        lines: ['Notifications from this workspace will arrive here.'],
+        ctaLabel: 'Open TopDown',
+        ctaUrl: `${publicAppUrl()}/app`,
+      });
+      return c.json({ ok: true });
+    } catch (error) {
+      return bad(
+        c,
+        error instanceof Error ? error.message : 'test send failed',
+        502
+      );
+    }
+  }
+);
+
+app.patch(
+  '/api/workspaces/:id/notifications/channels/:channelId',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    const [channel, allowed] = await channelForUser(
+      user,
+      param(c, 'channelId')
+    );
+    if (!channel || channel.workspace_id !== wsId) {
+      return bad(c, 'not found', 404);
+    }
+    if (!allowed) return bad(c, 'insufficient role', 403);
+    const body = await c.req.json().catch(() => null);
+    await query(
+      'UPDATE notification_channels SET enabled = $1 WHERE id = $2',
+      [body?.enabled === true, channel.id]
+    );
+    return c.json({ ok: true });
+  }
+);
+
+app.delete(
+  '/api/workspaces/:id/notifications/channels/:channelId',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    const [channel, allowed] = await channelForUser(
+      user,
+      param(c, 'channelId')
+    );
+    if (!channel || channel.workspace_id !== wsId) {
+      return bad(c, 'not found', 404);
+    }
+    if (!allowed) return bad(c, 'insufficient role', 403);
+    await query('DELETE FROM notification_channels WHERE id = $1', [
+      channel.id,
+    ]);
+    return c.json({ ok: true });
+  }
+);
+
+app.patch(
+  '/api/workspaces/:id/notifications/prefs',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    if (!(await workspaceRoleFor(user, wsId))) {
+      return bad(c, 'not a member', 403);
+    }
+    const body = await c.req.json().catch(() => null);
+    const updates: string[] = [];
+    const params: unknown[] = [];
+    if (typeof body?.notifyEmail === 'boolean') {
+      params.push(body.notifyEmail);
+      updates.push(`notify_email = $${params.length}`);
+    }
+    if (typeof body?.notifyBriefs === 'boolean') {
+      params.push(body.notifyBriefs);
+      updates.push(`notify_briefs = $${params.length}`);
+    }
+    if (updates.length === 0) return bad(c, 'nothing to update', 400);
+    params.push(wsId, user.id);
+    await query(
+      `UPDATE workspace_members SET ${updates.join(', ')}
+       WHERE workspace_id = $${params.length - 1} AND user_id = $${params.length}`,
+      params
+    );
+    return c.json({ ok: true });
+  }
+);
+
+app.post(
+  '/api/maps/:id/notifications/coverage-preview',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const [map, role] = await mapForUser(user, param(c, 'id'));
+    if (!map) return bad(c, 'not found', 404);
+    if (!role) return bad(c, 'not a member', 403);
+    return c.json(committeeCoverage(map.state as MapState));
+  }
+);
+
+// ---------- transcripts ----------
+
+interface TranscriptRow {
+  id: string;
+  workspace_id: string;
+  map_id: string;
+  source: 'paste' | 'upload' | 'gong';
+  external_id: string | null;
+  title: string | null;
+  occurred_at: string | null;
+  transcript: string;
+  analysis: TranscriptAnalysis | null;
+  analysis_error: string | null;
+  applied_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+// List shape ships transcriptChars only; the full text loads on demand.
+function toCallTranscript(row: TranscriptRow, includeText = false) {
+  return {
+    id: row.id,
+    mapId: row.map_id,
+    source: row.source,
+    externalId: row.external_id,
+    title: row.title,
+    occurredAt: row.occurred_at,
+    analysis: row.analysis,
+    analysisError: row.analysis_error,
+    appliedAt: row.applied_at,
+    createdAt: row.created_at,
+    transcriptChars: row.transcript.length,
+    ...(includeText ? { transcript: row.transcript } : {}),
+  };
+}
+
+async function runTranscriptAnalysis(
+  map: MapRow,
+  row: TranscriptRow
+): Promise<{ analysis: TranscriptAnalysis | null; error: string | null }> {
+  const state = map.state as MapState;
+  const workspace = await query<{ seller_profile: SellerProfile | null }>(
+    'SELECT seller_profile FROM workspaces WHERE id = $1',
+    [map.workspace_id]
+  );
+  try {
+    const analysis = await analyzeTranscript(
+      {
+        companyName: state.meta?.companyName ?? map.domain,
+        domain: map.domain,
+        title: row.title,
+        occurredAt: row.occurred_at,
+        people: (state.people ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          title: p.title,
+          role: p.role,
+        })),
+        sellerSummary: workspace[0]?.seller_profile?.summary ?? null,
+        transcript: row.transcript,
+      },
+      state.people ?? [],
+      { demoFixture: state.meta?.provider === 'fixture' }
+    );
+    return { analysis, error: null };
+  } catch (error) {
+    return {
+      analysis: null,
+      error: error instanceof Error ? error.message : 'analysis failed',
+    };
+  }
+}
+
+async function persistAnalysis(
+  rowId: string,
+  result: { analysis: TranscriptAnalysis | null; error: string | null }
+) {
+  await query(
+    'UPDATE call_transcripts SET analysis = $1, analysis_error = $2 WHERE id = $3',
+    [result.analysis ? JSON.stringify(result.analysis) : null, result.error, rowId]
+  );
+}
+
+app.get('/api/maps/:id/transcripts', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const rows = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE map_id = $1 ORDER BY created_at DESC',
+    [map.id]
+  );
+  return c.json({
+    transcripts: rows.map((row) => toCallTranscript(row)),
+    gongConfigured: gongConfigured(),
+  });
+});
+
+app.post('/api/maps/:id/transcripts', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const body = await c.req.json().catch(() => null);
+  const source = body?.source === 'upload' ? 'upload' : 'paste';
+  const text = typeof body?.text === 'string' ? body.text : '';
+  if (text.length < 200 || text.length > 400_000) {
+    return bad(c, 'transcript must be 200–400,000 characters', 400);
+  }
+  const normalized = normalizeTranscript(
+    text,
+    typeof body?.filename === 'string' ? body.filename : undefined
+  );
+  const id = randomUUID();
+  await query(
+    `INSERT INTO call_transcripts
+      (id, workspace_id, map_id, source, external_id, title, occurred_at,
+       transcript, created_by, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      id,
+      map.workspace_id,
+      map.id,
+      source,
+      id, // paste/upload dedupe on the row's own id
+      typeof body?.title === 'string' ? body.title.slice(0, 300) : null,
+      typeof body?.occurredAt === 'string' ? body.occurredAt : null,
+      normalized,
+      user.id,
+      now(),
+    ]
+  );
+  const rows = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE id = $1',
+    [id]
+  );
+  const row = rows[0];
+  // Synchronous analyze — a slow model shouldn't lose the row.
+  const result = await runTranscriptAnalysis(map, row);
+  await persistAnalysis(id, result);
+  if (result.analysis) {
+    await recordAnalytics({
+      eventName: 'transcript_analyzed',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: { source },
+    });
+  }
+  const saved = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE id = $1',
+    [id]
+  );
+  return c.json({ transcript: toCallTranscript(saved[0]) });
+});
+
+app.post('/api/maps/:id/transcripts/gong/import', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  if (!gongConfigured()) {
+    return bad(c, 'gong is not configured', 503);
+  }
+  const body = await c.req.json().catch(() => null);
+  const days =
+    typeof body?.days === 'number' && body.days > 0 && body.days <= 90
+      ? body.days
+      : 30;
+  const state = map.state as MapState;
+  const calls = await listCalls(
+    new Date(Date.now() - days * 86_400_000).toISOString(),
+    new Date().toISOString(),
+    map.domain,
+    state.people ?? []
+  );
+  const imported: ReturnType<typeof toCallTranscript>[] = [];
+  for (const call of calls.slice(0, 5)) {
+    const id = randomUUID();
+    let transcript: string;
+    try {
+      transcript = await fetchTranscript(call.id);
+    } catch (error) {
+      console.error('gong transcript fetch failed', call.id, error);
+      continue;
+    }
+    if (transcript.length < 200) continue;
+    const inserted = await query<TranscriptRow>(
+      `INSERT INTO call_transcripts
+        (id, workspace_id, map_id, source, external_id, title, occurred_at,
+         transcript, created_by, created_at)
+       VALUES ($1,$2,$3,'gong',$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (map_id, source, external_id) DO NOTHING
+       RETURNING *`,
+      [
+        id,
+        map.workspace_id,
+        map.id,
+        call.id,
+        call.title,
+        call.started,
+        transcript,
+        user.id,
+        now(),
+      ]
+    );
+    const row = inserted[0];
+    if (!row) continue; // already imported
+    const result = await runTranscriptAnalysis(map, row);
+    await persistAnalysis(row.id, result);
+    if (result.analysis) {
+      await recordAnalytics({
+        eventName: 'transcript_analyzed',
+        userId: user.id,
+        workspaceId: map.workspace_id,
+        mapId: map.id,
+        properties: { source: 'gong' },
+      });
+    }
+    const saved = await query<TranscriptRow>(
+      'SELECT * FROM call_transcripts WHERE id = $1',
+      [row.id]
+    );
+    imported.push(toCallTranscript(saved[0]));
+  }
+  return c.json({ imported: imported.length, transcripts: imported });
+});
+
+async function transcriptForMap(
+  mapId: string,
+  tid: string
+): Promise<TranscriptRow | null> {
+  const rows = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE id = $1 AND map_id = $2',
+    [tid, mapId]
+  );
+  return rows[0] ?? null;
+}
+
+app.get('/api/maps/:id/transcripts/:tid', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const row = await transcriptForMap(map.id, param(c, 'tid'));
+  if (!row) return bad(c, 'not found', 404);
+  return c.json({ transcript: toCallTranscript(row, true) });
+});
+
+app.post('/api/maps/:id/transcripts/:tid/reanalyze', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const row = await transcriptForMap(map.id, param(c, 'tid'));
+  if (!row) return bad(c, 'not found', 404);
+  const result = await runTranscriptAnalysis(map, row);
+  await persistAnalysis(row.id, result);
+  if (result.analysis) {
+    await recordAnalytics({
+      eventName: 'transcript_analyzed',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: { source: row.source },
+    });
+  }
+  const saved = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE id = $1',
+    [row.id]
+  );
+  return c.json({ transcript: toCallTranscript(saved[0]) });
+});
+
+app.post('/api/maps/:id/transcripts/:tid/apply', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const row = await transcriptForMap(map.id, param(c, 'tid'));
+  if (!row) return bad(c, 'not found', 404);
+  if (!row.analysis) return bad(c, 'transcript has no analysis to apply', 400);
+  const body = await c.req.json().catch(() => null);
+  const overrides =
+    body?.overrides && typeof body.overrides === 'object'
+      ? (body.overrides as Record<string, string | null>)
+      : {};
+  const state = map.state as MapState;
+  const { plan, touchedPersonIds } = applyAnalysisToStrategy(
+    state.meta?.strategy,
+    row.analysis,
+    { id: row.id, title: row.title, occurredAt: row.occurred_at },
+    overrides
+  );
+  const nextState = applyAnalysisToPeople(
+    { ...state, meta: { ...state.meta, strategy: plan } },
+    touchedPersonIds,
+    row.occurred_at
+  );
+
+  // Same persistence path as PATCH: snapshot the prior state, then write.
+  await query(
+    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
+  );
+  await query(
+    'UPDATE maps SET state = $1, updated_at = $2 WHERE id = $3',
+    [JSON.stringify(nextState), now(), map.id]
+  );
+  await query(
+    `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
+     (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
+    [map.id]
+  );
+  await query(
+    'UPDATE call_transcripts SET applied_at = $1 WHERE id = $2',
+    [now(), row.id]
+  );
+  await recordAnalytics({
+    eventName: 'transcript_applied',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: { touched_people: touchedPersonIds.length },
+  });
+  return c.json({ state: nextState });
+});
+
+app.delete('/api/maps/:id/transcripts/:tid', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const row = await transcriptForMap(map.id, param(c, 'tid'));
+  if (!row) return bad(c, 'not found', 404);
+  await query('DELETE FROM call_transcripts WHERE id = $1', [row.id]);
+  return c.json({ ok: true });
+});
+
 // ---------- maps ----------
 
 app.get('/api/maps', requireAuth, async (c) => {
@@ -1112,6 +2155,7 @@ app.get('/api/maps', requireAuth, async (c) => {
   if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
   const rows = await query<MapRow>(
     `SELECT id, name, domain, company_name, state, is_live_opportunity,
+            outcome, outcome_at, stage,
             created_by, created_at, updated_at
      FROM maps WHERE workspace_id = $1 ORDER BY updated_at DESC`,
     [wsId]

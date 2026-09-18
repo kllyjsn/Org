@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useSession } from './store';
 import LoginPage from './pages/LoginPage';
 import AccountsPage from './pages/AccountsPage';
+import PortfolioPage from './pages/PortfolioPage';
 import MapPage from './pages/MapPage';
 import SharePage from './pages/SharePage';
 
@@ -41,6 +42,14 @@ export default function App() {
         element={
           <RequireAuth>
             <AccountsPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/app/portfolio"
+        element={
+          <RequireAuth>
+            <PortfolioPage />
           </RequireAuth>
         }
       />

@@ -22,6 +22,34 @@ export const EMPTY_PLAN: AccountStrategyPlan = {
   updatedAt: '',
 };
 
+/**
+ * Merge a stakeholder edit into the plan. A hand-set stance always claims
+ * `stanceSource: 'manual'` — transcripts may fill an 'unknown' stance but
+ * never overwrite the rep's own call.
+ */
+export function patchStakeholder(
+  plan: AccountStrategyPlan,
+  personId: string,
+  patch: Partial<StakeholderPlanEntry>
+): AccountStrategyPlan {
+  const current = plan.stakeholders[personId] ?? {
+    stance: 'unknown' as Stance,
+    nextStep: '',
+    note: '',
+  };
+  if (patch.stance !== undefined) {
+    patch = { ...patch, stanceSource: 'manual' };
+  }
+  return {
+    ...plan,
+    stakeholders: {
+      ...plan.stakeholders,
+      [personId]: { ...current, ...patch },
+    },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export interface RoutePath {
   people: Person[];
   inferredHops: number;

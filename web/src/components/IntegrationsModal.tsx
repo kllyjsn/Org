@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarDays, Loader2, PlugZap, RefreshCw, Unplug, X } from 'lucide-react';
+import { CalendarDays, Database, Loader2, PlugZap, RefreshCw, Unplug, X } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import type { IntegrationStatus, IntegrationSyncResult } from '../types';
@@ -7,6 +7,8 @@ import type { IntegrationStatus, IntegrationSyncResult } from '../types';
 const ENV_HINTS: Record<string, string> = {
   google: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET',
   microsoft: 'MICROSOFT_CLIENT_ID / MICROSOFT_CLIENT_SECRET',
+  hubspot: 'HUBSPOT_CLIENT_ID / HUBSPOT_CLIENT_SECRET',
+  salesforce: 'SALESFORCE_CLIENT_ID / SALESFORCE_CLIENT_SECRET',
 };
 
 function relativeTime(iso: string | null): string {
@@ -143,8 +145,17 @@ export default function IntegrationsModal({
             <Loader2 className="animate-spin" />
           </div>
         ) : (
-          <ul className="space-y-3">
-            {providers.map((provider) => {
+          <>
+          {(['calendar', 'crm'] as const).map((kind) => {
+            const group = providers.filter((p) => p.kind === kind);
+            if (group.length === 0) return null;
+            return (
+              <div key={kind} className="mb-4">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">
+                  {kind === 'calendar' ? 'Calendar & email' : 'CRM'}
+                </div>
+                <ul className="space-y-3">
+            {group.map((provider) => {
               const busy = busyProvider === provider.id;
               const connection = provider.connection;
               const result = syncResult[provider.id];
@@ -156,7 +167,7 @@ export default function IntegrationsModal({
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
                       <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#eeecff] text-[#5b4cf0]">
-                        <CalendarDays size={15} />
+                        {provider.kind === 'crm' ? <Database size={15} /> : <CalendarDays size={15} />}
                       </span>
                       <div>
                         <div className="text-sm font-semibold text-slate-900">
@@ -262,7 +273,11 @@ export default function IntegrationsModal({
                 </li>
               );
             })}
-          </ul>
+                </ul>
+              </div>
+            );
+          })}
+          </>
         )}
       </div>
     </div>
