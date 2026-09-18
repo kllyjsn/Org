@@ -11,7 +11,9 @@ const COMPANY_PROFILE_QUERY =
   'company mission statement, headquarters address, latest annual revenue with ' +
   'year, total employee count, number of software engineers/developers, ' +
   'industry, fiscal year end month (1-12), LinkedIn company page URL, latest ' +
-  '10-K or annual report URL, funding stage and total raised.';
+  '10-K or annual report URL, funding stage and total raised. For engineer ' +
+  'count, give the estimated number of software engineers/developers employed; ' +
+  'return 0 if there is no credible estimate.';
 
 const COMPANY_PROFILE_SCHEMA = {
   type: 'object',
@@ -114,6 +116,14 @@ export function normalizeCompanyProfile(
   const linkedinUrl = normalizedUrl(value.linkedinUrl)?.replace(/\/+$/, '') ?? null;
   const annualRevenue = normalizedString(value.annualRevenue);
   const fiscalYearEndMonth = normalizedNumber(value.fiscalYearEndMonth);
+  const employeeCount = normalizedNumber(value.employeeCount);
+  const normalizedEngineerCount = normalizedNumber(value.engineerCount);
+  const engineerCount =
+    normalizedEngineerCount !== null &&
+    normalizedEngineerCount >= 5 &&
+    (employeeCount === null || normalizedEngineerCount <= employeeCount)
+      ? normalizedEngineerCount
+      : null;
   const citationsList = Array.isArray(citations) ? citations : [];
   const sources = Array.from(
     new Set(
@@ -133,8 +143,8 @@ export function normalizeCompanyProfile(
     headquarters: normalizedString(value.headquarters),
     annualRevenue,
     annualRevenueUsd: parseAnnualRevenueUsd(annualRevenue),
-    employeeCount: normalizedNumber(value.employeeCount),
-    engineerCount: normalizedNumber(value.engineerCount),
+    employeeCount,
+    engineerCount,
     industry: normalizedString(value.industry),
     fiscalYearEndMonth:
       fiscalYearEndMonth !== null &&

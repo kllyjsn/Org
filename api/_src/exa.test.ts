@@ -9,7 +9,7 @@ test('normalizes company profile fields and annual revenue', () => {
       annualReportUrl: 'Not publicly available',
       annualRevenue: '$2.00B (2026 annualized gross revenue)',
       funding: 'Series C, $484M - $558.6M total raised',
-      engineerCount: 0,
+      engineerCount: 2,
       employeeCount: 9593,
       linkedinUrl: 'https://www.linkedin.com/company/mercor-ai/',
       fiscalYearEndMonth: 0,
@@ -25,6 +25,14 @@ test('normalizes company profile fields and annual revenue', () => {
   assert.equal(profile.employeeCount, 9593);
   assert.equal(profile.linkedinUrl, 'https://www.linkedin.com/company/mercor-ai');
   assert.deepEqual(profile.sources, ['https://mercor.com/about']);
+  assert.equal(
+    normalizeCompanyProfile({ employeeCount: 100, engineerCount: 500 }, [], '').engineerCount,
+    null
+  );
+  assert.equal(
+    normalizeCompanyProfile({ employeeCount: 9593, engineerCount: 300 }, [], '').engineerCount,
+    300
+  );
   assert.equal(
     normalizeCompanyProfile({ description: ' ' }, [], profile.retrievedAt).description,
     null
