@@ -40,6 +40,12 @@ import {
 } from './integrations/crm-sync.js';
 import type { CrmSession } from './integrations/crm-types.js';
 import { committeeCoverage } from './notifications/coverage.js';
+import {
+  mapPortfolioRow,
+  portfolioSummary,
+  type DealStage,
+  type PortfolioInput,
+} from './portfolio.js';
 import { analyzeTranscript } from './transcripts/analyze.js';
 import { applyAnalysisToPeople, applyAnalysisToStrategy } from './transcripts/apply.js';
 import { configured as gongConfigured, fetchTranscript, listCalls } from './transcripts/gong.js';
@@ -1475,6 +1481,77 @@ app.post('/api/maps/:id/crm/push', requireAuth, async (c) => {
   return c.json({ state: nextState, pushed: results.length, failed });
 });
 
+// ---------- portfolio ----------
+
+// O(maps) in-process rollup — fine at current map counts.
+app.get('/api/workspaces/:id/portfolio', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!(await workspaceRoleFor(user, workspaceId))) {
+    return bad(c, 'not a member', 403);
+  }
+  const maps = await query<PortfolioInput>(
+    `SELECT id, name, domain, company_name, is_live_opportunity, outcome,
+            outcome_at, outcome_coverage, stage, state, updated_at, created_by
+     FROM maps WHERE workspace_id = $1`,
+    [workspaceId]
+  );
+  const rows = maps.map((m) => mapPortfolioRow(m));
+  return c.json({
+    rows,
+    summary: portfolioSummary(rows),
+    generatedAt: now(),
+  });
+});
+
+app.patch('/api/maps/:id/outcome', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const body = await c.req.json().catch(() => null);
+  const outcome = body?.outcome;
+  const stage: DealStage | null =
+    body?.stage === 'discovery' ||
+    body?.stage === 'evaluation' ||
+    body?.stage === 'proposal' ||
+    body?.stage === 'negotiation' ||
+    body?.stage === 'closed'
+      ? body.stage
+      : null;
+  if (outcome !== 'open' && outcome !== 'won' && outcome !== 'lost') {
+    return bad(c, 'outcome must be open, won, or lost');
+  }
+  const state = map.state as MapState;
+  const closing = outcome !== 'open';
+  await query(
+    `UPDATE maps SET outcome = $1, outcome_at = $2, outcome_coverage = $3,
+            stage = $4, updated_at = $5 WHERE id = $6`,
+    [
+      outcome,
+      closing ? now() : null,
+      // snapshot committee coverage at the moment the outcome is set
+      closing ? JSON.stringify(committeeCoverage(state)) : null,
+      stage,
+      now(),
+      map.id,
+    ]
+  );
+  if (closing || map.outcome !== 'open') {
+    await recordAnalytics({
+      eventName: 'outcome_set',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: {
+        outcome,
+        score: closing ? committeeCoverage(state).score : null,
+      },
+    });
+  }
+  return c.json({ ok: true, outcome, stage });
+});
+
 // ---------- notifications ----------
 
 interface ChannelRow {
@@ -2078,6 +2155,7 @@ app.get('/api/maps', requireAuth, async (c) => {
   if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
   const rows = await query<MapRow>(
     `SELECT id, name, domain, company_name, state, is_live_opportunity,
+            outcome, outcome_at, stage,
             created_by, created_at, updated_at
      FROM maps WHERE workspace_id = $1 ORDER BY updated_at DESC`,
     [wsId]

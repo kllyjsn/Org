@@ -379,6 +379,11 @@ export default function AccountsPage() {
           active
         />
         <RailButton
+          icon={<BriefcaseBusiness size={16} />}
+          label="Portfolio"
+          onClick={() => navigate('/app/portfolio')}
+        />
+        <RailButton
           icon={<Plus size={16} />}
           label="New workspace"
           onClick={() => setCreatingWorkspace(true)}
@@ -599,9 +604,19 @@ export default function AccountsPage() {
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       T0 public web
                     </span>
-                    {m.is_live_opportunity && (
+                    {m.is_live_opportunity && m.outcome === 'open' && (
                       <span className="rounded-full bg-[#effbd0] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
                         Live deal
+                      </span>
+                    )}
+                    {m.outcome === 'won' && (
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                        Won
+                      </span>
+                    )}
+                    {m.outcome === 'lost' && (
+                      <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-rose-600">
+                        Lost
                       </span>
                     )}
                   </div>

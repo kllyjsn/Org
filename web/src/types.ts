@@ -216,6 +216,9 @@ export interface MapListItem {
   created_at: string;
   updated_at: string;
   is_live_opportunity: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  outcomeAt: string | null;
+  stage: string | null;
   peopleCount: number;
   initiativeCount: number;
 }
@@ -228,6 +231,9 @@ export interface LoadedMap {
   company_name: string | null;
   state: MapState;
   is_live_opportunity: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  outcomeAt: string | null;
+  stage: string | null;
   role: 'owner' | 'member' | 'viewer';
   created_by: string;
   created_at: string;
@@ -636,4 +642,77 @@ export interface CrmPushResult {
   state: MapState;
   pushed: number;
   failed: { personId: string; error: string }[];
+}
+
+export type DealStage =
+  | 'discovery'
+  | 'evaluation'
+  | 'proposal'
+  | 'negotiation'
+  | 'closed';
+
+export type CoverageBand = 'strong' | 'moderate' | 'weak';
+
+export type RiskFlag =
+  | 'single_threaded'
+  | 'coverage_gap'
+  | 'no_economic_buyer'
+  | 'stale_30d';
+
+export interface CommitteeCoverage {
+  keyRoles: {
+    role: BuyingRole;
+    covered: boolean;
+    people: { name: string; metWith: boolean; lastTouchAt: string | null }[];
+  }[];
+  coveredCount: number;
+  missingRoles: BuyingRole[];
+  untouchedKeyPeople: Person[];
+  threadCount: number;
+  singleThreaded: boolean;
+  score: number;
+}
+
+export interface PortfolioRow {
+  id: string;
+  name: string;
+  domain: string;
+  companyName: string | null;
+  isLiveOpportunity: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  outcomeAt: string | null;
+  stage: DealStage;
+  coverage: CommitteeCoverage;
+  knownPeople: number;
+  expectedKnown: number;
+  gap: number;
+  singleThreaded: boolean;
+  untouchedKeyCount: number;
+  amount: number | null;
+  closeDate: string | null;
+  crmStage: string | null;
+  lastActivityAt: string | null;
+  riskFlags: RiskFlag[];
+  outcomeCoverageScore: number | null;
+}
+
+export interface PortfolioSummary {
+  total: number;
+  live: number;
+  byBand: Record<CoverageBand, number>;
+  singleThreaded: number;
+  withGaps: number;
+  atRiskLive: number;
+  winLoss: {
+    byBand: Record<
+      CoverageBand,
+      { won: number; lost: number; winRate: number | null }
+    >;
+  };
+}
+
+export interface PortfolioResponse {
+  rows: PortfolioRow[];
+  summary: PortfolioSummary;
+  generatedAt: string;
 }
