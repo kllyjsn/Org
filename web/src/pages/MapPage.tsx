@@ -288,7 +288,7 @@ function MapInner() {
   );
   const researchDue = Boolean(
     meta?.researchedAt &&
-    (!meta.nextRefreshAt || Date.parse(meta.nextRefreshAt) <= Date.now())
+      (!meta.nextRefreshAt || Date.parse(meta.nextRefreshAt) <= Date.now())
   );
 
   useEffect(() => {
@@ -361,15 +361,7 @@ function MapInner() {
         }, 50);
       })
       .catch(() => setNotFound(true));
-  }, [
-    mapId,
-    setNodes,
-    setEdges,
-    rf,
-    openingFitOptions,
-    isMobile,
-    anchorTopLeft,
-  ]);
+  }, [mapId, setNodes, setEdges, rf, openingFitOptions, isMobile, anchorTopLeft]);
 
   useEffect(() => {
     if (searchParams.get('briefing') === '1') {
@@ -527,9 +519,7 @@ function MapInner() {
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       onNodesChange(changes);
-      if (
-        changes.some((ch) => ch.type === 'position' || ch.type === 'remove')
-      ) {
+      if (changes.some((ch) => ch.type === 'position' || ch.type === 'remove')) {
         // state below is post-change via useNodesState; persist next tick
         window.setTimeout(() => {
           setNodes((ns) => {
@@ -572,7 +562,10 @@ function MapInner() {
         const without = es.filter(
           (e) => !(e.data?.kind === 'reports' && e.target === conn.target)
         );
-        const next = [...without, reportsEdge(conn.source!, conn.target!)];
+        const next = [
+          ...without,
+          reportsEdge(conn.source!, conn.target!),
+        ];
         markDirty(nodes, next);
         return next;
       });
@@ -586,10 +579,7 @@ function MapInner() {
       const ids = new Set(deleted.map((n) => n.id));
       setEdges((es) => {
         const next = es.filter((e) => !ids.has(e.source) && !ids.has(e.target));
-        markDirty(
-          nodes.filter((n) => !ids.has(n.id)),
-          next
-        );
+        markDirty(nodes.filter((n) => !ids.has(n.id)), next);
         return next;
       });
       setSelectedId((sel) => (sel && ids.has(sel) ? null : sel));
@@ -707,15 +697,7 @@ function MapInner() {
       shownCount: view.shownCount,
       hiddenCount: view.hiddenCount,
     };
-  }, [
-    nodes,
-    isMobile,
-    expandedLanes,
-    collapsedLanes,
-    showAllLanes,
-    laneOf,
-    toggleLane,
-  ]);
+  }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, laneOf, toggleLane]);
 
   const displayNodes = laneView.nodes;
 
@@ -727,8 +709,7 @@ function MapInner() {
     }
     for (const initiative of meta?.initiatives ?? []) {
       for (const url of initiative.evidence ?? []) if (url) urls.add(url);
-      for (const s of initiative.evidenceDetails ?? [])
-        if (s.url) urls.add(s.url);
+      for (const s of initiative.evidenceDetails ?? []) if (s.url) urls.add(s.url);
     }
     return Array.from(urls).slice(0, 96);
   }, [people, meta]);
@@ -773,9 +754,7 @@ function MapInner() {
       );
       return after.some((n) => {
         const was = prev.get(n.id);
-        return (
-          was !== undefined && was !== laneKey(n.data.person, laneGrouping)
-        );
+        return was !== undefined && was !== laneKey(n.data.person, laneGrouping);
       });
     },
     [laneGrouping]
@@ -835,7 +814,10 @@ function MapInner() {
     (fromId: string, toId: string, label: string) => {
       recordHistory();
       setEdges((es) => {
-        const next = [...es, influenceEdge(fromId, toId, label || null)];
+        const next = [
+          ...es,
+          influenceEdge(fromId, toId, label || null),
+        ];
         markDirty(nodes, next);
         return next;
       });
@@ -906,8 +888,7 @@ function MapInner() {
             const person = node.data.person;
             const adoptTitle =
               !!capturedTitle &&
-              (!person.title ||
-                person.title.trim().toLowerCase() === 'employee');
+              (!person.title || person.title.trim().toLowerCase() === 'employee');
             return {
               ...node,
               data: {
@@ -948,68 +929,65 @@ function MapInner() {
     ]
   );
 
-  const addPerson = useCallback(
-    (draft?: Partial<Person>) => {
-      recordHistory();
-      const center = rf.screenToFlowPosition({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
+  const addPerson = useCallback((draft?: Partial<Person>) => {
+    recordHistory();
+    const center = rf.screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    // Land new cards below the chart's left edge — viewport center almost
+    // always overlaps someone on a busy map.
+    const spot =
+      nodes.length === 0
+        ? center
+        : {
+            x: Math.min(...nodes.map((n) => n.position.x)),
+            y: Math.max(...nodes.map((n) => n.position.y)) + 160,
+          };
+    const person: Person = {
+      id: crypto.randomUUID(),
+      name: draft?.name ?? 'New person',
+      title: draft?.title ?? '',
+      department: draft?.department ?? null,
+      team: draft?.team ?? null,
+      productLine: draft?.productLine ?? null,
+      teamEvidence: draft?.team ? 'inferred' : null,
+      role: 'none',
+      // Manually added people carry no evidence — mark unverified rather
+      // than impersonating researched confidence.
+      confidence: 'low',
+      sources: [],
+      notes: '',
+      email: null,
+      linkedin: null,
+      x: spot.x,
+      y: spot.y,
+    };
+    setNodes((ns) => {
+      const next = [
+        ...ns,
+        {
+          id: person.id,
+          type: 'person' as const,
+          position: { x: spot.x, y: spot.y },
+          data: { person, readOnly: false },
+          style: { width: 250 },
+        },
+      ];
+      setEdges((es) => {
+        markDirty(next, es);
+        return es;
       });
-      // Land new cards below the chart's left edge — viewport center almost
-      // always overlaps someone on a busy map.
-      const spot =
-        nodes.length === 0
-          ? center
-          : {
-              x: Math.min(...nodes.map((n) => n.position.x)),
-              y: Math.max(...nodes.map((n) => n.position.y)) + 160,
-            };
-      const person: Person = {
-        id: crypto.randomUUID(),
-        name: draft?.name ?? 'New person',
-        title: draft?.title ?? '',
-        department: draft?.department ?? null,
-        team: draft?.team ?? null,
-        productLine: draft?.productLine ?? null,
-        teamEvidence: draft?.team ? 'inferred' : null,
-        role: 'none',
-        // Manually added people carry no evidence — mark unverified rather
-        // than impersonating researched confidence.
-        confidence: 'low',
-        sources: [],
-        notes: '',
-        email: null,
-        linkedin: null,
-        x: spot.x,
-        y: spot.y,
-      };
-      setNodes((ns) => {
-        const next = [
-          ...ns,
-          {
-            id: person.id,
-            type: 'person' as const,
-            position: { x: spot.x, y: spot.y },
-            data: { person, readOnly: false },
-            style: { width: 250 },
-          },
-        ];
-        setEdges((es) => {
-          markDirty(next, es);
-          return es;
-        });
-        return next;
+      return next;
+    });
+    setSelectedId(person.id);
+    window.setTimeout(() => {
+      void rf.setCenter(spot.x + 125, spot.y + 45, {
+        zoom: rf.getZoom(),
+        duration: 300,
       });
-      setSelectedId(person.id);
-      window.setTimeout(() => {
-        void rf.setCenter(spot.x + 125, spot.y + 45, {
-          zoom: rf.getZoom(),
-          duration: 300,
-        });
-      }, 60);
-    },
-    [rf, nodes, setNodes, setEdges, markDirty, recordHistory]
-  );
+    }, 60);
+  }, [rf, nodes, setNodes, setEdges, markDirty, recordHistory]);
 
   const focusPeople = useCallback(
     (matches: Person[]) => {
@@ -1075,12 +1053,7 @@ function MapInner() {
       const laid =
         mode === 'hierarchy'
           ? applyLayout(currentPeople, currentEdges)
-          : applyLanes(
-              currentPeople,
-              isMobile ? 2 : 4,
-              mode,
-              isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
-            );
+          : applyLanes(currentPeople, isMobile ? 2 : 4, mode, isMobile ? MOBILE_COL_GAP : LANE_COL_GAP);
       if (mode !== 'hierarchy') setLaneGrouping(mode);
       const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
       setNodes((ns) => {
@@ -1215,7 +1188,8 @@ function MapInner() {
       const sorted = nodes
         .filter((node) => ids.has(node.id))
         .sort(
-          (a, b) => a.position.y - b.position.y || a.position.x - b.position.x
+          (a, b) =>
+            a.position.y - b.position.y || a.position.x - b.position.x
         );
       const clusters = new Map<string, Node<PersonNodeData>[]>();
       for (const node of sorted) {
@@ -1331,7 +1305,8 @@ function MapInner() {
     clipboard.current = snapshot(
       selectedNodes,
       edges.filter(
-        (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)
+        (edge) =>
+          selectedIds.has(edge.source) && selectedIds.has(edge.target)
       )
     );
   }, [selectedNodes, edges]);
@@ -1383,7 +1358,13 @@ function MapInner() {
       return next;
     });
     clipboard.current = snapshot(pastedNodes, pastedEdges);
-  }, [readOnly, recordHistory, setNodes, setEdges, markDirty]);
+  }, [
+    readOnly,
+    recordHistory,
+    setNodes,
+    setEdges,
+    markDirty,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1534,10 +1515,7 @@ function MapInner() {
                 node.id === selectedId && Boolean(node.data.person.groupId)
             )?.data.person.groupId
           : undefined;
-        if (
-          selectedGroup &&
-          /\b(this|these|selected|selection|current group)\b/.test(lower)
-        ) {
+        if (selectedGroup && /\b(this|these|selected|selection|current group)\b/.test(lower)) {
           nodes.forEach((node) => {
             if (node.data.person.groupId === selectedGroup) {
               selectionIds.add(node.id);
@@ -1549,9 +1527,7 @@ function MapInner() {
       }
       if (
         /\b(show|display|filter|view|use|switch to)\b/.test(lower) &&
-        /\b(influence|influences|reporting|reports|hierarchy|managerial|all relationships)\b/.test(
-          lower
-        )
+        /\b(influence|influences|reporting|reports|hierarchy|managerial|all relationships)\b/.test(lower)
       ) {
         const view: AgentRelationshipView = /influence/.test(lower)
           ? 'influence'
@@ -1591,10 +1567,7 @@ function MapInner() {
         if (readOnly) return say('I couldn’t edit this read-only map.');
         setDeepResearchFocus(
           query
-            .replace(
-              /\b(deep research|research|enrich|find more people)\b/gi,
-              ''
-            )
+            .replace(/\b(deep research|research|enrich|find more people)\b/gi, '')
             .replace(/\b(for|about|on|in)\b/gi, '')
             .trim()
         );
@@ -1614,9 +1587,7 @@ function MapInner() {
         /\b(build|open|show|create|generate|view)\b.*\b(account brief|relationship path|deal plan|account strategy|path in)\b/.test(
           lower
         ) ||
-        /^(account brief|relationship path|deal plan|account strategy)$/.test(
-          lower
-        )
+        /^(account brief|relationship path|deal plan|account strategy)$/.test(lower)
       ) {
         setShowStrategy(true);
         return say('Opening the account strategy.');
@@ -1658,17 +1629,11 @@ function MapInner() {
           (person) => lower.indexOf(person.name.toLowerCase()) > divider
         );
         if (subordinate && manager) {
-          return describeRelationship(
-            manager,
-            subordinate,
-            'reports',
-            false,
-            () => {
-              setManager(subordinate.id, manager.id);
-              focusPeople([subordinate, manager]);
-              return `${subordinate.name} now reports to ${manager.name}.`;
-            }
-          );
+          return describeRelationship(manager, subordinate, 'reports', false, () => {
+            setManager(subordinate.id, manager.id);
+            focusPeople([subordinate, manager]);
+            return `${subordinate.name} now reports to ${manager.name}.`;
+          });
         }
       }
 
@@ -1691,21 +1656,9 @@ function MapInner() {
       }
 
       const roles: { terms: string[]; role: BuyingRole; label: string }[] = [
-        {
-          terms: ['economic buyer', 'budget owner'],
-          role: 'economic_buyer',
-          label: 'economic buyer',
-        },
-        {
-          terms: ['decision maker'],
-          role: 'decision_maker',
-          label: 'decision maker',
-        },
-        {
-          terms: ['technical buyer'],
-          role: 'technical_buyer',
-          label: 'technical buyer',
-        },
+        { terms: ['economic buyer', 'budget owner'], role: 'economic_buyer', label: 'economic buyer' },
+        { terms: ['decision maker'], role: 'decision_maker', label: 'decision maker' },
+        { terms: ['technical buyer'], role: 'technical_buyer', label: 'technical buyer' },
         { terms: ['champion'], role: 'champion', label: 'champion' },
         { terms: ['influencer'], role: 'influencer', label: 'influencer' },
         { terms: ['blocker'], role: 'blocker', label: 'blocker' },
@@ -1861,10 +1814,7 @@ function MapInner() {
     try {
       const bounds = getNodesBounds(displayNodes);
       const W = 1920;
-      const H = Math.max(
-        1080,
-        Math.ceil((bounds.height * 1920) / Math.max(bounds.width, 1)) + 200
-      );
+      const H = Math.max(1080, Math.ceil((bounds.height * 1920) / Math.max(bounds.width, 1)) + 200);
       const vp = getViewportForBounds(bounds, W, H, 0.4, 1.5, 0.08);
       const url = await toPng(el, {
         backgroundColor: '#f8fafc',
@@ -1908,7 +1858,10 @@ function MapInner() {
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
       });
-      const pick = (row: Record<string, string>, ...keys: string[]): string => {
+      const pick = (
+        row: Record<string, string>,
+        ...keys: string[]
+      ): string => {
         for (const key of keys) {
           const value = row[key]?.trim();
           if (value) return value;
@@ -2003,9 +1956,7 @@ function MapInner() {
                   ...person,
                   ...enrichment,
                   notes: [person.notes, notes].filter(Boolean).join('\n'),
-                  sources: Array.from(
-                    new Set([...(person.sources ?? []), 'CRM CSV'])
-                  ),
+                  sources: Array.from(new Set([...(person.sources ?? []), 'CRM CSV'])),
                 },
               },
             };
@@ -2053,16 +2004,7 @@ function MapInner() {
       );
       window.setTimeout(() => setImportNotice(''), 5_000);
     },
-    [
-      readOnly,
-      recordHistory,
-      rf,
-      setNodes,
-      markDirty,
-      edges,
-      relayLanes,
-      lanesChanged,
-    ]
+    [readOnly, recordHistory, rf, setNodes, markDirty, edges, relayLanes, lanesChanged]
   );
 
   const mergeResearch = useCallback(
@@ -2122,7 +2064,8 @@ function MapInner() {
                 department: person.department ?? researched.department,
                 team: person.team ?? researched.team,
                 productLine: person.productLine ?? researched.productLine,
-                teamEvidence: person.teamEvidence ?? researched.teamEvidence,
+                teamEvidence:
+                  person.teamEvidence ?? researched.teamEvidence,
                 confidence: researched.confidence,
                 sources: Array.from(
                   new Set([
@@ -2195,7 +2138,10 @@ function MapInner() {
       }
 
       const idByName = new Map(
-        nextNodes.map((node) => [normalizeName(node.data.person.name), node.id])
+        nextNodes.map((node) => [
+          normalizeName(node.data.person.name),
+          node.id,
+        ])
       );
       const nextEdges = [...edges];
       for (const researched of result.people) {
@@ -2225,9 +2171,10 @@ function MapInner() {
               Date.now() +
                 (meta.refreshCadence === 'monthly' ? 30 : 7) * 86_400_000
             ).toISOString(),
-            initiatives: (result.initiatives.length > 0
-              ? result.initiatives
-              : (meta.initiatives ?? [])
+            initiatives: (
+              result.initiatives.length > 0
+                ? result.initiatives
+                : (meta.initiatives ?? [])
             ).map((initiative) => ({
               ...initiative,
               evidence: (initiative.evidence ?? []).filter(
@@ -2556,290 +2503,284 @@ function MapInner() {
           </div>
         </header>
 
-        <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
-          {importNotice && (
-            <div className="absolute right-3 top-3 z-40 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
-              {importNotice}
-            </div>
-          )}
-          {viewMode === 'roster' ? (
-            <RosterView
-              people={people}
-              managerOf={managerOf}
-              selectedId={selectedId}
-              onSelect={(person) => setSelectedId(person.id)}
-              fileName={mapName || 'roster'}
-            />
-          ) : (
-            <>
-              <button
-                onClick={() => setShowCommands(true)}
-                className="absolute left-1/2 top-3 z-30 flex w-[calc(100%_-_7rem)] max-w-md -translate-x-1/2 items-center gap-2.5 rounded-2xl border border-white/90 bg-white/90 px-3.5 py-2.5 text-left text-sm text-slate-500 shadow-[0_12px_40px_rgba(15,23,42,.12)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_16px_45px_rgba(15,23,42,.16)] sm:top-4 sm:px-4"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#eeecff] text-[#5b4cf0]">
-                  <Search size={15} />
-                </span>
-                <span className="min-w-0 flex-1 truncate">
-                  Search or ask TopDown
-                </span>
-                <Sparkles size={14} className="shrink-0 text-[#5b4cf0]" />
-                <kbd className="hidden rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400 sm:block">
-                  ⌘K
-                </kbd>
-              </button>
-              <ReactFlow
-                nodes={displayNodes}
-                edges={edges}
-                onNodesChange={handleNodesChange}
-                onEdgesChange={handleEdgesChange}
-                onConnect={onConnect}
-                onNodesDelete={onNodesDelete}
-                onNodeDragStart={() => {
-                  if (!dragHistoryRecorded.current) {
-                    recordHistory();
-                    dragHistoryRecorded.current = true;
-                  }
-                }}
-                onNodeDragStop={() => {
-                  dragHistoryRecorded.current = false;
-                }}
-                onNodeClick={(_, n) => {
-                  if (n.type !== 'person') return;
-                  setSelectedId(n.id);
-                  const groupId = n.data.person.groupId;
-                  if (groupId) {
-                    setNodes((items) =>
-                      items.map((node) => ({
-                        ...node,
-                        selected: node.data.person.groupId === groupId,
-                      }))
-                    );
-                  }
-                }}
-                onPaneClick={() => setSelectedId(null)}
-                onPointerMove={(event) => {
-                  cursorRef.current = rf.screenToFlowPosition({
-                    x: event.clientX,
-                    y: event.clientY,
-                  });
-                }}
-                nodeTypes={nodeTypes}
-                nodesDraggable={!readOnly}
-                nodesConnectable={!readOnly}
-                elementsSelectable
-                selectionOnDrag={false}
-                selectionKeyCode={readOnly ? null : 'Shift'}
-                panOnDrag
-                multiSelectionKeyCode={['Meta', 'Control']}
-                deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
-                fitView
-                fitViewOptions={openingFitOptions}
-                minZoom={0.2}
-                proOptions={{ hideAttribution: true }}
-              >
-                <Background gap={28} size={1} color="#d9ddd4" />
-                <Controls
-                  showInteractive={false}
-                  fitViewOptions={openingFitOptions}
-                  className="max-sm:!hidden !bottom-4 !left-4"
-                />
-                <MiniMap
-                  pannable
-                  zoomable
-                  className="!hidden !bg-slate-50 sm:!block"
-                />
-              </ReactFlow>
+      <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
+        {importNotice && (
+          <div className="absolute right-3 top-3 z-40 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
+            {importNotice}
+          </div>
+        )}
+        {viewMode === 'roster' ? (
+          <RosterView
+            people={people}
+            managerOf={managerOf}
+            selectedId={selectedId}
+            onSelect={(person) => setSelectedId(person.id)}
+            fileName={mapName || 'roster'}
+          />
+        ) : (
+        <>
+        <button
+          onClick={() => setShowCommands(true)}
+          className="absolute left-1/2 top-3 z-30 flex w-[calc(100%_-_7rem)] max-w-md -translate-x-1/2 items-center gap-2.5 rounded-2xl border border-white/90 bg-white/90 px-3.5 py-2.5 text-left text-sm text-slate-500 shadow-[0_12px_40px_rgba(15,23,42,.12)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_16px_45px_rgba(15,23,42,.16)] sm:top-4 sm:px-4"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#eeecff] text-[#5b4cf0]">
+            <Search size={15} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            Search or ask TopDown
+          </span>
+          <Sparkles size={14} className="shrink-0 text-[#5b4cf0]" />
+          <kbd className="hidden rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400 sm:block">
+            ⌘K
+          </kbd>
+        </button>
+        <ReactFlow
+          nodes={displayNodes}
+          edges={edges}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
+          onConnect={onConnect}
+          onNodesDelete={onNodesDelete}
+          onNodeDragStart={() => {
+            if (!dragHistoryRecorded.current) {
+              recordHistory();
+              dragHistoryRecorded.current = true;
+            }
+          }}
+          onNodeDragStop={() => {
+            dragHistoryRecorded.current = false;
+          }}
+          onNodeClick={(_, n) => {
+            if (n.type !== 'person') return;
+            setSelectedId(n.id);
+            const groupId = n.data.person.groupId;
+            if (groupId) {
+              setNodes((items) =>
+                items.map((node) => ({
+                  ...node,
+                  selected: node.data.person.groupId === groupId,
+                }))
+              );
+            }
+          }}
+          onPaneClick={() => setSelectedId(null)}
+          onPointerMove={(event) => {
+            cursorRef.current = rf.screenToFlowPosition({
+              x: event.clientX,
+              y: event.clientY,
+            });
+          }}
+          nodeTypes={nodeTypes}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          elementsSelectable
+          selectionOnDrag={false}
+          selectionKeyCode={readOnly ? null : 'Shift'}
+          panOnDrag
+          multiSelectionKeyCode={['Meta', 'Control']}
+          deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
+          fitView
+          fitViewOptions={openingFitOptions}
+          minZoom={0.2}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background gap={28} size={1} color="#d9ddd4" />
+          <Controls
+            showInteractive={false}
+            fitViewOptions={openingFitOptions}
+            className="max-sm:!hidden !bottom-4 !left-4"
+          />
+          <MiniMap
+            pannable
+            zoomable
+            className="!hidden !bg-slate-50 sm:!block"
+          />
+        </ReactFlow>
 
-              <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
-                {presence
-                  .filter(
-                    (person) =>
-                      person.id !== selfId &&
-                      person.cursor_x !== null &&
-                      person.cursor_y !== null
-                  )
-                  .map((person) => (
+        <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
+          {presence
+            .filter(
+              (person) =>
+                person.id !== selfId &&
+                person.cursor_x !== null &&
+                person.cursor_y !== null
+            )
+            .map((person) => (
+              <div
+                key={person.id}
+                className="absolute transition-all duration-300"
+                style={{
+                  left: person.cursor_x! * viewport.zoom + viewport.x,
+                  top: person.cursor_y! * viewport.zoom + viewport.y,
+                }}
+              >
+                <div className="h-0 w-0 border-b-[10px] border-l-[6px] border-r-[6px] border-b-indigo-600 border-l-transparent border-r-transparent [transform:rotate(-35deg)]" />
+                <span className="ml-2 rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-medium text-white shadow">
+                  {person.name}
+                </span>
+              </div>
+            ))}
+        </div>
+
+        {!readOnly && selectedNodes.length > 1 && (
+          <div className="absolute bottom-3 left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg sm:bottom-5">
+            <span className="px-2 text-xs font-medium text-slate-500">
+              {selectedNodes.length} selected
+            </span>
+            <button
+              onClick={alignTop}
+              title="Align top"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <AlignStartHorizontal size={16} />
+            </button>
+            <button
+              onClick={distributeHorizontally}
+              disabled={selectedNodes.length < 3}
+              title="Distribute horizontally"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:text-slate-300"
+            >
+              <AlignHorizontalDistributeCenter size={16} />
+            </button>
+            <button
+              onClick={groupSelection}
+              title="Group selection"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <Group size={16} />
+            </button>
+            <button
+              onClick={ungroupSelection}
+              title="Ungroup selection"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <Ungroup size={16} />
+            </button>
+            <button
+              onClick={() => {
+                copySelection();
+                window.setTimeout(pasteSelection, 0);
+              }}
+              title="Duplicate selection"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <Copy size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* density control — collapse/expand every lane at once */}
+        {(laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) && (
+          <div className={`pointer-events-auto absolute left-1/2 z-10 -translate-x-1/2 ${!readOnly && selectedNodes.length > 1 ? 'bottom-16' : 'bottom-3'}`}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAllLanes(laneView.hiddenCount > 0);
+                setExpandedLanes(new Set());
+                setCollapsedLanes(new Set());
+              }}
+              className="flex items-center gap-2 rounded-full border border-white/80 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.1)] backdrop-blur-xl transition hover:text-[#5b4cf0]"
+            >
+              {laneView.hiddenCount === 0 ? (
+                <>Collapse lanes</>
+              ) : (
+                <>
+                  Showing {laneView.shownCount} of {people.length}
+                  <span className="text-[#5b4cf0]">Show all</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* buying-committee coverage pill: compact by default, expands on demand */}
+        {people.length > 0 && (
+          <div className={`absolute right-2 z-10 flex flex-col items-end gap-1.5 sm:bottom-auto sm:right-4 sm:top-20 ${!readOnly && selectedNodes.length > 1 ? 'bottom-28' : (laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) ? 'bottom-14' : 'bottom-2'}`}>
+            <button
+              type="button"
+              onClick={() => setCommitteeOpen((open) => !open)}
+              aria-expanded={committeeOpen}
+              title={`${committeeCovered} of ${COMMITTEE_ROLES.length} buying roles covered`}
+              className="flex items-center gap-2 rounded-full border border-white/80 bg-white/85 py-1 pl-2.5 pr-2 text-[10px] font-semibold uppercase tracking-[.1em] text-slate-500 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl transition hover:bg-white hover:text-slate-700"
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
+              <span>Committee · {people.length}</span>
+              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-1">
+                {COMMITTEE_ROLES.map((r) => (
+                  <span
+                    key={r}
+                    className={`h-1.5 w-1.5 rounded-full ${(coverage.get(r) ?? 0) > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
+                  />
+                ))}
+              </span>
+              <span className="tabular-nums normal-case tracking-normal text-slate-400">
+                {committeeCovered}/{COMMITTEE_ROLES.length}
+              </span>
+            </button>
+            {committeeOpen && (
+              <div className="flex w-52 flex-col gap-1 rounded-2xl border border-white/80 bg-white/95 p-2 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl">
+                {COMMITTEE_ROLES.map((r) => {
+                  const count = coverage.get(r) ?? 0;
+                  return (
                     <div
-                      key={person.id}
-                      className="absolute transition-all duration-300"
-                      style={{
-                        left: person.cursor_x! * viewport.zoom + viewport.x,
-                        top: person.cursor_y! * viewport.zoom + viewport.y,
-                      }}
+                      key={r}
+                      className={`flex items-center gap-2 rounded-lg px-2 py-1 text-[11px] ${
+                        count > 0 ? ROLE_META[r].chip : 'text-slate-400'
+                      }`}
                     >
-                      <div className="h-0 w-0 border-b-[10px] border-l-[6px] border-r-[6px] border-b-indigo-600 border-l-transparent border-r-transparent [transform:rotate(-35deg)]" />
-                      <span className="ml-2 rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-medium text-white shadow">
-                        {person.name}
+                      <span
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${count > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
+                      />
+                      <span className="flex-1">{ROLE_META[r].label}</span>
+                      <span className="tabular-nums font-medium">
+                        {count > 0 ? count : '—'}
                       </span>
                     </div>
-                  ))}
+                  );
+                })}
               </div>
-
-              {!readOnly && selectedNodes.length > 1 && (
-                <div className="absolute bottom-3 left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg sm:bottom-5">
-                  <span className="px-2 text-xs font-medium text-slate-500">
-                    {selectedNodes.length} selected
-                  </span>
-                  <button
-                    onClick={alignTop}
-                    title="Align top"
-                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                  >
-                    <AlignStartHorizontal size={16} />
-                  </button>
-                  <button
-                    onClick={distributeHorizontally}
-                    disabled={selectedNodes.length < 3}
-                    title="Distribute horizontally"
-                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:text-slate-300"
-                  >
-                    <AlignHorizontalDistributeCenter size={16} />
-                  </button>
-                  <button
-                    onClick={groupSelection}
-                    title="Group selection"
-                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                  >
-                    <Group size={16} />
-                  </button>
-                  <button
-                    onClick={ungroupSelection}
-                    title="Ungroup selection"
-                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                  >
-                    <Ungroup size={16} />
-                  </button>
-                  <button
-                    onClick={() => {
-                      copySelection();
-                      window.setTimeout(pasteSelection, 0);
-                    }}
-                    title="Duplicate selection"
-                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                  >
-                    <Copy size={16} />
-                  </button>
-                </div>
-              )}
-
-              {/* density control — collapse/expand every lane at once */}
-              {(laneView.hiddenCount > 0 ||
-                showAllLanes ||
-                collapsedLanes.size > 0 ||
-                expandedLanes.size > 0) && (
-                <div
-                  className={`pointer-events-auto absolute left-1/2 z-10 -translate-x-1/2 ${!readOnly && selectedNodes.length > 1 ? 'bottom-16' : 'bottom-3'}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAllLanes(laneView.hiddenCount > 0);
-                      setExpandedLanes(new Set());
-                      setCollapsedLanes(new Set());
-                    }}
-                    className="flex items-center gap-2 rounded-full border border-white/80 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.1)] backdrop-blur-xl transition hover:text-[#5b4cf0]"
-                  >
-                    {laneView.hiddenCount === 0 ? (
-                      <>Collapse lanes</>
-                    ) : (
-                      <>
-                        Showing {laneView.shownCount} of {people.length}
-                        <span className="text-[#5b4cf0]">Show all</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* buying-committee coverage pill: compact by default, expands on demand */}
-              {people.length > 0 && (
-                <div
-                  className={`absolute right-2 z-10 flex flex-col items-end gap-1.5 sm:bottom-auto sm:right-4 sm:top-20 ${!readOnly && selectedNodes.length > 1 ? 'bottom-28' : laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0 ? 'bottom-14' : 'bottom-2'}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setCommitteeOpen((open) => !open)}
-                    aria-expanded={committeeOpen}
-                    title={`${committeeCovered} of ${COMMITTEE_ROLES.length} buying roles covered`}
-                    className="flex items-center gap-2 rounded-full border border-white/80 bg-white/85 py-1 pl-2.5 pr-2 text-[10px] font-semibold uppercase tracking-[.1em] text-slate-500 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl transition hover:bg-white hover:text-slate-700"
-                  >
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
-                    <span>Committee · {people.length}</span>
-                    <span className="flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-1">
-                      {COMMITTEE_ROLES.map((r) => (
-                        <span
-                          key={r}
-                          className={`h-1.5 w-1.5 rounded-full ${(coverage.get(r) ?? 0) > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
-                        />
-                      ))}
-                    </span>
-                    <span className="tabular-nums normal-case tracking-normal text-slate-400">
-                      {committeeCovered}/{COMMITTEE_ROLES.length}
-                    </span>
-                  </button>
-                  {committeeOpen && (
-                    <div className="flex w-52 flex-col gap-1 rounded-2xl border border-white/80 bg-white/95 p-2 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl">
-                      {COMMITTEE_ROLES.map((r) => {
-                        const count = coverage.get(r) ?? 0;
-                        return (
-                          <div
-                            key={r}
-                            className={`flex items-center gap-2 rounded-lg px-2 py-1 text-[11px] ${
-                              count > 0 ? ROLE_META[r].chip : 'text-slate-400'
-                            }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${count > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
-                            />
-                            <span className="flex-1">{ROLE_META[r].label}</span>
-                            <span className="tabular-nums font-medium">
-                              {count > 0 ? count : '—'}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {people.length === 0 && (
-                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-                  <div className="rounded-2xl border border-slate-200 bg-white/90 px-6 py-4 text-center text-sm text-slate-500 shadow-sm">
-                    This map is empty.
-                    {!readOnly && (
-                      <>
-                        {' '}
-                        Add people with <b>+ Person</b> or drag a connection
-                        between nodes to build reporting lines.
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          <AnimatePresence>
-            {selected && mapId && (
-              <PersonPanel
-                key={selected.id}
-                mapId={mapId}
-                person={selected}
-                people={people}
-                edges={edges.map(edgeToMap)}
-                initiatives={meta?.initiatives}
-                readOnly={readOnly}
-                onChange={updatePerson}
-                onSetManager={setManager}
-                onAddInfluence={addInfluence}
-                onDelete={deletePerson}
-                onClose={() => setSelectedId(null)}
-                onNavigate={(id) => setSelectedId(id)}
-              />
             )}
-          </AnimatePresence>
-        </div>
+          </div>
+        )}
+
+        {people.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <div className="rounded-2xl border border-slate-200 bg-white/90 px-6 py-4 text-center text-sm text-slate-500 shadow-sm">
+              This map is empty.
+              {!readOnly && (
+                <>
+                  {' '}
+                  Add people with <b>+ Person</b> or drag a connection between
+                  nodes to build reporting lines.
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        </>
+        )}
+
+        <AnimatePresence>
+          {selected && mapId && (
+            <PersonPanel
+              key={selected.id}
+              mapId={mapId}
+              person={selected}
+              people={people}
+              edges={edges.map(edgeToMap)}
+              initiatives={meta?.initiatives}
+              readOnly={readOnly}
+              onChange={updatePerson}
+              onSetManager={setManager}
+              onAddInfluence={addInfluence}
+              onDelete={deletePerson}
+              onClose={() => setSelectedId(null)}
+              onNavigate={(id) => setSelectedId(id)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
       </div>
 
       {showShare && mapId && (
@@ -2849,8 +2790,7 @@ function MapInner() {
         <MeetingsImportModal
           people={people}
           onApply={applyMeetings}
-          onClose={() => setShowMeetings(false)}
-        />
+          onClose={() => setShowMeetings(false)} />
       )}
       {showDeepResearch && (
         <DeepResearchModal
@@ -2873,9 +2813,7 @@ function MapInner() {
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="font-semibold text-slate-900">
-                  Version history
-                </h2>
+                <h2 className="font-semibold text-slate-900">Version history</h2>
                 <p className="text-xs text-slate-500">
                   Restore an earlier collaborative save.
                 </p>

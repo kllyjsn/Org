@@ -268,7 +268,11 @@ export interface BriefingAction {
   reason: string;
   confidence: Confidence;
   provenance: 'sourced' | 'map' | 'hypothesis';
-  type: 'focus_people' | 'open_strategy' | 'open_initiatives' | 'deep_research';
+  type:
+    | 'focus_people'
+    | 'open_strategy'
+    | 'open_initiatives'
+    | 'deep_research';
   personIds?: string[];
   focus?: string;
   evidence: string[];
