@@ -6,6 +6,7 @@ import type {
   CrmAdapter,
   CrmContact,
   CrmOpportunity,
+  CrmSession,
 } from './crm-types.js';
 
 const CLIENT_ID = () => process.env.SALESFORCE_CLIENT_ID ?? '';
@@ -45,9 +46,8 @@ function sfHeaders(token: string): Record<string, string> {
 }
 
 /** Token arrives as `accessToken##instanceUrl` (see crm-types.ts). */
-function clientFor(token: string): SalesforceClient {
-  const [accessToken, instanceUrl = ''] = token.split('##');
-  return new SalesforceClient(accessToken, instanceUrl);
+function clientFor(session: CrmSession): SalesforceClient {
+  return new SalesforceClient(session.accessToken, session.instanceUrl ?? '');
 }
 
 export class SalesforceClient {
@@ -183,8 +183,8 @@ export const salesforceAdapter: CrmAdapter = {
     };
   },
 
-  async searchAccounts(token, q): Promise<CrmAccount[]> {
-    const client = clientFor(token);
+  async searchAccounts(session: CrmSession, q): Promise<CrmAccount[]> {
+    const client = clientFor(session);
     const like = `%${soqlEscape(q)}%`;
     const rows = await client.query<{
       Id: string;
@@ -201,8 +201,11 @@ export const salesforceAdapter: CrmAdapter = {
     }));
   },
 
-  async listOpportunities(token, accountId): Promise<CrmOpportunity[]> {
-    const client = clientFor(token);
+  async listOpportunities(
+    session: CrmSession,
+    accountId: string
+  ): Promise<CrmOpportunity[]> {
+    const client = clientFor(session);
     const rows = await client.query<{
       Id: string;
       Name: string;
@@ -223,8 +226,12 @@ export const salesforceAdapter: CrmAdapter = {
     }));
   },
 
-  async listContacts(token, accountId, opportunityId?): Promise<CrmContact[]> {
-    const client = clientFor(token);
+  async listContacts(
+    session: CrmSession,
+    accountId: string,
+    opportunityId?: string
+  ): Promise<CrmContact[]> {
+    const client = clientFor(session);
     const contacts = await client.query<{
       Id: string;
       Name: string;
@@ -263,8 +270,8 @@ export const salesforceAdapter: CrmAdapter = {
     return;
   },
 
-  async pushContact(token, contact, ctx) {
-    const client = clientFor(token);
+  async pushContact(session: CrmSession, contact, ctx) {
+    const client = clientFor(session);
     const custom = await Promise.all([
       client.describeField('Contact', 'TopDown_Buying_Role__c'),
       client.describeField('Contact', 'TopDown_Stance__c'),

@@ -38,6 +38,7 @@ import {
   contactsToPush,
   mergeCrmContacts,
 } from './integrations/crm-sync.js';
+import type { CrmSession } from './integrations/crm-types.js';
 import { committeeCoverage } from './notifications/coverage.js';
 import { analyzeTranscript } from './transcripts/analyze.js';
 import { applyAnalysisToPeople, applyAnalysisToStrategy } from './transcripts/apply.js';
@@ -1231,19 +1232,13 @@ async function crmIntegrationForUser(
   return [integration, role];
 }
 
-async function crmToken(
+async function crmSessionFor(
   integration: IntegrationRow
-): Promise<{ token: string; adapter: ReturnType<typeof crmAdapterFor> }> {
+): Promise<{ session: CrmSession; adapter: ReturnType<typeof crmAdapterFor> }> {
   const adapter = crmAdapterFor(integration.provider);
   if (!adapter) throw new Error(`unknown provider ${integration.provider}`);
   const { accessToken, instanceUrl } = await withFreshToken(integration);
-  return {
-    token:
-      integration.provider === 'salesforce'
-        ? `${accessToken}##${instanceUrl ?? ''}`
-        : accessToken,
-    adapter,
-  };
+  return { session: { accessToken, instanceUrl }, adapter };
 }
 
 app.get('/api/integrations/:id/crm/accounts', requireAuth, async (c) => {
@@ -1251,9 +1246,9 @@ app.get('/api/integrations/:id/crm/accounts', requireAuth, async (c) => {
   const [integration, role] = await crmIntegrationForUser(user, param(c, 'id'));
   if (!integration) return bad(c, 'not a CRM connection', 404);
   if (!role) return bad(c, 'not a member', 403);
-  const { token, adapter } = await crmToken(integration);
+  const { session, adapter } = await crmSessionFor(integration);
   const q = c.req.query('q') ?? '';
-  return c.json({ accounts: await adapter!.searchAccounts(token, q) });
+  return c.json({ accounts: await adapter!.searchAccounts(session, q) });
 });
 
 app.get(
@@ -1267,10 +1262,10 @@ app.get(
     );
     if (!integration) return bad(c, 'not a CRM connection', 404);
     if (!role) return bad(c, 'not a member', 403);
-    const { token, adapter } = await crmToken(integration);
+    const { session, adapter } = await crmSessionFor(integration);
     return c.json({
       opportunities: await adapter!.listOpportunities(
-        token,
+        session,
         param(c, 'accountId')
       ),
     });
@@ -1391,9 +1386,9 @@ app.post('/api/maps/:id/crm/pull', requireAuth, async (c) => {
   );
   const integration = integrations[0];
   if (!integration) return bad(c, `no connected ${link.provider} account`, 400);
-  const { token, adapter } = await crmToken(integration);
+  const { session, adapter } = await crmSessionFor(integration);
   const contacts = await adapter!.listContacts(
-    token,
+    session,
     link.accountId,
     link.opportunityId ?? undefined
   );
@@ -1438,14 +1433,14 @@ app.post('/api/maps/:id/crm/push', requireAuth, async (c) => {
   );
   const integration = integrations[0];
   if (!integration) return bad(c, `no connected ${link.provider} account`, 400);
-  const { token, adapter } = await crmToken(integration);
-  await adapter!.ensureSchema(token);
+  const { session, adapter } = await crmSessionFor(integration);
+  await adapter!.ensureSchema(session);
   const rows = contactsToPush(state).slice(0, 100);
   const results: { personId: string; crmId: string; url: string | null }[] = [];
   const failed: { personId: string; error: string }[] = [];
   for (const row of rows) {
     try {
-      const pushed = await adapter!.pushContact(token, row, {
+      const pushed = await adapter!.pushContact(session, row, {
         accountId: link.accountId,
         opportunityId: link.opportunityId,
       });

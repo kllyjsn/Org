@@ -41,11 +41,12 @@ export interface CrmPushContact {
   linkedin: string | null;
 }
 
-/**
- * The `token` argument across this interface is the decrypted access token —
- * except Salesforce, which also needs its per-org API base: callers pass
- * `accessToken##instanceUrl` and the adapter splits it internally.
- */
+/** Decrypted OAuth session — Salesforce also needs its per-org API base. */
+export interface CrmSession {
+  accessToken: string;
+  instanceUrl: string | null;
+}
+
 export interface CrmAdapter {
   id: CrmProviderId;
   label: string;
@@ -57,17 +58,20 @@ export interface CrmAdapter {
     redirectUri: string
   ): Promise<TokenExchange>;
   refresh(refreshToken: string): Promise<TokenRefresh>;
-  searchAccounts(token: string, q: string): Promise<CrmAccount[]>;
-  listOpportunities(token: string, accountId: string): Promise<CrmOpportunity[]>;
+  searchAccounts(session: CrmSession, q: string): Promise<CrmAccount[]>;
+  listOpportunities(
+    session: CrmSession,
+    accountId: string
+  ): Promise<CrmOpportunity[]>;
   listContacts(
-    token: string,
+    session: CrmSession,
     accountId: string,
     opportunityId?: string
   ): Promise<CrmContact[]>;
   pushContact(
-    token: string,
+    session: CrmSession,
     contact: CrmPushContact,
     ctx: { accountId: string; opportunityId?: string | null }
   ): Promise<{ crmId: string; url: string | null }>;
-  ensureSchema(token: string): Promise<void>;
+  ensureSchema(session: CrmSession): Promise<void>;
 }

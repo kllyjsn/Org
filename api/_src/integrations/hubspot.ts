@@ -2,6 +2,7 @@ import type { BuyingRole } from '../types.js';
 import { providerFetch } from './types.js';
 import type { TokenExchange, TokenRefresh } from './types.js';
 import type {
+  CrmSession,
   CrmAccount,
   CrmAdapter,
   CrmContact,
@@ -162,7 +163,7 @@ export const hubspotAdapter: CrmAdapter = {
     };
   },
 
-  async searchAccounts(token, q): Promise<CrmAccount[]> {
+  async searchAccounts(session: CrmSession, q): Promise<CrmAccount[]> {
     const res = await providerFetch(`${API}/crm/v3/objects/companies/search`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -192,7 +193,11 @@ export const hubspotAdapter: CrmAdapter = {
     }));
   },
 
-  async listOpportunities(token, accountId): Promise<CrmOpportunity[]> {
+  async listOpportunities(
+    session: CrmSession,
+    accountId: string
+  ): Promise<CrmOpportunity[]> {
+    const token = session.accessToken;
     const ids = await associatedIds(token, 'companies', accountId, 'deals');
     const deals = await batchRead(token, 'deals', ids, DEAL_PROPS);
     const open = (deal: HubSpotObject) =>
@@ -214,7 +219,12 @@ export const hubspotAdapter: CrmAdapter = {
       }));
   },
 
-  async listContacts(token, accountId, opportunityId?): Promise<CrmContact[]> {
+  async listContacts(
+    session: CrmSession,
+    accountId: string,
+    opportunityId?: string
+  ): Promise<CrmContact[]> {
+    const token = session.accessToken;
     const ids = await associatedIds(token, 'companies', accountId, 'contacts');
     const contacts = await batchRead(
       token,
@@ -253,7 +263,8 @@ export const hubspotAdapter: CrmAdapter = {
     });
   },
 
-  async ensureSchema(token) {
+  async ensureSchema(session: CrmSession) {
+    const token = session.accessToken;
     for (const [name, options] of [
       [
         'topdown_buying_role',
@@ -298,7 +309,8 @@ export const hubspotAdapter: CrmAdapter = {
     }
   },
 
-  async pushContact(token, contact, ctx) {
+  async pushContact(session: CrmSession, contact, ctx) {
+    const token = session.accessToken;
     const properties: Record<string, string> = {
       topdown_buying_role: contact.role,
     };
