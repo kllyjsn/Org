@@ -68,15 +68,22 @@ export async function createWorkspaceForUser(
   return { id, name, plan: 'free' };
 }
 
+export async function membership(
+  userId: string,
+  workspaceId: string
+): Promise<Pick<MemberRow, 'role' | 'access_scope'> | null> {
+  const rows = await query<Pick<MemberRow, 'role' | 'access_scope'>>(
+    'SELECT role, access_scope FROM workspace_members WHERE workspace_id = $1 AND user_id = $2',
+    [workspaceId, userId]
+  );
+  return rows[0] ?? null;
+}
+
 export async function memberRole(
   userId: string,
   workspaceId: string
 ): Promise<MemberRow['role'] | null> {
-  const rows = await query<{ role: MemberRow['role'] }>(
-    'SELECT role FROM workspace_members WHERE workspace_id = $1 AND user_id = $2',
-    [workspaceId, userId]
-  );
-  return rows[0]?.role ?? null;
+  return (await membership(userId, workspaceId))?.role ?? null;
 }
 
 export function publicUser(u: UserRow) {

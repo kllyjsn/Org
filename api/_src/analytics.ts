@@ -240,7 +240,8 @@ function number(value: string | null | undefined): number {
 export async function valueSummary(
   userId: string,
   workspaceId: string,
-  includePlatform: boolean
+  includePlatform: boolean,
+  scopedUserId: string | null = null
 ) {
   const personalRows = await query<MetricRow>(
     `SELECT
@@ -287,8 +288,12 @@ export async function valueSummary(
   );
   const liveRows = await query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
-     FROM maps WHERE workspace_id = $1 AND is_live_opportunity = TRUE`,
-    [workspaceId]
+     FROM maps WHERE workspace_id = $1 AND is_live_opportunity = TRUE
+       AND ($2::text IS NULL OR id IN (
+         SELECT map_id FROM member_map_access
+         WHERE workspace_id = $1 AND user_id = $2
+       ))`,
+    [workspaceId, scopedUserId]
   );
   const workspaceRows = await query<WorkspaceMetricRow>(
     `SELECT

@@ -161,6 +161,17 @@ CREATE TABLE IF NOT EXISTS workspace_invites (
   accepted_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_workspace_invites_ws ON workspace_invites(workspace_id);
+ALTER TABLE workspace_members ADD COLUMN IF NOT EXISTS access_scope TEXT NOT NULL DEFAULT 'all';
+ALTER TABLE workspace_invites ADD COLUMN IF NOT EXISTS access_scope TEXT NOT NULL DEFAULT 'all';
+ALTER TABLE workspace_invites ADD COLUMN IF NOT EXISTS map_ids JSONB NOT NULL DEFAULT '[]'::jsonb;
+CREATE TABLE IF NOT EXISTS member_map_access (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, user_id, map_id)
+);
+CREATE INDEX IF NOT EXISTS idx_member_map_access_user ON member_map_access(user_id, workspace_id);
 CREATE TABLE IF NOT EXISTS personas (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
