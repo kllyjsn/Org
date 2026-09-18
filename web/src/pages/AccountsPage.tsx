@@ -33,20 +33,141 @@ import RailButton, { RailSeparator } from '../components/RailButton';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 
+type AccessScopeValue = 'all' | 'selected';
+
+function AccessScopePicker({
+  idPrefix,
+  maps,
+  scope,
+  selected,
+  onScopeChange,
+  onSelectedChange,
+}: {
+  idPrefix: string;
+  maps: { id: string; name: string }[];
+  scope: AccessScopeValue;
+  selected: Set<string>;
+  onScopeChange: (scope: AccessScopeValue) => void;
+  onSelectedChange: (selected: Set<string>) => void;
+}) {
+  return (
+    <div>
+      <div
+        role="group"
+        aria-label="Account access"
+        className="flex rounded-lg bg-slate-100 p-0.5 text-xs font-medium"
+      >
+        {(
+          [
+            ['all', 'All accounts'],
+            ['selected', 'Specific accounts'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={scope === value}
+            onClick={() => onScopeChange(value)}
+            className={`flex-1 rounded-md px-2 py-1.5 transition ${
+              scope === value
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {scope === 'selected' && (
+        <div className="mt-2">
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-slate-500">
+              {selected.size} of {maps.length} selected
+            </span>
+            <span className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => onSelectedChange(new Set(maps.map((m) => m.id)))}
+                className="font-medium text-indigo-600 hover:text-indigo-500"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectedChange(new Set())}
+                className="font-medium text-slate-400 hover:text-slate-600"
+              >
+                Clear
+              </button>
+            </span>
+          </div>
+          <ul className="max-h-40 overflow-y-auto rounded-lg border border-slate-200">
+            {maps.map((m) => (
+              <li key={m.id}>
+                <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    id={`${idPrefix}-map-${m.id}`}
+                    checked={selected.has(m.id)}
+                    onChange={() => {
+                      const next = new Set(selected);
+                      if (next.has(m.id)) next.delete(m.id);
+                      else next.add(m.id);
+                      onSelectedChange(next);
+                    }}
+                    className="accent-indigo-600"
+                  />
+                  <span className="truncate">{m.name}</span>
+                </label>
+              </li>
+            ))}
+            {maps.length === 0 && (
+              <li className="px-3 py-2 text-xs text-slate-400">
+                No accounts in this workspace yet.
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MembersModal({
   workspaceId,
+  maps,
   onClose,
 }: {
   workspaceId: string;
+  maps: { id: string; name: string }[];
   onClose: () => void;
 }) {
   const [members, setMembers] = useState<
-    { id: string; name: string; email: string; role: string }[]
+    {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+      access_scope: AccessScopeValue;
+      map_ids: string[];
+    }[]
   >([]);
   const [invites, setInvites] = useState<
-    { id: string; email: string; created_at: string; expires_at: string }[]
+    {
+      id: string;
+      email: string;
+      created_at: string;
+      expires_at: string;
+      access_scope: AccessScopeValue;
+      map_ids: string[];
+    }[]
   >([]);
   const [email, setEmail] = useState('');
+  const [inviteScope, setInviteScope] = useState<AccessScopeValue>('all');
+  const [inviteSelected, setInviteSelected] = useState<Set<string>>(new Set());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editScope, setEditScope] = useState<AccessScopeValue>('all');
+  const [editSelected, setEditSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -71,7 +192,10 @@ function MembersModal({
     setNotice(null);
     setInviteLink(null);
     try {
-      const result = await api.addMember(workspaceId, email);
+      const result = await api.addMember(workspaceId, email, {
+        accessScope: inviteScope,
+        mapIds: inviteScope === 'selected' ? [...inviteSelected] : [],
+      });
       if (result.added) setNotice('Added');
       else if (result.emailSent) setNotice(`Invite sent to ${email}`);
       else {
@@ -79,9 +203,25 @@ function MembersModal({
         setInviteLink(result.inviteUrl ?? null);
       }
       setEmail('');
+      setInviteScope('all');
+      setInviteSelected(new Set());
       void refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'failed to add member');
+    }
+  };
+
+  const saveAccess = async (memberId: string) => {
+    setError(null);
+    try {
+      await api.updateMemberAccess(workspaceId, memberId, {
+        accessScope: editScope,
+        mapIds: editScope === 'selected' ? [...editSelected] : [],
+      });
+      setEditingId(null);
+      void refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'failed to update access');
     }
   };
 
@@ -106,7 +246,7 @@ function MembersModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="members-modal-title"
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="members-modal-title" className="text-lg font-semibold">
@@ -119,14 +259,71 @@ function MembersModal({
         </div>
         <ul className="mb-4 divide-y divide-slate-100">
           {members.map((m) => (
-            <li key={m.id} className="flex items-center justify-between py-2">
-              <div>
-                <div className="text-sm font-medium">{m.name}</div>
-                <div className="text-xs text-slate-500">{m.email}</div>
+            <li key={m.id} className="py-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium">{m.name}</div>
+                  <div className="text-xs text-slate-500">{m.email}</div>
+                  {m.role !== 'owner' && (
+                    <div className="mt-1 text-xs text-slate-400">
+                      {m.access_scope === 'selected'
+                        ? `${m.map_ids.length} account${m.map_ids.length === 1 ? '' : 's'}`
+                        : 'All accounts'}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                    {m.role}
+                  </span>
+                  {m.role !== 'owner' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingId === m.id) {
+                          setEditingId(null);
+                        } else {
+                          setEditingId(m.id);
+                          setEditScope(m.access_scope);
+                          setEditSelected(new Set(m.map_ids));
+                        }
+                      }}
+                      className="text-xs text-slate-400 hover:text-indigo-600"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
               </div>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                {m.role}
-              </span>
+              {editingId === m.id && (
+                <div className="mt-2 rounded-lg border border-slate-200 p-3">
+                  <AccessScopePicker
+                    idPrefix={`edit-${m.id}`}
+                    maps={maps}
+                    scope={editScope}
+                    selected={editSelected}
+                    onScopeChange={setEditScope}
+                    onSelectedChange={setEditSelected}
+                  />
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={editScope === 'selected' && editSelected.size === 0}
+                      onClick={() => void saveAccess(m.id)}
+                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
             </li>
           ))}
           {invites.map((inv) => (
@@ -135,6 +332,11 @@ function MembersModal({
                 <div className="text-sm font-medium">{inv.email}</div>
                 <div className="text-xs text-slate-500">
                   expires {new Date(inv.expires_at).toLocaleDateString()}
+                </div>
+                <div className="mt-1 text-xs text-slate-400">
+                  {inv.access_scope === 'selected'
+                    ? `${inv.map_ids.length} account${inv.map_ids.length === 1 ? '' : 's'}`
+                    : 'All accounts'}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -151,7 +353,7 @@ function MembersModal({
             </li>
           ))}
         </ul>
-        <form onSubmit={add} className="flex gap-2">
+        <form onSubmit={add} className="flex flex-col gap-2">
           <input
             className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500"
             placeholder="teammate@company.com"
@@ -162,9 +364,18 @@ function MembersModal({
             onChange={(e) => setEmail(e.target.value)}
             required
           />
+          <AccessScopePicker
+            idPrefix="invite"
+            maps={maps}
+            scope={inviteScope}
+            selected={inviteSelected}
+            onScopeChange={setInviteScope}
+            onSelectedChange={setInviteSelected}
+          />
           <button
             type="submit"
-            className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+            disabled={inviteScope === 'selected' && inviteSelected.size === 0}
+            className="self-end rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Invite
           </button>
@@ -709,6 +920,7 @@ export default function AccountsPage() {
       {showMembers && workspaceId && (
         <MembersModal
           workspaceId={workspaceId}
+          maps={maps.map((m) => ({ id: m.id, name: m.name }))}
           onClose={() => setShowMembers(false)}
         />
       )}
