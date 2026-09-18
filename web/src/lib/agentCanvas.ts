@@ -64,7 +64,7 @@ function fieldValue(person: Person, field: AgentGroupingField) {
   return person[field] ?? person.department;
 }
 
-export function summarizeGrouping(
+function summarizeGrouping(
   people: Person[],
   field: AgentGroupingField
 ): Extract<AgentActionPreview, { kind: 'group' }> {

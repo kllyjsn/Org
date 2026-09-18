@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ReactFlow, {
+  applyEdgeChanges,
+  applyNodeChanges,
   Background,
   Controls,
   getNodesBounds,
@@ -249,6 +251,11 @@ function MapInner() {
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   const remoteUpdatedAt = useRef('');
   const saveStateRef = useRef<SaveState>('saved');
+  // Mirror of the latest canvas arrays. Handlers persist post-update state
+  // through these refs instead of running side effects inside state
+  // updaters, which StrictMode double-invokes in dev.
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
 
   const readOnly = role === 'viewer';
   // Phone viewports fit an entire org to ~20% zoom, which renders cards
@@ -296,6 +303,11 @@ function MapInner() {
   }, [meta]);
 
   useEffect(() => {
+    nodesRef.current = nodes;
+    edgesRef.current = edges;
+  }, [nodes, edges]);
+
+  useEffect(() => {
     saveStateRef.current = saveState;
   }, [saveState]);
 
@@ -307,7 +319,7 @@ function MapInner() {
         const flow = toFlow(map.state, map.role === 'viewer');
         // Default view for accounts with meeting coverage: met/unmet lanes
         // segmented by team. Pure arrangement — nothing marked dirty.
-        let anchorPeople = map.state.people;
+        let anchorPeople = map.state.people ?? [];
         const hasMet = (map.state.people ?? []).some(
           (person) => person.metWith
         );
@@ -319,7 +331,7 @@ function MapInner() {
         if (grouping) {
           if (hasMet) setLaneGrouping('met');
           anchorPeople = applyLanes(
-            map.state.people,
+            map.state.people ?? [],
             isMobile ? 2 : 4,
             grouping,
             isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
@@ -332,6 +344,8 @@ function MapInner() {
             position: pos.get(n.id) ?? n.position,
           }));
         }
+        nodesRef.current = flow.nodes;
+        edgesRef.current = flow.edges;
         setNodes(flow.nodes);
         setEdges(flow.edges);
         setMapName(map.name);
@@ -407,6 +421,8 @@ function MapInner() {
           const flow = toFlow(map.state, map.role === 'viewer');
           setMapName(map.name);
           setMeta(map.state.meta);
+          nodesRef.current = flow.nodes;
+          edgesRef.current = flow.edges;
           setNodes(flow.nodes);
           setEdges(flow.edges);
         })
@@ -421,22 +437,30 @@ function MapInner() {
     setShowHistory(true);
     void api
       .listVersions(mapId)
-      .then(({ versions: items }) => setVersions(items));
+      .then(({ versions: items }) => setVersions(items))
+      .catch(() => undefined);
   }, [mapId]);
 
   const restoreVersion = useCallback(
     async (versionId: string) => {
       if (!mapId) return;
-      const restored = await api.restoreVersion(mapId, versionId);
-      const flow = toFlow(restored.state, readOnly);
-      setMapName(restored.name);
-      setMeta(restored.state.meta);
-      setNodes(flow.nodes);
-      setEdges(flow.edges);
-      setPast([]);
-      setFuture([]);
-      setShowHistory(false);
-      setSaveState('saved');
+      try {
+        const restored = await api.restoreVersion(mapId, versionId);
+        const flow = toFlow(restored.state, readOnly);
+        setMapName(restored.name);
+        setMeta(restored.state.meta);
+        nodesRef.current = flow.nodes;
+        edgesRef.current = flow.edges;
+        setNodes(flow.nodes);
+        setEdges(flow.edges);
+        setPast([]);
+        setFuture([]);
+        setShowHistory(false);
+        setSaveState('saved');
+      } catch {
+        setImportNotice('Restore failed — try again.');
+        window.setTimeout(() => setImportNotice(''), 5_000);
+      }
     },
     [mapId, readOnly, setNodes, setEdges]
   );
@@ -492,6 +516,8 @@ function MapInner() {
   const restore = useCallback(
     (next: CanvasSnapshot) => {
       const restored = snapshot(next.nodes, next.edges);
+      nodesRef.current = restored.nodes;
+      edgesRef.current = restored.edges;
       setNodes(restored.nodes);
       setEdges(restored.edges);
       markDirty(restored.nodes, restored.edges);
@@ -519,72 +545,59 @@ function MapInner() {
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       onNodesChange(changes);
+      nodesRef.current = applyNodeChanges(changes, nodesRef.current);
       if (changes.some((ch) => ch.type === 'position' || ch.type === 'remove')) {
-        // state below is post-change via useNodesState; persist next tick
-        window.setTimeout(() => {
-          setNodes((ns) => {
-            setEdges((es) => {
-              markDirty(ns, es);
-              return es;
-            });
-            return ns;
-          });
-        }, 0);
+        markDirty(nodesRef.current, edgesRef.current);
       }
     },
-    [onNodesChange, markDirty, setNodes, setEdges]
+    [onNodesChange, markDirty]
   );
 
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       onEdgesChange(changes);
+      edgesRef.current = applyEdgeChanges(changes, edgesRef.current);
       if (changes.some((ch) => ch.type === 'remove')) {
-        window.setTimeout(() => {
-          setNodes((ns) => {
-            setEdges((es) => {
-              markDirty(ns, es);
-              return es;
-            });
-            return ns;
-          });
-        }, 0);
+        markDirty(nodesRef.current, edgesRef.current);
       }
     },
-    [onEdgesChange, markDirty, setNodes, setEdges]
+    [onEdgesChange, markDirty]
   );
 
   const onConnect = useCallback(
     (conn: Connection) => {
       if (!conn.source || !conn.target || conn.source === conn.target) return;
       recordHistory();
-      setEdges((es) => {
-        // one formal manager per person
-        const without = es.filter(
+      // one formal manager per person
+      const next = [
+        ...edgesRef.current.filter(
           (e) => !(e.data?.kind === 'reports' && e.target === conn.target)
-        );
-        const next = [
-          ...without,
-          reportsEdge(conn.source!, conn.target!),
-        ];
-        markDirty(nodes, next);
-        return next;
-      });
+        ),
+        reportsEdge(conn.source!, conn.target!),
+      ];
+      edgesRef.current = next;
+      setEdges(next);
+      markDirty(nodesRef.current, next);
     },
-    [setEdges, markDirty, nodes, recordHistory]
+    [setEdges, markDirty, recordHistory]
   );
 
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
       recordHistory();
       const ids = new Set(deleted.map((n) => n.id));
-      setEdges((es) => {
-        const next = es.filter((e) => !ids.has(e.source) && !ids.has(e.target));
-        markDirty(nodes.filter((n) => !ids.has(n.id)), next);
-        return next;
-      });
+      const next = edgesRef.current.filter(
+        (e) => !ids.has(e.source) && !ids.has(e.target)
+      );
+      edgesRef.current = next;
+      setEdges(next);
+      markDirty(
+        nodesRef.current.filter((n) => !ids.has(n.id)),
+        next
+      );
       setSelectedId((sel) => (sel && ids.has(sel) ? null : sel));
     },
-    [setEdges, markDirty, nodes, recordHistory]
+    [setEdges, markDirty, recordHistory]
   );
 
   const selected = nodes.find((n) => n.id === selectedId)?.data.person ?? null;
@@ -767,62 +780,57 @@ function MapInner() {
       editTimer.current = window.setTimeout(() => {
         editTimer.current = null;
       }, 750);
-      setNodes((ns) => {
-        const metChanged =
-          laneGrouping === 'met' &&
-          ns.some(
-            (n) =>
-              n.id === updated.id &&
-              Boolean(n.data.person.metWith) !== Boolean(updated.metWith)
-          );
-        const next = ns.map((n) =>
-          n.id === updated.id
-            ? { ...n, data: { ...n.data, person: updated } }
-            : n
+      const current = nodesRef.current;
+      const metChanged =
+        laneGrouping === 'met' &&
+        current.some(
+          (n) =>
+            n.id === updated.id &&
+            Boolean(n.data.person.metWith) !== Boolean(updated.metWith)
         );
-        // Under the met split a met flip changes the person's lane — relay
-        // so the card physically joins the other band.
-        const positioned = metChanged ? relayLanes(next) : next;
-        setEdges((es) => {
-          markDirty(positioned, es);
-          return es;
-        });
-        return positioned;
-      });
+      const next = current.map((n) =>
+        n.id === updated.id
+          ? { ...n, data: { ...n.data, person: updated } }
+          : n
+      );
+      // Under the met split a met flip changes the person's lane — relay
+      // so the card physically joins the other band.
+      const positioned = metChanged ? relayLanes(next) : next;
+      nodesRef.current = positioned;
+      setNodes(positioned);
+      markDirty(positioned, edgesRef.current);
     },
-    [setNodes, setEdges, markDirty, recordHistory, laneGrouping, relayLanes]
+    [setNodes, markDirty, recordHistory, laneGrouping, relayLanes]
   );
 
   const setManager = useCallback(
     (personId: string, managerId: string | null) => {
       recordHistory();
-      setEdges((es) => {
-        const without = es.filter(
-          (e) => !(e.data?.kind === 'reports' && e.target === personId)
-        );
-        const next = managerId
-          ? [...without, reportsEdge(managerId, personId)]
-          : without;
-        markDirty(nodes, next);
-        return next;
-      });
+      const without = edgesRef.current.filter(
+        (e) => !(e.data?.kind === 'reports' && e.target === personId)
+      );
+      const next = managerId
+        ? [...without, reportsEdge(managerId, personId)]
+        : without;
+      edgesRef.current = next;
+      setEdges(next);
+      markDirty(nodesRef.current, next);
     },
-    [setEdges, markDirty, nodes, recordHistory]
+    [setEdges, markDirty, recordHistory]
   );
 
   const addInfluence = useCallback(
     (fromId: string, toId: string, label: string) => {
       recordHistory();
-      setEdges((es) => {
-        const next = [
-          ...es,
-          influenceEdge(fromId, toId, label || null),
-        ];
-        markDirty(nodes, next);
-        return next;
-      });
+      const next = [
+        ...edgesRef.current,
+        influenceEdge(fromId, toId, label || null),
+      ];
+      edgesRef.current = next;
+      setEdges(next);
+      markDirty(nodesRef.current, next);
     },
-    [setEdges, markDirty, nodes, recordHistory]
+    [setEdges, markDirty, recordHistory]
   );
 
   // Meeting import: flag matched people as Met (adopting captured titles
@@ -880,41 +888,37 @@ function MapInner() {
           style: { width: 250 },
         };
       });
-      setNodes((ns) => {
-        const next = [
-          ...ns.map((node) => {
-            const capturedTitle = titleById.get(node.id);
-            if (capturedTitle === undefined) return node;
-            const person = node.data.person;
-            const adoptTitle =
-              !!capturedTitle &&
-              (!person.title || person.title.trim().toLowerCase() === 'employee');
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                person: {
-                  ...person,
-                  metWith: true,
-                  ...(adoptTitle ? { title: capturedTitle } : {}),
-                },
+      const next = [
+        ...nodesRef.current.map((node) => {
+          const capturedTitle = titleById.get(node.id);
+          if (capturedTitle === undefined) return node;
+          const person = node.data.person;
+          const adoptTitle =
+            !!capturedTitle &&
+            (!person.title || person.title.trim().toLowerCase() === 'employee');
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              person: {
+                ...person,
+                metWith: true,
+                ...(adoptTitle ? { title: capturedTitle } : {}),
               },
-            };
-          }),
-          ...additions,
-        ];
-        // Imported matches belong in the Met lane under the met split, and
-        // unmatched names land in their lane band rather than a loose row.
-        const positioned =
-          laneGrouping === 'met' || unmatched.length > 0
-            ? relayLanes(next)
-            : next;
-        setEdges((es) => {
-          markDirty(positioned, es);
-          return es;
-        });
-        return positioned;
-      });
+            },
+          };
+        }),
+        ...additions,
+      ];
+      // Imported matches belong in the Met lane under the met split, and
+      // unmatched names land in their lane band rather than a loose row.
+      const positioned =
+        laneGrouping === 'met' || unmatched.length > 0
+          ? relayLanes(next)
+          : next;
+      nodesRef.current = positioned;
+      setNodes(positioned);
+      markDirty(positioned, edgesRef.current);
     },
     [
       markDirty,
@@ -922,7 +926,6 @@ function MapInner() {
       readOnly,
       recordHistory,
       rf,
-      setEdges,
       setNodes,
       laneGrouping,
       relayLanes,
@@ -963,23 +966,19 @@ function MapInner() {
       x: spot.x,
       y: spot.y,
     };
-    setNodes((ns) => {
-      const next = [
-        ...ns,
-        {
-          id: person.id,
-          type: 'person' as const,
-          position: { x: spot.x, y: spot.y },
-          data: { person, readOnly: false },
-          style: { width: 250 },
-        },
-      ];
-      setEdges((es) => {
-        markDirty(next, es);
-        return es;
-      });
-      return next;
-    });
+    const next = [
+      ...nodesRef.current,
+      {
+        id: person.id,
+        type: 'person' as const,
+        position: { x: spot.x, y: spot.y },
+        data: { person, readOnly: false },
+        style: { width: 250 },
+      },
+    ];
+    nodesRef.current = next;
+    setNodes(next);
+    markDirty(next, edgesRef.current);
     setSelectedId(person.id);
     window.setTimeout(() => {
       void rf.setCenter(spot.x + 125, spot.y + 45, {
@@ -987,7 +986,7 @@ function MapInner() {
         duration: 300,
       });
     }, 60);
-  }, [rf, nodes, setNodes, setEdges, markDirty, recordHistory]);
+  }, [rf, nodes, setNodes, markDirty, recordHistory]);
 
   const focusPeople = useCallback(
     (matches: Person[]) => {
@@ -1004,9 +1003,12 @@ function MapInner() {
         return next;
       });
       const ids = new Set(matches.map((person) => person.id));
-      setNodes((items) =>
-        items.map((node) => ({ ...node, selected: ids.has(node.id) }))
-      );
+      const next = nodesRef.current.map((node) => ({
+        ...node,
+        selected: ids.has(node.id),
+      }));
+      nodesRef.current = next;
+      setNodes(next);
       setSelectedId(matches.length === 1 ? matches[0].id : null);
       const matchedNodes = nodes.filter((node) => ids.has(node.id));
       window.setTimeout(
@@ -1025,20 +1027,18 @@ function MapInner() {
   const deletePerson = useCallback(
     (personId: string) => {
       recordHistory();
-      setNodes((ns) => ns.filter((n) => n.id !== personId));
-      setEdges((es) => {
-        const next = es.filter(
-          (e) => e.source !== personId && e.target !== personId
-        );
-        markDirty(
-          nodes.filter((n) => n.id !== personId),
-          next
-        );
-        return next;
-      });
+      const nextNodes = nodesRef.current.filter((n) => n.id !== personId);
+      const nextEdges = edgesRef.current.filter(
+        (e) => e.source !== personId && e.target !== personId
+      );
+      nodesRef.current = nextNodes;
+      edgesRef.current = nextEdges;
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+      markDirty(nextNodes, nextEdges);
       setSelectedId(null);
     },
-    [setNodes, setEdges, markDirty, nodes, recordHistory]
+    [setNodes, setEdges, markDirty, recordHistory]
   );
 
   const autoLayout = useCallback(
@@ -1056,14 +1056,13 @@ function MapInner() {
           : applyLanes(currentPeople, isMobile ? 2 : 4, mode, isMobile ? MOBILE_COL_GAP : LANE_COL_GAP);
       if (mode !== 'hierarchy') setLaneGrouping(mode);
       const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
-      setNodes((ns) => {
-        const next = ns.map((n) => ({
-          ...n,
-          position: pos.get(n.id) ?? n.position,
-        }));
-        markDirty(next, edges);
-        return next;
-      });
+      const next = nodesRef.current.map((n) => ({
+        ...n,
+        position: pos.get(n.id) ?? n.position,
+      }));
+      nodesRef.current = next;
+      setNodes(next);
+      markDirty(next, edgesRef.current);
       window.setTimeout(() => {
         if (mode !== 'hierarchy') anchorTopLeft(laid);
         else rf.fitView({ padding: 0.2 });
@@ -1091,16 +1090,15 @@ function MapInner() {
     recordHistory();
     const y = Math.min(...selectedNodes.map((node) => node.position.y));
     const selectedIds = new Set(selectedNodes.map((node) => node.id));
-    setNodes((items) => {
-      const next = items.map((node) =>
-        selectedIds.has(node.id)
-          ? { ...node, position: { ...node.position, y } }
-          : node
-      );
-      markDirty(next, edges);
-      return next;
-    });
-  }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
+    const next = nodesRef.current.map((node) =>
+      selectedIds.has(node.id)
+        ? { ...node, position: { ...node.position, y } }
+        : node
+    );
+    nodesRef.current = next;
+    setNodes(next);
+    markDirty(next, edgesRef.current);
+  }, [selectedNodes, recordHistory, setNodes, markDirty]);
 
   const distributeHorizontally = useCallback(() => {
     if (selectedNodes.length < 3) return;
@@ -1114,60 +1112,57 @@ function MapInner() {
       ordered.map((node, index) => [node.id, first + step * index])
     );
     recordHistory();
-    setNodes((items) => {
-      const next = items.map((node) => {
-        const x = xById.get(node.id);
-        return x === undefined
-          ? node
-          : { ...node, position: { ...node.position, x } };
-      });
-      markDirty(next, edges);
-      return next;
+    const next = nodesRef.current.map((node) => {
+      const x = xById.get(node.id);
+      return x === undefined
+        ? node
+        : { ...node, position: { ...node.position, x } };
     });
-  }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
+    nodesRef.current = next;
+    setNodes(next);
+    markDirty(next, edgesRef.current);
+  }, [selectedNodes, recordHistory, setNodes, markDirty]);
 
   const groupSelection = useCallback(() => {
     if (selectedNodes.length < 2) return;
     recordHistory();
     const selectedIds = new Set(selectedNodes.map((node) => node.id));
     const groupId = crypto.randomUUID();
-    setNodes((items) => {
-      const next = items.map((node) =>
-        selectedIds.has(node.id)
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                person: { ...node.data.person, groupId },
-              },
-            }
-          : node
-      );
-      markDirty(next, edges);
-      return next;
-    });
-  }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
+    const next = nodesRef.current.map((node) =>
+      selectedIds.has(node.id)
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              person: { ...node.data.person, groupId },
+            },
+          }
+        : node
+    );
+    nodesRef.current = next;
+    setNodes(next);
+    markDirty(next, edgesRef.current);
+  }, [selectedNodes, recordHistory, setNodes, markDirty]);
 
   const ungroupSelection = useCallback(() => {
     if (selectedNodes.length === 0) return;
     recordHistory();
     const selectedIds = new Set(selectedNodes.map((node) => node.id));
-    setNodes((items) => {
-      const next = items.map((node) =>
-        selectedIds.has(node.id)
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                person: { ...node.data.person, groupId: undefined },
-              },
-            }
-          : node
-      );
-      markDirty(next, edges);
-      return next;
-    });
-  }, [selectedNodes, recordHistory, setNodes, markDirty, edges]);
+    const next = nodesRef.current.map((node) =>
+      selectedIds.has(node.id)
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              person: { ...node.data.person, groupId: undefined },
+            },
+          }
+        : node
+    );
+    nodesRef.current = next;
+    setNodes(next);
+    markDirty(next, edgesRef.current);
+  }, [selectedNodes, recordHistory, setNodes, markDirty]);
 
   const semanticGroup = useCallback(
     (
@@ -1228,27 +1223,26 @@ function MapInner() {
         );
         column += 1;
       }
-      setNodes((items) => {
-        const next = items.map((node) => {
-          if (!ids.has(node.id)) return node;
-          const person = node.data.person;
-          const key =
-            (field === 'businessUnit'
-              ? person.department
-              : (person[field] ?? person.department)) ?? 'Unassigned';
-          return {
-            ...node,
-            selected: true,
-            position: positions.get(node.id) ?? node.position,
-            data: {
-              ...node.data,
-              person: { ...person, groupId: groupIds.get(key) },
-            },
-          };
-        });
-        markDirty(next, edges);
-        return next;
+      const next = nodesRef.current.map((node) => {
+        if (!ids.has(node.id)) return node;
+        const person = node.data.person;
+        const key =
+          (field === 'businessUnit'
+            ? person.department
+            : (person[field] ?? person.department)) ?? 'Unassigned';
+        return {
+          ...node,
+          selected: true,
+          position: positions.get(node.id) ?? node.position,
+          data: {
+            ...node.data,
+            person: { ...person, groupId: groupIds.get(key) },
+          },
+        };
       });
+      nodesRef.current = next;
+      setNodes(next);
+      markDirty(next, edgesRef.current);
       setSelectedId(null);
       window.setTimeout(
         () => void rf.fitView({ padding: 0.22, duration: 450 }),
@@ -1262,22 +1256,21 @@ function MapInner() {
   const setRelationshipView = useCallback(
     (view: AgentRelationshipView) => {
       recordHistory();
-      setEdges((items) => {
-        const next = items.map((edge) => ({
-          ...edge,
-          hidden:
-            view === 'all' ? false : (edge.data?.kind ?? 'reports') !== view,
-        }));
-        markDirty(nodes, next);
-        return next;
-      });
+      const next = edgesRef.current.map((edge) => ({
+        ...edge,
+        hidden:
+          view === 'all' ? false : (edge.data?.kind ?? 'reports') !== view,
+      }));
+      edgesRef.current = next;
+      setEdges(next);
+      markDirty(nodesRef.current, next);
       return view === 'all'
         ? 'Showing all relationships.'
         : view === 'reports'
           ? 'Showing reporting relationships only.'
           : 'Showing influence relationships only.';
     },
-    [nodes, recordHistory, setEdges, markDirty]
+    [recordHistory, setEdges, markDirty]
   );
 
   const previewGroup = useCallback(
@@ -1342,21 +1335,19 @@ function MapInner() {
       target: ids.get(edge.target)!,
       selected: false,
     }));
-    setNodes((items) => {
-      const next = [
-        ...items.map((node) => ({ ...node, selected: false })),
-        ...pastedNodes,
-      ];
-      setEdges((itemsEdges) => {
-        const nextEdges = [
-          ...itemsEdges.map((edge) => ({ ...edge, selected: false })),
-          ...pastedEdges,
-        ];
-        markDirty(next, nextEdges);
-        return nextEdges;
-      });
-      return next;
-    });
+    const next = [
+      ...nodesRef.current.map((node) => ({ ...node, selected: false })),
+      ...pastedNodes,
+    ];
+    const nextEdges = [
+      ...edgesRef.current.map((edge) => ({ ...edge, selected: false })),
+      ...pastedEdges,
+    ];
+    nodesRef.current = next;
+    edgesRef.current = nextEdges;
+    setNodes(next);
+    setEdges(nextEdges);
+    markDirty(next, nextEdges);
     clipboard.current = snapshot(pastedNodes, pastedEdges);
   }, [
     readOnly,
@@ -1832,12 +1823,16 @@ function MapInner() {
       a.click();
     } catch {
       setImportNotice('PNG export failed — try again.');
+      window.setTimeout(() => setImportNotice(''), 5_000);
     }
   }, [displayNodes, mapName]);
 
   const saveName = useCallback(() => {
     if (!mapId || readOnly) return;
-    void api.patchMap(mapId, { name: mapName });
+    void api.patchMap(mapId, { name: mapName }).catch(() => {
+      saveStateRef.current = 'dirty';
+      setSaveState('dirty');
+    });
   }, [mapId, mapName, readOnly]);
 
   const importCrmCsv = useCallback(
@@ -1868,135 +1863,136 @@ function MapInner() {
         }
         return '';
       };
-      setNodes((items) => {
-        const next = [...items];
-        const baseX = items.length
-          ? Math.min(...items.map((n) => n.position.x))
-          : center.x;
-        const baseY = items.length
-          ? Math.max(...items.map((n) => n.position.y)) + 240
-          : center.y;
-        for (const row of rows) {
-          const name =
-            pick(
-              row,
-              'name',
-              'fullname',
-              'contactname',
-              'contact',
-              'employeename',
-              'person',
-              'displayname'
-            ) ||
-            [
-              pick(row, 'firstname', 'givenname'),
-              pick(row, 'lastname', 'surname', 'familyname'),
-            ]
-              .filter(Boolean)
-              .join(' ');
-          const email = pick(row, 'email', 'emailaddress', 'mail');
-          if (!name && !email) {
-            skipped += 1;
-            continue;
-          }
-          const title = pick(
+      const items = nodesRef.current;
+      const next = [...items];
+      const baseX = items.length
+        ? Math.min(...items.map((n) => n.position.x))
+        : center.x;
+      const baseY = items.length
+        ? Math.max(...items.map((n) => n.position.y)) + 240
+        : center.y;
+      for (const row of rows) {
+        const name =
+          pick(
             row,
-            'title',
-            'jobtitle',
-            'position',
-            'role',
-            'jobrole',
-            'designation'
-          );
-          const department = pick(
-            row,
-            'department',
-            'dept',
-            'function',
-            'division',
-            'businessunit',
-            'bu'
-          );
-          const team = pick(row, 'team', 'subteam', 'squad');
-          const productLine = pick(row, 'productline', 'product', 'segment');
-          const linkedin = pick(
-            row,
-            'linkedin',
-            'linkedinurl',
-            'linkedinprofile',
-            'profile',
-            'url'
-          );
-          const notes = pick(row, 'notes', 'note', 'comments', 'description');
-          const matchIndex = next.findIndex((node) => {
-            const person = node.data.person;
-            return (
-              (!!email &&
-                !!person.email &&
-                person.email.toLowerCase() === email.toLowerCase()) ||
-              (!!name && person.name.toLowerCase() === name.toLowerCase())
-            );
-          });
-          const enrichment = {
-            ...(title ? { title } : {}),
-            ...(department ? { department } : {}),
-            ...(team ? { team, teamEvidence: 'sourced' as const } : {}),
-            ...(productLine ? { productLine } : {}),
-            ...(email ? { email } : {}),
-            ...(linkedin ? { linkedin } : {}),
-          };
-          if (matchIndex >= 0) {
-            const node = next[matchIndex];
-            const person = node.data.person;
-            next[matchIndex] = {
-              ...node,
-              data: {
-                ...node.data,
-                person: {
-                  ...person,
-                  ...enrichment,
-                  notes: [person.notes, notes].filter(Boolean).join('\n'),
-                  sources: Array.from(new Set([...(person.sources ?? []), 'CRM CSV'])),
-                },
-              },
-            };
-            updated += 1;
-            continue;
-          }
-          const x = baseX + (added % 6) * 300;
-          const y = baseY + Math.floor(added / 6) * 260;
-          const person: Person = {
-            id: crypto.randomUUID(),
-            name: name || email,
-            title: title || 'CRM contact',
-            department: department || null,
-            team: team || null,
-            productLine: productLine || null,
-            teamEvidence: team ? 'sourced' : null,
-            role: 'none',
-            confidence: 'high',
-            sources: ['CRM CSV'],
-            researchStatus: 'verified',
-            notes,
-            email: email || null,
-            linkedin: linkedin || null,
-            x,
-            y,
-          };
-          next.push({
-            id: person.id,
-            type: 'person',
-            position: { x, y },
-            data: { person, readOnly: false },
-            style: { width: 250 },
-          });
-          added += 1;
+            'name',
+            'fullname',
+            'contactname',
+            'contact',
+            'employeename',
+            'person',
+            'displayname'
+          ) ||
+          [
+            pick(row, 'firstname', 'givenname'),
+            pick(row, 'lastname', 'surname', 'familyname'),
+          ]
+            .filter(Boolean)
+            .join(' ');
+        const email = pick(row, 'email', 'emailaddress', 'mail');
+        if (!name && !email) {
+          skipped += 1;
+          continue;
         }
-        const finalNodes =
-          added > 0 || lanesChanged(items, next) ? relayLanes(next) : next;
-        markDirty(finalNodes, edges);
-        return finalNodes;
-      });
+
+        const title = pick(
+          row,
+          'title',
+          'jobtitle',
+          'position',
+          'role',
+          'jobrole',
+          'designation'
+        );
+        const department = pick(
+          row,
+          'department',
+          'dept',
+          'function',
+          'division',
+          'businessunit',
+          'bu'
+        );
+        const team = pick(row, 'team', 'subteam', 'squad');
+        const productLine = pick(row, 'productline', 'product', 'segment');
+        const linkedin = pick(
+          row,
+          'linkedin',
+          'linkedinurl',
+          'linkedinprofile',
+          'profile',
+          'url'
+        );
+        const notes = pick(row, 'notes', 'note', 'comments', 'description');
+        const matchIndex = next.findIndex((node) => {
+          const person = node.data.person;
+          return (
+            (!!email &&
+              !!person.email &&
+              person.email.toLowerCase() === email.toLowerCase()) ||
+            (!!name && person.name.toLowerCase() === name.toLowerCase())
+          );
+        });
+        const enrichment = {
+          ...(title ? { title } : {}),
+          ...(department ? { department } : {}),
+          ...(team ? { team, teamEvidence: 'sourced' as const } : {}),
+          ...(productLine ? { productLine } : {}),
+          ...(email ? { email } : {}),
+          ...(linkedin ? { linkedin } : {}),
+        };
+        if (matchIndex >= 0) {
+          const node = next[matchIndex];
+          const person = node.data.person;
+          next[matchIndex] = {
+            ...node,
+            data: {
+              ...node.data,
+              person: {
+                ...person,
+                ...enrichment,
+                notes: [person.notes, notes].filter(Boolean).join('\n'),
+                sources: Array.from(new Set([...(person.sources ?? []), 'CRM CSV'])),
+              },
+            },
+          };
+          updated += 1;
+          continue;
+        }
+        const x = baseX + (added % 6) * 300;
+        const y = baseY + Math.floor(added / 6) * 260;
+        const person: Person = {
+          id: crypto.randomUUID(),
+          name: name || email,
+          title: title || 'CRM contact',
+          department: department || null,
+          team: team || null,
+          productLine: productLine || null,
+          teamEvidence: team ? 'sourced' : null,
+          role: 'none',
+          confidence: 'high',
+          sources: ['CRM CSV'],
+          researchStatus: 'verified',
+          notes,
+          email: email || null,
+          linkedin: linkedin || null,
+          x,
+          y,
+        };
+        next.push({
+          id: person.id,
+          type: 'person',
+          position: { x, y },
+          data: { person, readOnly: false },
+          style: { width: 250 },
+        });
+        added += 1;
+      }
+      const finalNodes =
+        added > 0 || lanesChanged(items, next) ? relayLanes(next) : next;
+      nodesRef.current = finalNodes;
+      setNodes(finalNodes);
+      markDirty(finalNodes, edgesRef.current);
       setImportNotice(
         updated + added === 0
           ? 'No usable contacts — the CSV needs a Name or Email column.'
@@ -2004,7 +2000,7 @@ function MapInner() {
       );
       window.setTimeout(() => setImportNotice(''), 5_000);
     },
-    [readOnly, recordHistory, rf, setNodes, markDirty, edges, relayLanes, lanesChanged]
+    [readOnly, recordHistory, rf, setNodes, markDirty, relayLanes, lanesChanged]
   );
 
   const mergeResearch = useCallback(
@@ -2241,6 +2237,8 @@ function MapInner() {
         added > 0 || lanesChanged(nodes, nextNodes)
           ? relayLanes(nextNodes)
           : nextNodes;
+      nodesRef.current = finalNodes;
+      edgesRef.current = nextEdges;
       setNodes(finalNodes);
       setEdges(nextEdges);
       markDirty(finalNodes, nextEdges);
@@ -2555,12 +2553,12 @@ function MapInner() {
             setSelectedId(n.id);
             const groupId = n.data.person.groupId;
             if (groupId) {
-              setNodes((items) =>
-                items.map((node) => ({
-                  ...node,
-                  selected: node.data.person.groupId === groupId,
-                }))
-              );
+              const next = nodesRef.current.map((node) => ({
+                ...node,
+                selected: node.data.person.groupId === groupId,
+              }));
+              nodesRef.current = next;
+              setNodes(next);
             }
           }}
           onPaneClick={() => setSelectedId(null)}

@@ -38,10 +38,15 @@ export function mergeBackgroundResearch(
 ): MapState {
   const people = (state.people ?? []).map((person) => ({ ...person }));
   const byName = new Map(
-    people.map((person, index) => [canonicalPersonName(person.name), index])
+    people.map((person, index) => [
+      canonicalPersonName(person.name ?? ''),
+      index,
+    ])
   );
-  const maxY = people.length > 0 ? Math.max(...people.map((person) => person.y)) : 0;
-  const minX = people.length > 0 ? Math.min(...people.map((person) => person.x)) : 0;
+  const maxY =
+    people.length > 0 ? Math.max(...people.map((person) => person.y ?? 0)) : 0;
+  const minX =
+    people.length > 0 ? Math.min(...people.map((person) => person.x ?? 0)) : 0;
   let added = 0;
 
   for (const researched of result.people) {
@@ -124,10 +129,10 @@ export function mergeBackgroundResearch(
     edges: state.edges ?? [],
     meta: {
       ...state.meta,
-      companyName: result.companyName ?? state.meta.companyName,
+      companyName: result.companyName ?? state.meta?.companyName,
       researchedAt: now(),
       provider: result.provider,
-      nextRefreshAt: nextRefreshAt(state.meta.refreshCadence),
+      nextRefreshAt: nextRefreshAt(state.meta?.refreshCadence),
       initiatives:
         result.initiatives.length > 0
           ? result.initiatives

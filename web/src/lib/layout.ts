@@ -8,7 +8,7 @@ const NODE_H = 170;
  * parents centered over children. Handles forests, cycles, and people
  * with no reporting links (they become roots / grid fallback).
  */
-export function layoutPositions(
+function layoutPositions(
   people: Person[],
   edges: MapEdge[]
 ): Map<string, { x: number; y: number }> {
@@ -56,7 +56,7 @@ export function applyLayout(people: Person[], edges: MapEdge[]): Person[] {
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: 0, y: 0 }) }));
 }
 
-export const LANE_COLUMNS = 4;
+const LANE_COLUMNS = 4;
 export const LANE_COL_GAP = 300;
 export const LANE_ROW_GAP = 160;
 const LANE_GAP = 100;
@@ -173,14 +173,14 @@ export function laneSpan(count: number, columns: number): number {
   return Math.min(count, Math.max(1, columns));
 }
 
-export function departmentLanePositions(
+function departmentLanePositions(
   people: Person[],
   columns = LANE_COLUMNS
 ): Map<string, { x: number; y: number }> {
   return lanePositions(people, columns, personLane);
 }
 
-export function applyDepartmentLanes(
+function applyDepartmentLanes(
   people: Person[],
   columns = LANE_COLUMNS
 ): Person[] {
@@ -300,7 +300,7 @@ export function seniorityRank(person: Person): number {
  * Draft a plausible reporting hierarchy for people with no known managers.
  * Acyclic by construction: parents are always strictly more senior or the root.
  */
-export function inferEdges(
+function inferEdges(
   people: Person[],
   parentless: Set<string> | null = null
 ): MapEdge[] {

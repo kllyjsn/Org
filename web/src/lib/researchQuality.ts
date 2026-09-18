@@ -29,7 +29,7 @@ const MULTI_PART_SUFFIXES = new Set([
  * ir.hubspot.com vs hubspot.com) count as a single corroborating source.
  * Mirrors the server's sourceDomain in api/_src/research.ts.
  */
-export function sourceRegistrableDomain(url: string): string {
+function sourceRegistrableDomain(url: string): string {
   try {
     const hostname = new URL(url).hostname
       .replace(/^www\./, '')

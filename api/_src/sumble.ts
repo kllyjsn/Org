@@ -408,7 +408,7 @@ export async function sumbleOrgPeople(
       {
         filter: { organization_ids: [orgId] },
         select: {
-          attributes: ['breadcrumbs'],
+          attributes: ['name', 'breadcrumbs'],
           related_people: {
             attributes: ['name', 'job_title'],
             max_per_team: 10,

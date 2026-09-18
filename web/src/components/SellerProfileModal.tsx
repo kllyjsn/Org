@@ -231,6 +231,12 @@ export default function SellerProfileModal({
           <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur sm:flex-row sm:justify-between sm:px-7">
             <button
               onClick={() => {
+                if (
+                  !window.confirm(
+                    'Research another company? Unsaved edits to this profile will be discarded.'
+                  )
+                )
+                  return;
                 setProfile(null);
                 setDomain(profile.domain);
               }}

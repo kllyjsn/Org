@@ -436,14 +436,14 @@ export default function PersonPanel({
           </span>
           <input
             className={field}
-            value={person.name}
+            value={person.name ?? ''}
             onChange={(e) => set({ name: e.target.value })}
             placeholder="Name"
             disabled={readOnly}
           />
           <input
             className={field}
-            value={person.title}
+            value={person.title ?? ''}
             onChange={(e) => set({ title: e.target.value })}
             placeholder="Title"
             disabled={readOnly}
@@ -496,7 +496,7 @@ export default function PersonPanel({
           </label>
           <select
             className={field}
-            value={person.role}
+            value={person.role ?? 'none'}
             onChange={(e) => set({ role: e.target.value as BuyingRole })}
             disabled={readOnly}
           >
@@ -563,7 +563,7 @@ export default function PersonPanel({
           </label>
           <textarea
             className={`${field} min-h-[80px] resize-y`}
-            value={person.notes}
+            value={person.notes ?? ''}
             onChange={(e) => set({ notes: e.target.value })}
             placeholder="Met at SKO — cares about SOC 2…"
             disabled={readOnly}
@@ -659,7 +659,8 @@ export default function PersonPanel({
               />
               <button
                 type="submit"
-                className="rounded-lg bg-slate-800 px-3 text-xs font-medium text-white"
+                disabled={posting}
+                className="rounded-lg bg-slate-800 px-3 text-xs font-medium text-white disabled:opacity-50"
               >
                 Post
               </button>
