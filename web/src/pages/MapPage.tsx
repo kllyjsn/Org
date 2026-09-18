@@ -119,6 +119,7 @@ import type {
   AccountStrategyPlan,
   BriefingAction,
   BuyingRole,
+  LoadedMap,
   MapEdge,
   MapPresence,
   MapState,
@@ -549,8 +550,7 @@ function MapInner() {
   }, [mapId, readOnly]);
 
   const handleRosterMapUpdated = useCallback(
-    async (updatedMap: import('../types').LoadedMap) => {
-      await flushPendingPersist();
+    (updatedMap: LoadedMap) => {
       const flow = toFlow(updatedMap.state, readOnly);
       setMapName(updatedMap.name);
       setDomain(updatedMap.domain);
@@ -565,7 +565,7 @@ function MapInner() {
       saveStateRef.current = 'saved';
       remoteUpdatedAt.current = updatedMap.updated_at;
     },
-    [flushPendingPersist, readOnly, setEdges, setNodes]
+    [readOnly, setEdges, setNodes]
   );
 
   const updateStrategyPlan = useCallback(
@@ -2928,7 +2928,7 @@ function MapInner() {
               domain={domain}
               readOnly={readOnly}
               onClose={() => setShowRoster(false)}
-              onMapUpdated={(updatedMap) => void handleRosterMapUpdated(updatedMap)}
+              onMapUpdated={handleRosterMapUpdated}
               onCountsChange={setRosterCounts}
               beforeAdd={flushPendingPersist}
             />
