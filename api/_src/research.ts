@@ -1,7 +1,7 @@
-import { chat, activeProvider, type Provider } from './llm.js';
-import { exaPeopleContext } from './exa.js';
-import { canonicalDepartment, sumbleOrgPeople } from './sumble.js';
+import type { Provider } from './llm.js';
+import { canonicalDepartment } from './sumble.js';
 import type { Confidence, ResearchSource, SellerProfile } from './types.js';
+import { initialCheckpoint, partialResult, runToCompletion } from './research-pipeline.js';
 
 export interface ResearchedPerson {
   name: string;
@@ -35,7 +35,11 @@ export interface ResearchResult {
   initiatives: StrategicInitiative[];
   /** Stored map source URLs the server verified as dead (404/410). */
   deadSources?: string[];
+  complete: boolean;
 }
+
+export const DOMAIN_RE =
+  /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63})+$/i;
 
 export interface StrategicInitiative {
   name: string;
@@ -48,10 +52,10 @@ export interface StrategicInitiative {
   salesAngles: string[];
 }
 
-const SYSTEM_PROMPT = `You are an analyst mapping the organizational structure of companies.
+export const SYSTEM_PROMPT = `You are an analyst mapping the organizational structure of companies.
 You answer only with strict JSON. No markdown, no prose, no footnotes.`;
 
-function researchPrompt(
+export function researchPrompt(
   domain: string,
   focus: string,
   discoveryContext = ''
@@ -133,7 +137,7 @@ labeling hypotheses and never fabricating fit:
 - Positioning: ${profile.positioning || profile.summary || 'unknown'}`;
 }
 
-function initiativesPrompt(
+export function initiativesPrompt(
   domain: string,
   sellerProfile?: SellerProfile | null
 ): string {
@@ -255,6 +259,18 @@ const CORE_FUNCTIONS = [
   'security',
   'customer success',
 ];
+
+export const FOCUSES = [
+  'executive leadership and company-wide reporting structure',
+  'engineering, platform, infrastructure, and security — including ' +
+    'engineering managers, team leads, and named staff or principal engineers',
+  'product, design, data, research, and AI/ML — including product ' +
+    'managers, designers, and named technical leads',
+  'sales, marketing, customer success, partnerships, and revenue ' +
+    'operations — including directors, managers, and named team leads',
+  'finance, legal, people, recruiting, support, and business operations ' +
+    '— including managers and named program owners',
+] as const;
 
 const SOURCE_TYPES: ResearchSource['sourceType'][] = [
   'official',
@@ -933,7 +949,7 @@ export function normalizePeople(
   return Array.from(people.values());
 }
 
-function missingFunctions(people: ResearchedPerson[]): string[] {
+export function missingFunctions(people: ResearchedPerson[]): string[] {
   const haystack = people
     .flatMap((person) => [
       person.department,
@@ -947,7 +963,7 @@ function missingFunctions(people: ResearchedPerson[]): string[] {
   return CORE_FUNCTIONS.filter((name) => !haystack.includes(name));
 }
 
-function normalizeInitiatives(
+export function normalizeInitiatives(
   raw: unknown,
   nowMs = Date.now()
 ): StrategicInitiative[] {
@@ -992,7 +1008,7 @@ function normalizeInitiatives(
 }
 
 /** Clearly-labeled demo chart so the product is usable with no LLM key. */
-function fixtureOrg(domain: string): ResearchResult {
+export function fixtureOrg(domain: string): ResearchResult {
   const fixtures: [string, string, string, string | null][] = [
     ['Alex Morgan', 'Chief Executive Officer', 'Executive', null],
     ['Sam Chen', 'Chief Revenue Officer', 'Sales', 'Alex Morgan'],
@@ -1031,7 +1047,14 @@ function fixtureOrg(domain: string): ResearchResult {
     tier: 'T0',
     demo: true,
     initiatives: [],
+    complete: true,
   };
+}
+
+export function peopleCapFor(
+  sumble: { total: number } | null
+): number {
+  return Math.min(600, Math.max(240, Math.ceil((sumble?.total ?? 0) * 1.3)));
 }
 
 export async function researchOrg(
@@ -1039,184 +1062,13 @@ export async function researchOrg(
   requestedFocus?: string,
   sellerProfile?: SellerProfile | null
 ): Promise<ResearchResult> {
-  const provider = activeProvider();
-  if (provider === 'fixture') return fixtureOrg(domain);
-
-  // Hard budget for the whole pipeline so the work finishes inside the
-  // serverless function limit; every provider attempt and post-processing
-  // phase honors this cutoff.
-  const deadlineMs = Date.now() + 52_000;
-
-  try {
-    const discoveryPromise = exaPeopleContext(domain, requestedFocus).catch(
-      () => ''
-    );
-    // Sumble's structured org data runs alongside the LLM passes: canonical
-    // job functions, team memberships, and LinkedIn URLs at commercial-data
-    // depth. Best-effort — absent key or timeout just means LLM-only results.
-    const sumblePromise = requestedFocus
-      ? Promise.resolve(null)
-      : sumbleOrgPeople(
-          domain,
-          Math.min(deadlineMs, Date.now() + 30_000)
-        ).catch(() => null);
-    const initiativesPromise: Promise<StrategicInitiative[]> = requestedFocus
-      ? Promise.resolve([])
-      : (async () => {
-          const messages = [
-            { role: 'system' as const, content: SYSTEM_PROMPT },
-            {
-              role: 'user' as const,
-              content: initiativesPrompt(domain, sellerProfile),
-            },
-          ];
-          try {
-            const result = await chat(messages, {
-              webSearch: true,
-              maxTokens: 4000,
-              deadlineMs: Math.min(deadlineMs, Date.now() + 32_000),
-            });
-            const parsed = extractJson(result.content) as {
-              initiatives?: unknown;
-            };
-            const initiatives = normalizeInitiatives(parsed.initiatives);
-            if (initiatives.length > 0) return initiatives;
-          } catch {
-            // Retry below without grounding while the people passes continue.
-          }
-          if (deadlineMs - Date.now() < 4_000) return [];
-          const fallback = await chat(messages, {
-            json: true,
-            maxTokens: 4000,
-            deadlineMs,
-          });
-          const parsed = extractJson(fallback.content) as {
-            initiatives?: unknown;
-          };
-          return normalizeInitiatives(parsed.initiatives);
-        })().catch(() => []);
-    const focuses = requestedFocus
-      ? [
-          `targeted enrichment for: ${requestedFocus}. Find the named person or ` +
-            'team first, then include closely related leaders and reporting lines ' +
-            'only when public evidence supports them.',
-        ]
-      : [
-          'executive leadership and company-wide reporting structure',
-          'engineering, platform, infrastructure, and security — including ' +
-            'engineering managers, team leads, and named staff or principal engineers',
-          'product, design, data, research, and AI/ML — including product ' +
-            'managers, designers, and named technical leads',
-          'sales, marketing, customer success, partnerships, and revenue ' +
-            'operations — including directors, managers, and named team leads',
-          'finance, legal, people, recruiting, support, and business operations ' +
-            '— including managers and named program owners',
-        ];
-    const discoveryContext = await discoveryPromise;
-    const passes = await Promise.allSettled(
-      focuses.map(async (focus) => {
-        const result = await chat([
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: researchPrompt(domain, focus, discoveryContext),
-          },
-        ], { webSearch: true, maxTokens: 8_000, deadlineMs });
-        const parsed = extractJson(result.content) as {
-          companyName?: unknown;
-          people?: unknown;
-        };
-        return { parsed, provider: result.provider };
-      })
-    );
-    for (const pass of passes) {
-      if (pass.status === 'rejected') {
-        console.warn(
-          `[research] pass failed: ${String(pass.reason).slice(0, 200)}`
-        );
-      }
-    }
-    const successful = passes.flatMap((pass) =>
-      pass.status === 'fulfilled' ? [pass.value] : []
-    );
-    if (successful.length === 0) {
-      throw new Error('All company research passes failed');
-    }
-    const sumble = await sumblePromise;
-    // Scale the cap to company size — Sumble reports the org's real headcount,
-    // so a 6,700-person company gets depth headroom while a small one doesn't
-    // inflate. 600 ceiling; 240 floor for when Sumble isn't available.
-    const peopleCap = Math.min(
-      600,
-      Math.max(240, Math.ceil((sumble?.total ?? 0) * 1.3))
-    );
-    let people = normalizePeople(
-      [
-        ...successful.flatMap((pass) =>
-          Array.isArray(pass.parsed.people) ? pass.parsed.people : []
-        ),
-        ...(sumble?.people ?? []),
-      ],
-      peopleCap
-    );
-    const missing = requestedFocus ? [] : missingFunctions(people);
-    if (missing.length > 0 && deadlineMs - Date.now() > 15_000) {
-      try {
-        const followUp = await chat([
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: researchPrompt(
-              domain,
-              `missing or underrepresented functions: ${missing.join(', ')}. ` +
-              'Return only people you can verify; some functions may not exist.',
-              discoveryContext
-            ),
-          },
-        ], { webSearch: true, maxTokens: 4000, deadlineMs });
-        const parsedFollowUp = extractJson(followUp.content) as {
-          people?: unknown;
-        };
-        // Same cap — the default limit here would otherwise truncate the
-        // whole merged map back to 60 people.
-        people = normalizePeople(
-          [
-            ...people,
-            ...(Array.isArray(parsedFollowUp.people)
-              ? parsedFollowUp.people
-              : []),
-          ],
-          peopleCap
-        );
-      } catch {
-        // The broad passes still provide a useful result if a follow-up times out.
-      }
-    }
-    const companyName =
-      successful.find(
-        (pass) => typeof pass.parsed.companyName === 'string'
-      )?.parsed.companyName ?? sumble?.companyName;
-    const initiatives = await initiativesPromise;
-    // Resolve redirects/dead links first, then reserve a bounded pass to verify
-    // that each surviving citation actually supports the claimed title.
-    await resolveSourceUrls(people, initiatives, deadlineMs - 7_000);
-    await verifyTitleClaims(people, deadlineMs - 2_500);
-    return {
-      companyName:
-        typeof companyName === 'string'
-          ? stripFootnotes(companyName)
-          : null,
+  const checkpoint = await runToCompletion(
+    initialCheckpoint({
       domain,
-      people,
-      provider: successful[0].provider,
-      tier: 'T0',
-      demo: false,
-      initiatives,
-    };
-  } catch (err) {
-    // No keys configured at all → clearly-labeled demo chart.
-    if (err instanceof Error && err.message === 'No LLM provider key configured')
-      return fixtureOrg(domain);
-    throw err;
-  }
+      focus: requestedFocus,
+      sellerProfile,
+    }),
+    { deadlineMs: Date.now() + 52_000 }
+  );
+  return partialResult(checkpoint);
 }
