@@ -89,6 +89,8 @@ function MembersModal({
     setError(null);
     try {
       await api.revokeInvite(workspaceId, inviteId);
+      setNotice(null);
+      setInviteLink(null);
       void refresh();
     } catch (err) {
       setError(
