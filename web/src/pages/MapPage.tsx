@@ -735,6 +735,19 @@ function MapInner() {
     [isMobile, laneGrouping]
   );
 
+  const lanesChanged = useCallback(
+    (before: Node<PersonNodeData>[], after: Node<PersonNodeData>[]) => {
+      const prev = new Map(
+        before.map((n) => [n.id, laneKey(n.data.person, laneGrouping)])
+      );
+      return after.some((n) => {
+        const was = prev.get(n.id);
+        return was !== undefined && was !== laneKey(n.data.person, laneGrouping);
+      });
+    },
+    [laneGrouping]
+  );
+
   const updatePerson = useCallback(
     (updated: Person) => {
       if (!editTimer.current) recordHistory();
@@ -1967,7 +1980,8 @@ function MapInner() {
           });
           added += 1;
         }
-        const finalNodes = added > 0 ? relayLanes(next) : next;
+        const finalNodes =
+          added > 0 || lanesChanged(items, next) ? relayLanes(next) : next;
         markDirty(finalNodes, edges);
         return finalNodes;
       });
@@ -1978,7 +1992,7 @@ function MapInner() {
       );
       window.setTimeout(() => setImportNotice(''), 5_000);
     },
-    [readOnly, recordHistory, rf, setNodes, markDirty, edges, relayLanes]
+    [readOnly, recordHistory, rf, setNodes, markDirty, edges, relayLanes, lanesChanged]
   );
 
   const mergeResearch = useCallback(
@@ -2211,7 +2225,10 @@ function MapInner() {
       }
       metaRef.current = nextMeta;
       setMeta(nextMeta);
-      const finalNodes = added > 0 ? relayLanes(nextNodes) : nextNodes;
+      const finalNodes =
+        added > 0 || lanesChanged(nodes, nextNodes)
+          ? relayLanes(nextNodes)
+          : nextNodes;
       setNodes(finalNodes);
       setEdges(nextEdges);
       markDirty(finalNodes, nextEdges);
@@ -2235,6 +2252,7 @@ function MapInner() {
       readOnly,
       recordHistory,
       relayLanes,
+      lanesChanged,
       rf,
       setEdges,
       setNodes,
