@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -12,6 +12,7 @@ import {
   personProductFit,
   sellerBuyingFunctionLabel,
 } from '../lib/accountFit';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type {
   MapEdge,
   Person,
@@ -169,6 +170,8 @@ export default function AccountStrategyModal({
   onFocusPerson: (person: Person) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
   const strategy = useMemo(() => {
     const start = [...people].sort(
       (a, b) =>
@@ -250,14 +253,23 @@ export default function AccountStrategyModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-4xl sm:rounded-3xl sm:p-7">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-strategy-modal-title"
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-4xl sm:rounded-3xl sm:p-7"
+      >
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
               <Sparkles size={13} />
               Evidence into action
             </div>
-            <h2 className="text-3xl font-semibold tracking-[-0.045em] text-slate-950">
+            <h2
+              id="account-strategy-modal-title"
+              className="text-3xl font-semibold tracking-[-0.045em] text-slate-950"
+            >
               Account strategy
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
