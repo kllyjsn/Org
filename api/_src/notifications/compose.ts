@@ -130,7 +130,9 @@ export function composePreMeetingBrief(
   }
 
   return {
-    title: `Brief: ${meeting.subject ?? 'Meeting'} in ${minutes} min`,
+    title: `Brief: ${meeting.subject ?? 'Meeting'} ${
+      minutes >= 90 ? `in ${Math.round(minutes / 60)} h` : `in ${minutes} min`
+    }`,
     lines,
     ctaLabel: 'Open map',
     ctaUrl: `${appUrl}/app/maps/${map.id}`,
