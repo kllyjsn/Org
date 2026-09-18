@@ -2413,8 +2413,8 @@ function MapInner() {
           icon={<Users size={16} />}
           label={
             rosterCounts === null
-              ? 'Suggested contacts'
-              : `Suggested contacts (${rosterCounts.suggested})`
+              ? 'Suggested'
+              : `Suggested (${rosterCounts.suggested})`
           }
           active={showRoster}
           onClick={() => {

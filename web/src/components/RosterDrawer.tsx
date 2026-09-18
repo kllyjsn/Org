@@ -66,11 +66,65 @@ const FUNCTIONS: RosterFn[] = [
   'other',
 ];
 
-function humanize(value: string): string {
-  return value
-    .split('_')
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(' ');
+const SENIORITY_LABELS: Record<RosterSeniority, string> = {
+  c_level: 'C-level',
+  evp_svp: 'EVP/SVP',
+  vp: 'VP',
+  director: 'Director',
+  manager: 'Manager',
+  lead: 'Lead',
+  ic: 'IC',
+  unknown: 'Unknown',
+};
+
+const FUNCTION_LABELS: Record<RosterFn, string> = {
+  executive: 'Executive',
+  engineering: 'Engineering',
+  product: 'Product',
+  design: 'Design',
+  data: 'Data',
+  security: 'Security',
+  it: 'IT',
+  sales: 'Sales',
+  marketing: 'Marketing',
+  customer_success: 'Customer success',
+  support: 'Support',
+  finance: 'Finance',
+  legal: 'Legal',
+  people: 'People',
+  operations: 'Operations',
+  other: 'Other',
+};
+
+const PROVIDER_LABELS: Record<string, string> = {
+  sumble: 'Sumble',
+  crustdata: 'Crustdata',
+};
+
+const SOURCE_LABELS: Record<RosterPerson['source'], string> = {
+  sumble: 'Sumble',
+  crustdata: 'Crustdata',
+  csv: 'CSV',
+  linkedin_url: 'LinkedIn URL',
+  research: 'Research',
+};
+
+const STATUS_LABELS: Record<
+  RosterSyncJob['events'][number]['status'],
+  string
+> = {
+  skipped: 'Skipped',
+  fetching: 'Fetching',
+  done: 'Done',
+  failed: 'Failed',
+};
+
+function labelForFunction(value: RosterFn): string {
+  return FUNCTION_LABELS[value];
+}
+
+function labelForSeniority(value: RosterSeniority): string {
+  return SENIORITY_LABELS[value];
 }
 
 function SourceIcon({ source }: { source: RosterPerson['source'] }) {
@@ -337,13 +391,15 @@ export default function RosterDrawer({
                   event.status === 'failed' ? 'text-red-600' : 'text-slate-600'
                 }`}
               >
-                <span className="font-semibold">{humanize(event.provider)}</span>
+                <span className="font-semibold">
+                  {PROVIDER_LABELS[event.provider] ?? event.provider}
+                </span>
                 <span className="text-right">
                   {event.status === 'fetching'
                     ? `fetching… ${event.fetched ?? 0} people`
                     : event.status === 'done'
                       ? `${event.fetched ?? 0} people (${event.upserted ?? 0} new/updated)`
-                      : event.message ?? humanize(event.status)}
+                      : event.message ?? STATUS_LABELS[event.status]}
                 </span>
               </div>
             ))}
@@ -372,7 +428,12 @@ export default function RosterDrawer({
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              {humanize(value)} ({counts[value]})
+              {value === 'suggested'
+                ? 'Suggested'
+                : value === 'added'
+                  ? 'Added'
+                  : 'Dismissed'}{' '}
+              ({counts[value]})
             </button>
           ))}
         </div>
@@ -401,7 +462,7 @@ export default function RosterDrawer({
                     : 'border-slate-200 bg-white text-slate-600'
                 }`}
               >
-                {humanize(value)} {response?.byFunction[value]}
+                {labelForFunction(value)} {response?.byFunction[value]}
               </button>
             ))}
           </div>
@@ -417,7 +478,7 @@ export default function RosterDrawer({
                     : 'border-slate-200 bg-white text-slate-600'
                 }`}
               >
-                {humanize(value)} {response?.bySeniority[value]}
+                {labelForSeniority(value)} {response?.bySeniority[value]}
               </button>
             ))}
           </div>
@@ -457,11 +518,11 @@ export default function RosterDrawer({
                   </div>
                   {person.seniority && (
                     <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
-                      {humanize(person.seniority)}
+                      {labelForSeniority(person.seniority)}
                     </span>
                   )}
                   <span
-                    title={humanize(person.source)}
+                    title={SOURCE_LABELS[person.source]}
                     className="shrink-0 text-slate-400"
                   >
                     <SourceIcon source={person.source} />
@@ -497,7 +558,9 @@ export default function RosterDrawer({
             </p>
             <p className="mt-2">
               {response?.providers.length
-                ? `Configured: ${response.providers.map(humanize).join(', ')}`
+                ? `Configured: ${response.providers
+                    .map((provider) => PROVIDER_LABELS[provider] ?? provider)
+                    .join(', ')}`
                 : 'No providers configured — set SUMBLE_API_KEY or CRUSTDATA_API_KEY, or import a CSV / LinkedIn URLs below'}
             </p>
           </div>

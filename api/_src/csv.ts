@@ -5,6 +5,7 @@ export interface ImportedRow {
   email: string | null;
   location: string | null;
   company: string | null;
+  manager: string | null;
 }
 
 function parseCsv(text: string): Record<string, string>[] {
@@ -75,6 +76,13 @@ export function rowsFromCsv(csv: string): ImportedRow[] {
         'companyname',
         'accountname',
       ]),
+      manager: value(row, [
+        'manager',
+        'managername',
+        'reportsto',
+        'reportstoname',
+        'supervisor',
+      ]),
     };
   }).filter((row) => !!row.name).slice(0, 2000);
 }
@@ -115,6 +123,7 @@ export function rowsFromLinkedinUrls(urls: string[]): ImportedRow[] {
       email: null,
       location: null,
       company: null,
+      manager: null,
     }];
   }).slice(0, 2000);
 }

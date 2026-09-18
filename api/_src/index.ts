@@ -1407,7 +1407,9 @@ app.post('/api/maps/:id/roster/import', requireAuth, async (c) => {
       location: row.location,
       linkedin: row.linkedin,
       email: row.email,
-      managerKey: null,
+      managerKey: row.manager
+        ? canonicalPersonName(row.manager)
+        : null,
       source: row.source,
       confidence: row.confidence,
       sourceUrl: row.linkedin,
