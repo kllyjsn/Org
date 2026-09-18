@@ -360,11 +360,18 @@ export default function AccountStrategyModal({
                 <button
                   onClick={() => {
                     const url = URL.createObjectURL(
-                      new Blob([brief], { type: 'text/markdown' })
+                      new Blob([brief], {
+                        type:
+                          format === 'markdown'
+                            ? 'text/markdown'
+                            : 'text/plain',
+                      })
                     );
                     const link = document.createElement('a');
                     link.href = url;
-                    link.download = `${domain}-account-strategy.md`;
+                    link.download = `${domain}-account-strategy.${
+                      format === 'markdown' ? 'md' : 'txt'
+                    }`;
                     link.click();
                     URL.revokeObjectURL(url);
                   }}
