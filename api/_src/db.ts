@@ -85,6 +85,13 @@ CREATE TABLE IF NOT EXISTS account_briefings (
   briefing JSONB NOT NULL,
   generated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS account_strategies (
+  map_id TEXT PRIMARY KEY REFERENCES maps(id) ON DELETE CASCADE,
+  map_updated_at TEXT NOT NULL,
+  seller_profile JSONB,
+  insights JSONB NOT NULL,
+  generated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS map_presence (
   map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

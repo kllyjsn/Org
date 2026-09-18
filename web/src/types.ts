@@ -75,6 +75,32 @@ export interface MapMeta {
   refreshCadence?: 'weekly' | 'monthly' | 'manual';
   nextRefreshAt?: string | null;
   initiatives?: StrategicInitiative[];
+  strategy?: AccountStrategyPlan;
+}
+
+export type Stance = 'advocate' | 'neutral' | 'skeptic' | 'unknown';
+
+export interface StakeholderPlanEntry {
+  stance: Stance;
+  nextStep: string;
+  note: string;
+}
+
+export interface StrategyTask {
+  id: string;
+  title: string;
+  done: boolean;
+  personId?: string;
+  source: 'generated' | 'manual';
+  createdAt: string;
+}
+
+export interface AccountStrategyPlan {
+  entryPersonId?: string | null;
+  targetPersonId?: string | null;
+  stakeholders: Record<string, StakeholderPlanEntry>;
+  tasks: StrategyTask[];
+  updatedAt: string;
 }
 
 export interface StrategicInitiative {
@@ -289,6 +315,33 @@ export interface AccountValueCase {
   researchGaps: string[];
 }
 
+export interface StrategyInsights {
+  generatedAt: string;
+  provider: string;
+  researchDepth: 'live' | 'map_only';
+  executiveSummary: string;
+  winThemes: BriefingInsight[];
+  landingPlays: {
+    title: string;
+    rationale: string;
+    personIds: string[];
+    provenance: 'sourced' | 'hypothesis';
+    evidence: string[];
+  }[];
+  stakeholderQuestions: {
+    personId?: string;
+    personName: string;
+    questions: string[];
+  }[];
+  competitiveWatch: BriefingInsight[];
+  mutualActionPlan: {
+    milestone: string;
+    owner: 'seller' | 'buyer' | 'joint';
+    timing: string;
+  }[];
+  researchGaps: string[];
+}
+
 export interface AccountAgentMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -330,6 +383,7 @@ export type ProductEventName =
   | 'source_opened'
   | 'briefing_opened'
   | 'briefing_action_selected'
+  | 'strategy_opened'
   | 'deep_research_completed';
 
 export interface ProductValueSummary {

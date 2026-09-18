@@ -7,6 +7,7 @@ export type ProductEventName =
   | 'map_refined'
   | 'source_opened'
   | 'briefing_opened'
+  | 'strategy_opened'
   | 'briefing_action_selected'
   | 'account_agent_used'
   | 'deep_research_completed'
@@ -41,6 +42,7 @@ const CLIENT_EVENTS = new Set<ProductEventName>([
   'map_viewed',
   'source_opened',
   'briefing_opened',
+  'strategy_opened',
   'briefing_action_selected',
   'deep_research_completed',
 ]);
@@ -130,7 +132,7 @@ export function sanitizeClientEvent(
       ? (input as Record<string, unknown>)
       : {};
 
-  if (name === 'map_viewed' || name === 'briefing_opened') {
+  if (name === 'map_viewed' || name === 'briefing_opened' || name === 'strategy_opened') {
     return {
       eventName: name,
       properties: {

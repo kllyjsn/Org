@@ -1,428 +1,937 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Check,
   Copy,
-  Route,
-  ShieldQuestion,
+  Download,
+  ExternalLink,
+  Loader2,
+  Plus,
   Sparkles,
-  Target,
+  Trash2,
+  X,
 } from 'lucide-react';
-import {
-  personProductFit,
-  sellerBuyingFunctionLabel,
-} from '../lib/accountFit';
+import { api } from '../api';
+import { computeStrategy, renderBrief } from '../lib/accountStrategy';
+import type { StrategyOutput } from '../lib/accountStrategy';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import type {
+  AccountStrategyPlan,
   MapEdge,
   Person,
   SellerProfile,
+  Stance,
   StrategicInitiative,
+  StrategyInsights,
+  StrategyTask,
 } from '../types';
 
-const ROLE_PRIORITY: Record<Person['role'], number> = {
-  champion: 100,
-  influencer: 75,
-  technical_buyer: 65,
-  decision_maker: 55,
-  economic_buyer: 50,
-  blocker: 10,
-  none: 0,
-};
+type Tab = 'Overview' | 'Routes' | 'Stakeholders' | 'Plays' | 'Brief';
+const tabs: Tab[] = ['Overview', 'Routes', 'Stakeholders', 'Plays', 'Brief'];
+const stances: Stance[] = ['advocate', 'neutral', 'skeptic', 'unknown'];
+const changed = (
+  plan: AccountStrategyPlan,
+  patch: Partial<AccountStrategyPlan>
+): AccountStrategyPlan => ({
+  ...plan,
+  ...patch,
+  updatedAt: new Date().toISOString(),
+});
 
-const TARGET_PRIORITY: Record<Person['role'], number> = {
-  economic_buyer: 100,
-  decision_maker: 90,
-  technical_buyer: 70,
-  champion: 40,
-  influencer: 30,
-  blocker: 10,
-  none: 0,
-};
-
-function personScore(
-  person: Person,
-  priorities: Record<Person['role'], number>,
-  sellerProfile: SellerProfile | null
-) {
-  const executive = /\b(chief|ceo|cto|cio|cfo|coo|president|vp|vice president|head)\b/i.test(
-    person.title
-  )
-    ? 18
-    : 0;
-  return (
-    priorities[person.role ?? 'none'] +
-    personProductFit(person, sellerProfile) +
-    executive +
-    Math.min((person.sources ?? []).length, 5) * 2 +
-    (person.confidence === 'high' ? 8 : person.confidence === 'medium' ? 4 : 0)
-  );
-}
-
-function strongestPath(
-  people: Person[],
-  edges: MapEdge[],
-  startId: string,
-  targetId: string
-): { people: Person[]; inferredHops: number } {
-  if (startId === targetId) {
-    return {
-      people: people.filter((person) => person.id === startId),
-      inferredHops: 0,
-    };
-  }
-  const byId = new Map(people.map((person) => [person.id, person]));
-  const adjacency = new Map<string, { id: string; cost: number }[]>();
-  for (const edge of edges) {
-    if (!byId.has(edge.from) || !byId.has(edge.to)) continue;
-    const cost =
-      edge.kind === 'influence' ? 1 : edge.inferred ? 2.2 : 1.4;
-    adjacency.set(edge.from, [
-      ...(adjacency.get(edge.from) ?? []),
-      { id: edge.to, cost },
-    ]);
-    adjacency.set(edge.to, [
-      ...(adjacency.get(edge.to) ?? []),
-      { id: edge.from, cost },
-    ]);
-  }
-
-  const distances = new Map<string, number>([[startId, 0]]);
-  const previous = new Map<string, string>();
-  const remaining = new Set(people.map((person) => person.id));
-  while (remaining.size > 0) {
-    const current = [...remaining].sort(
-      (a, b) =>
-        (distances.get(a) ?? Number.POSITIVE_INFINITY) -
-        (distances.get(b) ?? Number.POSITIVE_INFINITY)
-    )[0];
-    if (!current || !Number.isFinite(distances.get(current) ?? Infinity)) break;
-    remaining.delete(current);
-    if (current === targetId) break;
-    for (const next of adjacency.get(current) ?? []) {
-      const distance = (distances.get(current) ?? 0) + next.cost;
-      if (distance < (distances.get(next.id) ?? Number.POSITIVE_INFINITY)) {
-        distances.set(next.id, distance);
-        previous.set(next.id, current);
-      }
-    }
-  }
-  if (!previous.has(targetId)) return { people: [], inferredHops: 0 };
-  const ids = [targetId];
-  while (ids[0] !== startId) ids.unshift(previous.get(ids[0])!);
-  const inferredHops = ids.slice(1).filter((id, index) => {
-    const prior = ids[index];
-    return edges.find(
-      (edge) =>
-        ((edge.from === prior && edge.to === id) ||
-          (edge.from === id && edge.to === prior)) &&
-        edge.inferred
-    );
-  }).length;
-  return {
-    people: ids
-      .map((id) => byId.get(id))
-      .filter((person): person is Person => !!person),
-    inferredHops,
-  };
-}
-
-function objectionHypotheses(
-  target: Person | undefined,
-  initiatives: StrategicInitiative[]
-): string[] {
-  const hypotheses = new Set<string>();
-  if (target?.role === 'technical_buyer') {
-    hypotheses.add('Security, integration effort, and architecture fit');
-  }
-  if (target?.role === 'economic_buyer' || /\b(chief|vp|president)\b/i.test(target?.title ?? '')) {
-    hypotheses.add('Time to value, measurable return, and budget priority');
-  }
-  if (initiatives.some((initiative) => initiative.category === 'operations')) {
-    hypotheses.add('Change-management burden and disruption to current workflows');
-  }
-  if (initiatives.some((initiative) => initiative.category === 'technology')) {
-    hypotheses.add('Overlap with the existing stack and implementation ownership');
-  }
-  if (hypotheses.size === 0) {
-    hypotheses.add('Priority, timing, and ownership of the problem');
-  }
-  return [...hypotheses].slice(0, 3);
-}
-
-export default function AccountStrategyModal({
-  companyName,
-  domain,
-  people,
-  edges,
-  initiatives,
-  sellerProfile,
-  onClose,
-  onFocusPerson,
-}: {
+interface AccountStrategyModalProps {
+  mapId: string | null;
+  readOnly: boolean;
   companyName: string | null;
   domain: string;
   people: Person[];
   edges: MapEdge[];
   initiatives: StrategicInitiative[];
   sellerProfile: SellerProfile | null;
+  plan: AccountStrategyPlan;
+  onUpdatePlan: (plan: AccountStrategyPlan) => void;
   onClose: () => void;
-  onFocusPerson: (person: Person) => void;
-}) {
+  onFocusPeople: (people: Person[]) => void;
+  onOpenDeepResearch: (focus: string) => void;
+  onOpenInitiatives: () => void;
+}
+
+interface OverviewProps {
+  strategy: StrategyOutput;
+  insights: StrategyInsights | null;
+  loading: boolean;
+  error: string;
+  account: string;
+  onFocusPeople: (people: Person[]) => void;
+  onResearch: (focus: string) => void;
+  onInitiatives: () => void;
+  load: (refresh?: boolean) => void;
+}
+
+interface InsightListProps {
+  title: string;
+  items: { statement: string; provenance: string; evidence: string[] }[];
+}
+
+interface RoutesProps {
+  strategy: StrategyOutput;
+  people: Person[];
+  plan: AccountStrategyPlan;
+  readOnly: boolean;
+  onUpdate: (plan: AccountStrategyPlan) => void;
+  onFocusPeople: (people: Person[]) => void;
+}
+
+interface StakeholdersProps {
+  strategy: StrategyOutput;
+  plan: AccountStrategyPlan;
+  readOnly: boolean;
+  onUpdate: (
+    id: string,
+    patch: Partial<{ stance: Stance; nextStep: string; note: string }>
+  ) => void;
+  onFocusPeople: (people: Person[]) => void;
+}
+
+interface PlaysProps {
+  strategy: StrategyOutput;
+  plan: AccountStrategyPlan;
+  insights: StrategyInsights | null;
+  readOnly: boolean;
+  customTask: string;
+  setCustomTask: (value: string) => void;
+  addTask: (task: StrategyTask) => void;
+  onUpdate: (plan: AccountStrategyPlan) => void;
+}
+
+export default function AccountStrategyModal({
+  mapId,
+  readOnly,
+  companyName,
+  domain,
+  people,
+  edges,
+  initiatives,
+  sellerProfile,
+  plan,
+  onUpdatePlan,
+  onClose,
+  onFocusPeople,
+  onOpenDeepResearch,
+  onOpenInitiatives,
+}: AccountStrategyModalProps) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const [tab, setTab] = useState<Tab>('Overview');
+  const [scope, setScope] = useState<'exec' | 'full'>('exec');
+  const [format, setFormat] = useState<'markdown' | 'plain'>('markdown');
+  const [insights, setInsights] = useState<StrategyInsights | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const trapRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(trapRef);
-  const strategy = useMemo(() => {
-    const start = [...people].sort(
-      (a, b) =>
-        personScore(b, ROLE_PRIORITY, sellerProfile) -
-        personScore(a, ROLE_PRIORITY, sellerProfile)
-    )[0];
-    const target = [...people]
-      .filter((person) => person.id !== start?.id)
-      .sort(
-        (a, b) =>
-          personScore(b, TARGET_PRIORITY, sellerProfile) -
-          personScore(a, TARGET_PRIORITY, sellerProfile)
-      )[0] ?? start;
-    const path =
-      start && target
-        ? strongestPath(people, edges, start.id, target.id)
-        : { people: [], inferredHops: 0 };
-    const relevantInitiatives = initiatives
-      .filter((initiative) =>
-        (initiative.relevantPeople ?? []).some((name) =>
-          [start?.name, target?.name].some(
-            (personName) => personName?.toLowerCase() === name.toLowerCase()
-          )
-        )
-      )
-      .concat(initiatives)
-      .filter(
-        (initiative, index, items) =>
-          items.findIndex((item) => item.name === initiative.name) === index
-      )
-      .slice(0, 3);
-    return {
-      start,
-      target,
-      path,
-      initiatives: relevantInitiatives,
-      objections: objectionHypotheses(target, relevantInitiatives),
+  const [customTask, setCustomTask] = useState('');
+  const strategy = useMemo(
+    () => computeStrategy({ people, edges, initiatives, sellerProfile, plan }),
+    [people, edges, initiatives, sellerProfile, plan]
+  );
+  const brief = useMemo(
+    () =>
+      renderBrief({
+        companyName,
+        domain,
+        strategy,
+        plan,
+        format,
+        scope,
+        insights,
+      }),
+    [companyName, domain, strategy, plan, format, scope, insights]
+  );
+  const account = companyName || domain;
+  useFocusTrap(dialogRef);
+
+  useEffect(() => {
+    if (mapId)
+      void api.trackEvent(mapId, 'strategy_opened').catch(() => undefined);
+  }, [mapId]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (
+        (event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
+        (event.target as HTMLElement)?.getAttribute('role') === 'tab'
+      ) {
+        const index = tabs.indexOf(tab);
+        setTab(
+          tabs[
+            (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) %
+              tabs.length
+          ]
+        );
+      }
     };
-  }, [edges, initiatives, people, sellerProfile]);
-  const buyingFunction = sellerBuyingFunctionLabel(sellerProfile);
-
-  const brief = useMemo(() => {
-    const account = companyName || domain;
-    const lines = [
-      `${account} account brief`,
-      strategy.target
-        ? `Primary target: ${strategy.target.name}, ${strategy.target.title}`
-        : 'Primary target: Not mapped',
-      strategy.start
-        ? `Best entry point: ${strategy.start.name}, ${strategy.start.title}`
-        : 'Best entry point: Not mapped',
-      strategy.path.people.length > 1
-        ? `Mapped relationship hypothesis${strategy.path.inferredHops ? ' (includes inferred reporting)' : ''}: ${strategy.path.people.map((person) => person.name).join(' → ')}`
-        : 'Relationship path: No supported path is mapped yet',
-      '',
-      'Why now:',
-      ...(strategy.initiatives.length > 0
-        ? strategy.initiatives.map(
-            (initiative) => `- ${initiative.name}: ${initiative.summary}`
-          )
-        : ['- No recent initiative evidence is attached yet']),
-      '',
-      'Conversation opening:',
-      strategy.initiatives[0]?.salesAngles?.[0]
-        ? `- ${strategy.initiatives[0].salesAngles?.[0]}`
-        : '- Ask how the primary target measures the current priority and where execution is constrained',
-      '',
-      'Objection hypotheses to validate:',
-      ...strategy.objections.map((objection) => `- ${objection}`),
-    ];
-    return lines.join('\n');
-  }, [companyName, domain, strategy]);
-
-  const copyBrief = async () => {
-    await navigator.clipboard.writeText(brief);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1_500);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose, tab]);
+  const loadInsights = async (refresh = false) => {
+    if (!mapId) return;
+    setLoading(true);
+    setError('');
+    try {
+      setInsights(await api.getStrategyInsights(mapId, refresh));
+    } catch {
+      setError('AI strategy insights are unavailable right now.');
+    } finally {
+      setLoading(false);
+    }
   };
-
+  const updateStakeholder = (
+    id: string,
+    patch: Partial<{ stance: Stance; nextStep: string; note: string }>
+  ) => {
+    const current = plan.stakeholders[id] ?? {
+      stance: 'unknown' as Stance,
+      nextStep: '',
+      note: '',
+    };
+    onUpdatePlan(
+      changed(plan, {
+        stakeholders: { ...plan.stakeholders, [id]: { ...current, ...patch } },
+      })
+    );
+  };
+  const addTask = (task: StrategyTask) =>
+    onUpdatePlan(changed(plan, { tasks: [...plan.tasks, task] }));
+  const gradeColor =
+    strategy.health.grade === 'A'
+      ? 'text-emerald-300'
+      : strategy.health.grade === 'B'
+        ? 'text-[#c9f04b]'
+        : strategy.health.grade === 'C'
+          ? 'text-amber-300'
+          : 'text-rose-300';
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-sm sm:items-center sm:p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <div
-        ref={trapRef}
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="account-strategy-modal-title"
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-4xl sm:rounded-3xl sm:p-7"
+        aria-labelledby="account-strategy-title"
+        className="max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-[#f6f7f2] shadow-2xl sm:max-w-5xl sm:rounded-3xl"
       >
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
-              <Sparkles size={13} />
-              Evidence into action
+        <header className="relative overflow-hidden bg-slate-950 p-5 text-white sm:p-7">
+          <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-[#5b4cf0]/35 blur-3xl" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.18em] text-[#c9f04b]">
+                <Sparkles size={13} /> Evidence into action
+              </div>
+              <h2
+                id="account-strategy-title"
+                className="text-3xl font-semibold tracking-[-0.045em]"
+              >
+                Account strategy
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                {account} · {domain}
+              </p>
+              <p className="mt-4 text-sm text-slate-300">
+                {strategy.entry?.name ?? 'No entry'}{' '}
+                <ArrowRight className="mx-1 inline" size={14} />{' '}
+                {strategy.target?.name ?? 'No target'}
+              </p>
             </div>
-            <h2
-              id="account-strategy-modal-title"
-              className="text-3xl font-semibold tracking-[-0.045em] text-slate-950"
+            <div className="flex items-start gap-3">
+              <div className="flex h-20 w-20 flex-col items-center justify-center rounded-full border-4 border-[#5b4cf0] bg-white/5">
+                <span className={`text-2xl font-semibold ${gradeColor}`}>
+                  {strategy.health.score}
+                </span>
+                <span className="text-[10px] uppercase text-slate-400">
+                  Grade {strategy.health.grade}
+                </span>
+              </div>
+              <button
+                aria-label="Close strategy"
+                onClick={onClose}
+                className="rounded-lg p-2 text-slate-400 hover:bg-white/10"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+        </header>
+        <nav
+          role="tablist"
+          aria-label="Account strategy sections"
+          className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 pt-3 sm:px-7"
+        >
+          {tabs.map((item) => (
+            <button
+              key={item}
+              id={`account-strategy-tab-${item.toLowerCase()}`}
+              role="tab"
+              aria-selected={tab === item}
+              aria-controls="account-strategy-panel"
+              onClick={() => setTab(item)}
+              className={`whitespace-nowrap border-b-2 px-3 pb-3 text-xs font-semibold ${tab === item ? 'border-[#5b4cf0] text-[#5b4cf0]' : 'border-transparent text-slate-400'}`}
             >
-              Account strategy
-            </h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
-              The strongest mapped route to a buyer, plus a brief grounded in
-              the people, relationships, and initiatives already on this map.
-            </p>
-            {sellerProfile && buyingFunction && (
-              <p className="mt-2 text-xs font-medium text-[#5b4cf0]">
-                Prioritized for {sellerProfile.companyName}'s {buyingFunction}{' '}
-                use case.
+              {item}
+            </button>
+          ))}
+        </nav>
+        <main
+          id="account-strategy-panel"
+          role="tabpanel"
+          aria-labelledby={`account-strategy-tab-${tab.toLowerCase()}`}
+          tabIndex={0}
+          className="p-4 sm:p-7"
+        >
+          {tab === 'Overview' && (
+            <Overview
+              strategy={strategy}
+              insights={insights}
+              loading={loading}
+              error={error}
+              account={account}
+              onFocusPeople={onFocusPeople}
+              onResearch={onOpenDeepResearch}
+              onInitiatives={onOpenInitiatives}
+              load={loadInsights}
+            />
+          )}
+          {tab === 'Routes' && (
+            <Routes
+              strategy={strategy}
+              people={people}
+              plan={plan}
+              readOnly={readOnly}
+              onUpdate={onUpdatePlan}
+              onFocusPeople={onFocusPeople}
+            />
+          )}
+          {tab === 'Stakeholders' && (
+            <Stakeholders
+              strategy={strategy}
+              plan={plan}
+              readOnly={readOnly}
+              onUpdate={updateStakeholder}
+              onFocusPeople={onFocusPeople}
+            />
+          )}
+          {tab === 'Plays' && (
+            <Plays
+              strategy={strategy}
+              plan={plan}
+              insights={insights}
+              readOnly={readOnly}
+              customTask={customTask}
+              setCustomTask={setCustomTask}
+              addTask={addTask}
+              onUpdate={onUpdatePlan}
+            />
+          )}
+          {tab === 'Brief' && (
+            <section className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Toggle
+                  values={['exec', 'full']}
+                  value={scope}
+                  onChange={setScope}
+                />
+                <Toggle
+                  values={['markdown', 'plain']}
+                  value={format}
+                  onChange={setFormat}
+                />
+                <button
+                  onClick={() => {
+                    void navigator.clipboard.writeText(brief);
+                    setCopied(true);
+                    window.setTimeout(() => setCopied(false), 1500);
+                  }}
+                  className="ml-auto flex items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  onClick={() => {
+                    const url = URL.createObjectURL(
+                      new Blob([brief], {
+                        type:
+                          format === 'markdown'
+                            ? 'text/markdown'
+                            : 'text/plain',
+                      })
+                    );
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${domain}-account-strategy.${
+                      format === 'markdown' ? 'md' : 'txt'
+                    }`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                >
+                  <Download size={14} /> Download
+                </button>
+              </div>
+              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white p-5 text-xs leading-6 text-slate-700 td-card-shadow">
+                {brief}
+              </pre>
+            </section>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function Toggle<T extends string>({
+  values,
+  value,
+  onChange,
+}: {
+  values: T[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex rounded-lg border border-slate-200 bg-white p-1 text-xs">
+      {values.map((item) => (
+        <button
+          key={item}
+          onClick={() => onChange(item)}
+          className={`rounded-md px-3 py-1.5 ${value === item ? 'bg-slate-950 text-white' : 'text-slate-500'}`}
+        >
+          {item}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Overview({
+  strategy,
+  insights,
+  loading,
+  error,
+  account,
+  onFocusPeople,
+  onResearch,
+  onInitiatives,
+  load,
+}: OverviewProps) {
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {strategy.health.items.map((item) => (
+          <div
+            key={item.key}
+            className={`rounded-2xl border p-4 text-left td-card-shadow ${item.status === 'good' ? 'border-emerald-200 bg-emerald-50' : item.status === 'partial' ? 'border-amber-200 bg-amber-50' : 'border-rose-200 bg-rose-50'}`}
+          >
+            <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[.12em] text-slate-500">
+              <button
+                type="button"
+                onClick={() =>
+                  item.personIds?.length &&
+                  onFocusPeople(
+                    strategy.keyPeople.filter((person) =>
+                      item.personIds?.includes(person.id)
+                    )
+                  )
+                }
+                className="text-left"
+              >
+                {item.label}
+                <span className="sr-only">: {item.detail}</span>
+              </button>
+              {item.status === 'missing' &&
+                (item.key === 'champion' || item.key === 'economic_buyer') && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onResearch(`Who is the ${item.label} at ${account}?`)
+                    }
+                    className="text-[#5b4cf0]"
+                  >
+                    Research
+                  </button>
+                )}
+            </div>
+            <p className="mt-2 text-xs text-slate-600">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-2xl bg-slate-950 p-5 text-white">
+          <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#c9f04b]">
+            Risks
+          </div>
+          <div className="mt-3 space-y-3">
+            {strategy.risks.length ? (
+              strategy.risks.map((risk) => (
+                <div key={risk.id}>
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[9px] uppercase ${risk.severity === 'high' ? 'bg-rose-400/20 text-rose-300' : risk.severity === 'medium' ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-400/20 text-slate-300'}`}
+                    >
+                      {risk.severity}
+                    </span>
+                    {risk.title}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {risk.mitigation}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-slate-400">
+                No material risks detected.
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
-          >
-            Close
-          </button>
+        </section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 td-card-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#5b4cf0]">
+                Why now
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Initiatives anchoring the next conversation.
+              </p>
+            </div>
+            <button
+              onClick={onInitiatives}
+              className="text-xs font-semibold text-[#5b4cf0]"
+            >
+              All initiatives
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            {strategy.initiatives.map((item) => (
+              <div
+                key={item.name}
+                className="rounded-xl bg-slate-50 p-3 text-xs"
+              >
+                <b>{item.name}</b>
+                <p className="mt-1 text-slate-500">{item.summary}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+      <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#5b4cf0]">
+            AI strategy insights
+          </div>
+          {insights ? (
+            <button
+              onClick={() => load(true)}
+              className="text-xs font-semibold text-[#5b4cf0]"
+            >
+              Refresh
+            </button>
+          ) : (
+            <button
+              onClick={() => load()}
+              disabled={loading}
+              className="flex items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white"
+            >
+              {loading && <Loader2 size={13} className="animate-spin" />}
+              Generate AI insights
+            </button>
+          )}
         </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">
-              <Route size={13} /> Best entry point
-            </div>
-            {strategy.start ? (
-              <button
-                onClick={() => onFocusPerson(strategy.start!)}
-                className="text-left"
-              >
-                <div className="font-semibold text-slate-950">
-                  {strategy.start.name}
-                </div>
-                <div className="mt-1 text-xs leading-5 text-slate-500">
-                  {strategy.start.title}
-                </div>
-              </button>
-            ) : (
-              <p className="text-sm text-slate-400">No stakeholders mapped.</p>
-            )}
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">
-              <Target size={13} /> Primary target
-            </div>
-            {strategy.target ? (
-              <button
-                onClick={() => onFocusPerson(strategy.target!)}
-                className="text-left"
-              >
-                <div className="font-semibold text-slate-950">
-                  {strategy.target.name}
-                </div>
-                <div className="mt-1 text-xs leading-5 text-slate-500">
-                  {strategy.target.title}
-                </div>
-              </button>
-            ) : (
-              <p className="text-sm text-slate-400">No buyer mapped.</p>
-            )}
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">
-              <ShieldQuestion size={13} /> Coverage gap
-            </div>
-            <p className="text-sm leading-5 text-slate-600">
-              {strategy.path.people.length > 1
-                ? strategy.path.inferredHops > 0
-                  ? `${strategy.path.inferredHops} of ${strategy.path.people.length - 1} hops are inferred.`
-                  : `${strategy.path.people.length - 1} explicit mapped hop${strategy.path.people.length === 2 ? '' : 's'} to the target.`
-                : 'No supported relationship path is mapped yet.'}
+        {error && <p className="mt-3 text-xs text-rose-700">{error}</p>}
+        {insights && (
+          <>
+            <p className="mt-3 text-sm leading-6 text-slate-700">
+              {insights.executiveSummary}
             </p>
+            <InsightList title="Win themes" items={insights.winThemes} />
+            <InsightList
+              title="Competitive watch"
+              items={insights.competitiveWatch}
+            />
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+function InsightList({ title, items }: InsightListProps) {
+  return (
+    <div className="mt-4">
+      <div className="text-[10px] font-semibold uppercase tracking-[.12em] text-slate-500">
+        {title}
+      </div>
+      <div className="mt-2 space-y-2">
+        {items.map((item, index) => (
+          <div
+            key={`${item.statement}-${index}`}
+            className="flex gap-2 text-xs text-slate-700"
+          >
+            <span
+              className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${item.provenance === 'sourced' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
+            >
+              {item.provenance}
+            </span>
+            <span>
+              {item.statement}
+              {item.evidence[0] && (
+                <a
+                  className="ml-2 text-[#5b4cf0]"
+                  href={item.evidence[0]}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink className="inline" size={11} />
+                </a>
+              )}
+            </span>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function Routes({
+  strategy,
+  people,
+  plan,
+  readOnly,
+  onUpdate,
+  onFocusPeople,
+}: RoutesProps) {
+  const sorted = [...people].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {(['entryPersonId', 'targetPersonId'] as const).map((key) => (
+          <label key={key} className="text-xs font-semibold text-slate-600">
+            {key === 'entryPersonId' ? 'Entry person' : 'Target person'}
+            <select
+              disabled={readOnly}
+              value={plan[key] ?? ''}
+              onChange={(event) =>
+                onUpdate(changed(plan, { [key]: event.target.value || null }))
+              }
+              className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">
+                Auto —{' '}
+                {key === 'entryPersonId'
+                  ? (strategy.entry?.name ?? 'none')
+                  : (strategy.target?.name ?? 'none')}
+              </option>
+              {sorted.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name} · {person.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+      <section className="rounded-2xl bg-slate-950 p-5 text-white">
+        <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#c9f04b]">
+          Primary path · {strategy.primaryPath.strength}/100
         </div>
-
-        <section className="mt-3 rounded-2xl bg-slate-950 p-4 text-white sm:p-5">
-          <div className="mb-4 text-[10px] font-semibold uppercase tracking-[.14em] text-[#c9f04b]">
-            Strongest mapped hypothesis
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {strategy.primaryPath.people.map((person, index) => (
+            <div key={person.id} className="contents">
+              {index > 0 && <ArrowRight size={14} className="text-slate-500" />}
+              <button
+                onClick={() => onFocusPeople([person])}
+                className="rounded-xl border border-white/10 bg-white/[.06] px-3 py-2 text-left"
+              >
+                <span className="block text-sm font-semibold">
+                  {person.name}
+                </span>
+                <span className="block max-w-44 truncate text-[10px] text-slate-400">
+                  {person.title}
+                </span>
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-[#c9f04b]"
+            style={{ width: `${strategy.primaryPath.strength}%` }}
+          />
+        </div>
+      </section>
+      <div className="space-y-2">
+        {strategy.routes.map((route) => (
+          <div
+            key={route.target.id}
+            className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-slate-900">
+                {route.label} · {route.path.strength}/100
+              </div>
+              <div className="mt-1 truncate text-xs text-slate-500">
+                {route.path.people.map((person) => person.name).join(' → ') ||
+                  'No supported path'}
+              </div>
+            </div>
+            <button
+              onClick={() =>
+                onUpdate(changed(plan, { targetPersonId: route.target.id }))
+              }
+              disabled={readOnly}
+              className="rounded-lg bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              Use as target
+            </button>
           </div>
-          {strategy.path.people.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {strategy.path.people.map((person, index) => (
-                <div key={person.id} className="contents">
-                  {index > 0 && <ArrowRight size={14} className="text-slate-500" />}
+        ))}
+      </div>
+    </div>
+  );
+}
+function Stakeholders({
+  strategy,
+  plan,
+  readOnly,
+  onUpdate,
+  onFocusPeople,
+}: StakeholdersProps) {
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white td-card-shadow">
+      <table className="w-full min-w-[720px] text-left text-xs">
+        <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400">
+          <tr>
+            <th className="p-3">Stakeholder</th>
+            <th className="p-3">Role</th>
+            <th className="p-3">Stance</th>
+            <th className="p-3">Next step</th>
+            <th className="p-3">Note</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {strategy.keyPeople.map((person) => {
+            const value = plan.stakeholders[person.id] ?? {
+              stance: 'unknown' as Stance,
+              nextStep: '',
+              note: '',
+            };
+            return (
+              <tr key={person.id} className="border-t border-slate-100">
+                <td className="p-3">
                   <button
-                    onClick={() => onFocusPerson(person)}
-                    className="rounded-xl border border-white/10 bg-white/[.06] px-3 py-2 text-left hover:bg-white/10"
+                    onClick={() => onFocusPeople([person])}
+                    className="text-left font-semibold text-slate-900"
                   >
-                    <span className="block text-sm font-semibold">{person.name}</span>
-                    <span className="block max-w-48 truncate text-[10px] text-slate-400">
+                    {person.name}
+                    <span className="block font-normal text-slate-400">
                       {person.title}
                     </span>
                   </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">
-              Add an influence or reporting relationship to turn the entry
-              point into a supported route.
-            </p>
-          )}
-          <p className="mt-4 text-[10px] leading-4 text-slate-500">
-            This route reflects map evidence, not verified communication
-            history. Connected CRM, calendar, and meeting intelligence can
-            raise confidence.
-          </p>
-        </section>
-
-        <div className="mt-3 grid gap-3 lg:grid-cols-[1.35fr_.65fr]">
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#5b4cf0]">
-                  One-click account brief
-                </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  Ready for meeting prep, a deal review, or an outreach draft.
-                </p>
-              </div>
-              <button
-                onClick={() => void copyBrief()}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6b5cf8]"
+                </td>
+                <td className="p-3">
+                  <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] text-violet-700">
+                    {person.role}
+                  </span>
+                </td>
+                <td className="p-3">
+                  <select
+                    disabled={readOnly}
+                    value={value.stance}
+                    onChange={(event) =>
+                      onUpdate(person.id, {
+                        stance: event.target.value as Stance,
+                      })
+                    }
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1"
+                  >
+                    {stances.map((stance) => (
+                      <option key={stance}>{stance}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="p-3">
+                  <input
+                    disabled={readOnly}
+                    value={value.nextStep}
+                    onChange={(event) =>
+                      onUpdate(person.id, { nextStep: event.target.value })
+                    }
+                    className="w-44 rounded-lg border border-slate-200 px-2 py-1"
+                    placeholder="Map next step"
+                  />
+                </td>
+                <td className="p-3">
+                  <input
+                    disabled={readOnly}
+                    value={value.note}
+                    onChange={(event) =>
+                      onUpdate(person.id, { note: event.target.value })
+                    }
+                    className="w-44 rounded-lg border border-slate-200 px-2 py-1"
+                    placeholder="Context"
+                  />
+                </td>
+                <td className="p-3">
+                  <button
+                    onClick={() => onFocusPeople([person])}
+                    className="text-[#5b4cf0]"
+                  >
+                    Focus
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+function Plays({
+  strategy,
+  plan,
+  insights,
+  readOnly,
+  customTask,
+  setCustomTask,
+  addTask,
+  onUpdate,
+}: PlaysProps) {
+  return (
+    <div className="space-y-5">
+      <div className="flex gap-2">
+        <input
+          value={customTask}
+          onChange={(event) => setCustomTask(event.target.value)}
+          disabled={readOnly}
+          className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          placeholder="Add a custom play"
+        />
+        <button
+          disabled={readOnly || !customTask.trim()}
+          onClick={() => {
+            addTask({
+              id: `manual-${Date.now()}`,
+              title: customTask.trim(),
+              done: false,
+              source: 'manual',
+              createdAt: new Date().toISOString(),
+            });
+            setCustomTask('');
+          }}
+          className="rounded-xl bg-[#5b4cf0] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          <Plus size={14} className="inline" /> Add
+        </button>
+      </div>
+      <div className="space-y-2">
+        {plan.tasks.map((task) => (
+          <div
+            key={task.id}
+            className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"
+          >
+            <input
+              type="checkbox"
+              disabled={readOnly}
+              checked={task.done}
+              onChange={(event) =>
+                onUpdate(
+                  changed(plan, {
+                    tasks: plan.tasks.map((item) =>
+                      item.id === task.id
+                        ? { ...item, done: event.target.checked }
+                        : item
+                    ),
+                  })
+                )
+              }
+            />
+            <span
+              className={`flex-1 text-sm ${task.done ? 'text-slate-400 line-through' : 'text-slate-700'}`}
+            >
+              {task.title}
+            </span>
+            <button
+              disabled={readOnly}
+              onClick={() =>
+                onUpdate(
+                  changed(plan, {
+                    tasks: plan.tasks.filter((item) => item.id !== task.id),
+                  })
+                )
+              }
+              className="text-slate-400 hover:text-rose-600"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        ))}
+        {strategy.suggestedTasks.map((task) => (
+          <div
+            key={task.id}
+            className="flex items-center gap-3 rounded-xl border border-dashed border-violet-200 bg-violet-50 p-3"
+          >
+            <span className="flex-1 text-sm text-slate-700">{task.title}</span>
+            <button
+              disabled={readOnly}
+              onClick={() =>
+                addTask({
+                  ...task,
+                  createdAt: new Date().toISOString(),
+                })
+              }
+              className="rounded-lg bg-[#5b4cf0] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              Add
+            </button>
+          </div>
+        ))}
+      </div>
+      {insights && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-xs font-semibold text-slate-700">
+              AI landing plays
+            </h3>
+            {insights.landingPlays.map((play) => (
+              <div
+                key={play.title}
+                className="mt-3 rounded-xl bg-slate-50 p-3 text-xs"
               >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                {copied ? 'Copied' : 'Copy brief'}
-              </button>
-            </div>
-            <pre className="mt-4 whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">
-              {brief}
-            </pre>
+                <b>{play.title}</b>
+                <p className="mt-1 text-slate-500">{play.rationale}</p>
+              </div>
+            ))}
           </section>
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow sm:p-5">
-            <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-amber-700">
-              Objection hypotheses
-            </div>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              Prompts to validate, not claims about this account.
-            </p>
-            <ul className="mt-3 space-y-2">
-              {strategy.objections.map((objection) => (
-                <li
-                  key={objection}
-                  className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
-                >
-                  {objection}
-                </li>
-              ))}
-            </ul>
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-xs font-semibold text-slate-700">
+              Mutual action plan
+            </h3>
+            {insights.mutualActionPlan.map((item) => (
+              <div
+                key={item.milestone}
+                className="mt-2 flex justify-between gap-2 text-xs"
+              >
+                <span>{item.milestone}</span>
+                <span className="text-slate-400">
+                  {item.owner} · {item.timing}
+                </span>
+              </div>
+            ))}
           </section>
         </div>
-      </div>
+      )}
     </div>
   );
 }

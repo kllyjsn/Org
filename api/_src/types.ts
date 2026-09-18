@@ -70,6 +70,29 @@ export interface MapMeta {
   refreshCadence?: 'weekly' | 'monthly' | 'manual';
   nextRefreshAt?: string | null;
   initiatives?: StrategicInitiative[];
+  strategy?: AccountStrategyPlan;
+}
+
+export type Stance = 'advocate' | 'neutral' | 'skeptic' | 'unknown';
+export interface StakeholderPlanEntry {
+  stance: Stance;
+  nextStep: string;
+  note: string;
+}
+export interface StrategyTask {
+  id: string;
+  title: string;
+  done: boolean;
+  personId?: string;
+  source: 'generated' | 'manual';
+  createdAt: string;
+}
+export interface AccountStrategyPlan {
+  entryPersonId?: string | null;
+  targetPersonId?: string | null;
+  stakeholders: Record<string, StakeholderPlanEntry>;
+  tasks: StrategyTask[];
+  updatedAt: string;
 }
 
 export interface StrategicInitiative {
