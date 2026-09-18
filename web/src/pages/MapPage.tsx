@@ -2557,6 +2557,26 @@ function MapInner() {
             }
           }}
           onPaneClick={() => setSelectedId(null)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            const nodeEl = (event.target as HTMLElement).closest<HTMLElement>(
+              '.react-flow__node'
+            );
+            const id = nodeEl?.dataset.id;
+            if (!id || id.startsWith('lane:') || id.startsWith('more:')) return;
+            const person = people.find((p) => p.id === id);
+            if (!person) return;
+            event.preventDefault();
+            setSelectedId(id);
+            if (person.groupId) {
+              setNodes((items) =>
+                items.map((node) => ({
+                  ...node,
+                  selected: node.data.person.groupId === person.groupId,
+                }))
+              );
+            }
+          }}
           onPointerMove={(event) => {
             cursorRef.current = rf.screenToFlowPosition({
               x: event.clientX,

@@ -331,6 +331,16 @@ function ShareInner() {
             setSelectedId(n.id);
           }}
           onPaneClick={() => setSelectedId(null)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            const nodeEl = (event.target as HTMLElement).closest<HTMLElement>(
+              '.react-flow__node'
+            );
+            const id = nodeEl?.dataset.id;
+            if (!id || id.startsWith('lane:') || id.startsWith('more:')) return;
+            event.preventDefault();
+            setSelectedId(id);
+          }}
           nodeTypes={nodeTypes}
           nodesDraggable={false}
           nodesConnectable={false}
