@@ -15,6 +15,10 @@ interface SessionState {
     name: string,
     workspaceName?: string
   ) => Promise<void>;
+  acceptInvite: (
+    token: string,
+    body?: { name?: string; password?: string }
+  ) => Promise<void>;
   logout: () => Promise<void>;
   selectWorkspace: (id: string) => void;
   refreshWorkspaces: () => Promise<void>;
@@ -67,6 +71,15 @@ export const useSession = create<SessionState>((set, get) => ({
     );
     const preferred = localStorage.getItem(WS_KEY);
     set({ user, workspaces, workspaceId: pickWorkspace(workspaces, preferred) });
+  },
+
+  acceptInvite: async (token, body) => {
+    const { user, workspaces, workspaceId } = await api.acceptInvite(
+      token,
+      body
+    );
+    localStorage.setItem(WS_KEY, workspaceId);
+    set({ user, workspaces, workspaceId: pickWorkspace(workspaces, workspaceId) });
   },
 
   logout: async () => {

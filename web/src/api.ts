@@ -79,14 +79,50 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
   listMembers: (workspaceId: string) =>
-    req<{ members: { id: string; name: string; email: string; role: string }[] }>(
-      `/api/workspaces/${workspaceId}/members`
-    ),
+    req<{
+      members: { id: string; name: string; email: string; role: string }[];
+      invites: {
+        id: string;
+        email: string;
+        created_at: string;
+        expires_at: string;
+      }[];
+    }>(`/api/workspaces/${workspaceId}/members`),
   addMember: (workspaceId: string, email: string) =>
-    req<{ ok: true }>(`/api/workspaces/${workspaceId}/members`, {
+    req<{
+      ok: true;
+      added?: boolean;
+      invited?: boolean;
+      inviteUrl?: string;
+      emailSent?: boolean;
+    }>(`/api/workspaces/${workspaceId}/members`, {
       method: 'POST',
       body: JSON.stringify({ email }),
     }),
+  revokeInvite: (workspaceId: string, inviteId: string) =>
+    req<{ ok: true }>(
+      `/api/workspaces/${workspaceId}/invites/${inviteId}`,
+      { method: 'DELETE' }
+    ),
+  getInvite: (token: string) =>
+    req<{
+      invite: {
+        email: string;
+        workspaceName: string;
+        inviterName: string;
+        expiresAt: string;
+        hasAccount: boolean;
+        status: 'ok' | 'expired' | 'accepted';
+      };
+    }>(`/api/invites/${token}`),
+  acceptInvite: (
+    token: string,
+    body: { name?: string; password?: string } = {}
+  ) =>
+    req<{ user: SessionUser; workspaces: Workspace[]; workspaceId: string }>(
+      `/api/invites/${token}/accept`,
+      { method: 'POST', body: JSON.stringify(body) }
+    ),
   researchSellerProfile: (workspaceId: string, domain: string) =>
     req<{ profile: SellerProfile }>(
       `/api/workspaces/${workspaceId}/seller-profile/research`,
