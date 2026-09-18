@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { CheckCircle2, CircleAlert, Users, X } from 'lucide-react';
 import {
   matchMeetingPeople,
@@ -89,9 +90,11 @@ export default function MeetingsImportModal({
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-6"
     >
       <motion.div
@@ -99,9 +102,10 @@ export default function MeetingsImportModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="meetings-import-modal-title"
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 40, opacity: 0 }}
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         onClick={(event) => event.stopPropagation()}
         className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-sheet shadow-2xl sm:rounded-3xl"
       >

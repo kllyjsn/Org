@@ -27,7 +27,7 @@ export default function RailButton({
       title={label}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
-      className={`flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl transition sm:h-9 sm:w-full sm:justify-start sm:px-3 ${
+      className={`flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl transition active:scale-[.96] sm:h-9 sm:w-full sm:justify-start sm:px-3 ${
         active
           ? 'bg-white/15 text-white'
           : accent

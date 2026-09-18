@@ -40,6 +40,8 @@ export default {
         cta: '0 10px 24px rgba(91,76,240,.22)',
         panel: '0 10px 35px rgba(15,23,42,.1)',
       },
+      transitionDuration: { DEFAULT: '200ms' },
+      transitionTimingFunction: { DEFAULT: 'cubic-bezier(0.16, 1, 0.3, 1)' },
     },
   },
   plugins: [],

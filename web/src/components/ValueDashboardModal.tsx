@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import {
   Activity,
   Clock3,
@@ -67,12 +70,23 @@ export default function ValueDashboardModal({
   }, [workspaceId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="value-dashboard-modal-title"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-paper shadow-2xl sm:max-w-5xl sm:rounded-3xl"
       >
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200/80 bg-paper/95 px-5 py-5 backdrop-blur-xl sm:px-7">
@@ -256,7 +270,7 @@ export default function ValueDashboardModal({
             </>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

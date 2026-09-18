@@ -31,6 +31,7 @@ function edgeToMap(e: FlowEdge): MapEdge {
 }
 import { toPng } from 'html-to-image';
 import { AnimatePresence } from 'framer-motion';
+import { canvasMoveMs } from '../lib/motion';
 import {
   AlignHorizontalDistributeCenter,
   AlignStartHorizontal,
@@ -272,7 +273,7 @@ function MapInner() {
           y: (isMobile ? 170 : 200) - minY * zoom,
           zoom,
         },
-        { duration: 450 }
+        { duration: canvasMoveMs() }
       );
     },
     [isMobile, rf]
@@ -970,7 +971,7 @@ function MapInner() {
     window.setTimeout(() => {
       void rf.setCenter(spot.x + 125, spot.y + 45, {
         zoom: rf.getZoom(),
-        duration: 300,
+        duration: canvasMoveMs(),
       });
     }, 60);
   }, [rf, nodes, setNodes, setEdges, markDirty, recordHistory]);
@@ -1000,7 +1001,7 @@ function MapInner() {
           rf.fitView({
             nodes: matchedNodes,
             padding: matches.length === 1 ? 1.3 : 0.35,
-            duration: 450,
+            duration: canvasMoveMs(),
           }),
         30
       );
@@ -1052,7 +1053,7 @@ function MapInner() {
       });
       window.setTimeout(() => {
         if (mode !== 'hierarchy') anchorTopLeft(laid);
-        else rf.fitView({ padding: 0.2 });
+        else rf.fitView({ padding: 0.2, duration: canvasMoveMs() });
       }, 50);
     },
     [
@@ -1237,7 +1238,7 @@ function MapInner() {
       });
       setSelectedId(null);
       window.setTimeout(
-        () => void rf.fitView({ padding: 0.22, duration: 450 }),
+        () => void rf.fitView({ padding: 0.22, duration: canvasMoveMs() }),
         50
       );
       return `Grouped ${ids.size} people into ${clusters.size} ${clusters.size === 1 ? 'lane' : 'lanes'}.`;
@@ -1433,7 +1434,7 @@ function MapInner() {
       }
       if (action === 'overview') {
         setSelectedId(null);
-        void rf.fitView({ padding: 0.2, duration: 450 });
+        void rf.fitView({ padding: 0.2, duration: canvasMoveMs() });
       }
       if (action === 'strategy') setShowStrategy(true);
       if (action === 'changes') setShowChanges(true);
@@ -1544,7 +1545,7 @@ function MapInner() {
         setExpandedLanes(new Set());
         setCollapsedLanes(new Set());
         window.setTimeout(
-          () => void rf.fitView({ padding: 0.2, duration: 450 }),
+          () => void rf.fitView({ padding: 0.2, duration: canvasMoveMs() }),
           80
         );
         return say('Showing the whole account.');
@@ -2230,7 +2231,7 @@ function MapInner() {
           void rf.fitView({
             nodes: nextNodes.filter((node) => addedIds.includes(node.id)),
             padding: 0.5,
-            duration: 450,
+            duration: canvasMoveMs(),
           });
         }, 50);
       }
@@ -2621,10 +2622,9 @@ function MapInner() {
             .map((person) => (
               <div
                 key={person.id}
-                className="absolute transition-all duration-300"
+                className="absolute left-0 top-0 transition-transform duration-300"
                 style={{
-                  left: person.cursor_x! * viewport.zoom + viewport.x,
-                  top: person.cursor_y! * viewport.zoom + viewport.y,
+                  transform: `translate3d(${person.cursor_x! * viewport.zoom + viewport.x}px, ${person.cursor_y! * viewport.zoom + viewport.y}px, 0)`,
                 }}
               >
                 <div className="h-0 w-0 border-b-[10px] border-l-[6px] border-r-[6px] border-b-indigo-600 border-l-transparent border-r-transparent [transform:rotate(-35deg)]" />
@@ -2783,12 +2783,15 @@ function MapInner() {
       {showShare && mapId && (
         <ShareModal mapId={mapId} onClose={() => setShowShare(false)} />
       )}
+      <AnimatePresence>
       {showMeetings && (
         <MeetingsImportModal
           people={people}
           onApply={applyMeetings}
           onClose={() => setShowMeetings(false)} />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {showDeepResearch && (
         <DeepResearchModal
           domain={domain}
@@ -2805,6 +2808,7 @@ function MapInner() {
           onMerge={mergeResearch}
         />
       )}
+      </AnimatePresence>
       {showHistory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
           <div
@@ -2970,6 +2974,7 @@ function MapInner() {
           </div>
         </div>
       )}
+      <AnimatePresence>
       {showStrategy && meta && (
         <AccountStrategyModal
           companyName={meta.companyName}
@@ -2985,6 +2990,8 @@ function MapInner() {
           }}
         />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {showBriefing && mapId && (
         <AccountBriefingModal
           mapId={mapId}
@@ -3008,12 +3015,16 @@ function MapInner() {
           }}
         />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {showFeedback && (
         <FeedbackModal
           workspaceId={workspaceId || null}
           onClose={() => setShowFeedback(false)}
         />
       )}
+      </AnimatePresence>
+      <AnimatePresence>
       {showChanges && mapId && (
         <ChangeAlertsModal
           mapId={mapId}
@@ -3025,6 +3036,7 @@ function MapInner() {
           }}
         />
       )}
+      </AnimatePresence>
       <AnimatePresence>
         {showCommands && (
           <CommandPalette

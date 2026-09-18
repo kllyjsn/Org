@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, paletteVariants } from '../lib/motion';
 import {
   ArrowRight,
   BellRing,
@@ -300,7 +301,12 @@ export default function CommandPalette({
   };
 
   return (
-    <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
       className="fixed inset-0 z-[70] flex justify-center bg-slate-950/45 px-3 pt-[5vh] backdrop-blur-sm sm:pt-[9vh]"
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose();
@@ -311,10 +317,10 @@ export default function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Search and commands"
-        initial={{ y: -12, opacity: 0, scale: 0.985 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: -8, opacity: 0, scale: 0.99 }}
-        transition={{ duration: 0.16, ease: 'easeOut' }}
+        variants={paletteVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border border-white/70 bg-sheet/95 shadow-[0_30px_100px_rgba(15,23,42,.35)] backdrop-blur-2xl"
       >
         <div className="flex items-center gap-3 border-b border-slate-200/80 px-4 py-3.5 sm:px-5">
@@ -701,6 +707,6 @@ export default function CommandPalette({
           )}
         </div>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

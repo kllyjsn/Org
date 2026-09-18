@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { Building2, Loader2, Search, Sparkles, UsersRound, X } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -35,6 +37,7 @@ export default function DeepResearchModal({
   const [focus, setFocus] = useState(initialFocus || selected?.name || '');
   const [researching, setResearching] = useState(false);
   const [stage, setStage] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<ResearchResult | null>(null);
   const [error, setError] = useState('');
   const [merged, setMerged] = useState('');
@@ -45,11 +48,16 @@ export default function DeepResearchModal({
   useEffect(() => {
     if (!researching) return;
     timer.current = window.setInterval(
-      () => setStage((value) => (value + 1) % STAGES.length),
-      1_800
+      () => setStage((value) => Math.min(value + 1, STAGES.length - 1)),
+      9_000
+    );
+    const elapsedTimer = window.setInterval(
+      () => setElapsed((value) => value + 1),
+      1_000
     );
     return () => {
       if (timer.current) window.clearInterval(timer.current);
+      window.clearInterval(elapsedTimer);
     };
   }, [researching]);
 
@@ -70,6 +78,7 @@ export default function DeepResearchModal({
     setMerged('');
     setError('');
     setStage(0);
+    setElapsed(0);
     try {
       setResult(
         await api.research(
@@ -91,12 +100,23 @@ export default function DeepResearchModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[65] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-[65] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="deep-research-modal-title"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-[28px] bg-sheet p-5 shadow-2xl sm:rounded-[28px] sm:p-7"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -184,12 +204,18 @@ export default function DeepResearchModal({
           >
             <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
               <span>Deep research · {domain}</span>
-              <span>{stage + 1} / {STAGES.length}</span>
+              <span>{stage + 1} / {STAGES.length} · {elapsed}s</span>
             </div>
-            <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={STAGES.length}
+              aria-valuenow={stage + 1}
+              className="mb-3 h-1 overflow-hidden rounded-full bg-white/10"
+            >
               <div
-                className="h-full rounded-full bg-accent transition-all duration-500"
-                style={{ width: `${((stage + 1) / STAGES.length) * 100}%` }}
+                className="h-full w-full origin-left rounded-full bg-accent transition-transform duration-500"
+                style={{ transform: `scaleX(${(stage + 0.5) / STAGES.length})` }}
               />
             </div>
             <p className="flex items-center gap-2 text-sm text-slate-200">
@@ -280,7 +306,7 @@ export default function DeepResearchModal({
           Only publicly supported people are added. Inferred team assignments
           stay visibly labeled.
         </p>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

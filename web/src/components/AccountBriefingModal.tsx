@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import {
   ArrowRight,
   BellRing,
@@ -122,12 +125,23 @@ export default function AccountBriefingModal({
   }, [mapId, entry]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="briefing-modal-title"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-paper shadow-2xl sm:max-w-4xl sm:rounded-3xl"
       >
         <div className="relative overflow-hidden bg-slate-950 p-5 text-white sm:p-8">
@@ -465,7 +479,7 @@ export default function AccountBriefingModal({
             </>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { Inbox, Loader2, X } from 'lucide-react';
 import { api } from '../api';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -40,12 +43,23 @@ export default function FeedbackInboxModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-inbox-modal-title"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-sheet shadow-2xl sm:max-w-3xl sm:rounded-3xl"
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 bg-white/70 p-5 sm:p-6">
@@ -131,7 +145,7 @@ export default function FeedbackInboxModal({
             </article>
           ))}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
