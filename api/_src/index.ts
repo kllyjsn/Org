@@ -686,9 +686,11 @@ app.post('/api/research', requireAuth, async (c) => {
         knownSources: knownUrls,
       }),
     });
-    void runJobTick(job.id, 45_000).catch((error) => {
-      console.error('research job tick failed', error);
-    });
+    if (!process.env.VERCEL) {
+      void runJobTick(job.id, 45_000).catch((error) => {
+        console.error('research job tick failed', error);
+      });
+    }
     return c.json({ jobId: job.id }, 202);
   } catch (err) {
     console.error('research failed', err);
@@ -734,14 +736,15 @@ app.get('/api/research/jobs/:id/stream', requireAuth, async (c) => {
   c.header('X-Accel-Buffering', 'no');
   return streamSSE(c, async (stream) => {
     const endAt = Date.now() + 50_000;
-    let sentEvents = 0;
+    const after = Number(c.req.query('after'));
+    let sentEvents = Number.isFinite(after) ? Math.max(0, after) : 0;
     let sentPeople = -1;
     let tickStarted = false;
     while (Date.now() < endAt) {
       const job = await getJob(id);
       if (!job) {
         await stream.writeSSE({
-          event: 'error',
+          event: 'failed',
           data: JSON.stringify({ error: 'research job not found' }),
         });
         return;
@@ -782,7 +785,7 @@ app.get('/api/research/jobs/:id/stream', requireAuth, async (c) => {
       }
       if (job.status === 'failed') {
         await stream.writeSSE({
-          event: 'error',
+          event: 'failed',
           data: JSON.stringify({ error: job.error ?? 'research failed' }),
         });
         return;

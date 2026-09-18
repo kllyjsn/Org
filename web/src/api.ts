@@ -182,10 +182,14 @@ export const api = {
         seenPartialPeople = job.partial.people.length;
         handlers.onPartial(job.partial);
       }
+      if (terminal(job)) {
+        closed = true;
+        source?.close();
+        stopPolling();
+      }
       if (job.status === 'done' && job.result) handlers.onDone(job.result);
       if (job.status === 'failed') handlers.onError(job.error ?? 'research failed');
       if (job.status === 'cancelled') handlers.onError('research cancelled');
-      if (terminal(job)) stopPolling();
       return terminal(job);
     };
     const startPolling = () => {
@@ -204,28 +208,33 @@ export const api = {
       if (closed) return;
       stopPolling();
       source?.close();
-      source = new EventSource(`/api/research/jobs/${jobId}/stream`);
+      source = new EventSource(
+        `/api/research/jobs/${jobId}/stream?after=${seenEvents}`
+      );
       source.addEventListener('progress', (event) => {
+        seenEvents += 1;
         handlers.onEvent(JSON.parse((event as MessageEvent).data) as ResearchEvent);
       });
       source.addEventListener('partial', (event) => {
         handlers.onPartial(JSON.parse((event as MessageEvent).data) as ResearchResult);
       });
       source.addEventListener('done', (event) => {
+        closed = true;
+        source?.close();
         handlers.onDone(JSON.parse((event as MessageEvent).data) as ResearchResult);
-        source?.close();
       });
-      source.addEventListener('error', (event) => {
-        const data = (event as MessageEvent).data;
-        if (data) {
-          const payload = JSON.parse(data) as { error?: string };
-          handlers.onError(payload.error ?? 'research failed');
-        }
+      source.addEventListener('failed', (event) => {
+        closed = true;
         source?.close();
+        const payload = JSON.parse((event as MessageEvent).data) as {
+          error?: string;
+        };
+        handlers.onError(payload.error ?? 'research failed');
       });
       source.addEventListener('cancelled', () => {
-        handlers.onError('research cancelled');
+        closed = true;
         source?.close();
+        handlers.onError('research cancelled');
       });
       source.addEventListener('continue', () => {
         source?.close();
@@ -237,6 +246,7 @@ export const api = {
         }
       });
       source.onerror = () => {
+        if (closed) return;
         source?.close();
         startPolling();
         if (!closed && reconnectTimer === null) {

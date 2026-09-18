@@ -124,12 +124,14 @@ export default function CreateMapModal({
 
   const cancelResearch = async (usePartial = false) => {
     if (!jobId) return;
+    const activeJobId = jobId;
+    unsubscribe.current?.();
+    unsubscribe.current = null;
     try {
-      await api.cancelResearch(jobId);
+      await api.cancelResearch(activeJobId);
       if (usePartial && partial) setResult({ ...partial, complete: false });
       setResearching(false);
       setJobId(null);
-      unsubscribe.current?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'failed to cancel research');
     }

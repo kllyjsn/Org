@@ -8,6 +8,13 @@ import {
 } from './research-pipeline.js';
 import type { ResearchResult } from './research.js';
 
+export class JobCancelledError extends Error {
+  constructor() {
+    super('research job was cancelled');
+    this.name = 'JobCancelledError';
+  }
+}
+
 export type ResearchJobStatus =
   | 'queued'
   | 'running'
@@ -101,11 +108,12 @@ async function persistProgress(
 ): Promise<void> {
   const timestamp = now();
   const leaseUntil = new Date(Date.now() + leaseMs).toISOString();
-  await query(
+  const rows = await query<{ id: string }>(
     `UPDATE research_jobs
         SET checkpoint = $2, partial = $3, events = $4, lease_until = $5,
             updated_at = $6
-      WHERE id = $1 AND status = 'running'`,
+      WHERE id = $1 AND status = 'running'
+      RETURNING id`,
     [
       id,
       JSON.stringify(checkpoint),
@@ -115,6 +123,7 @@ async function persistProgress(
       timestamp,
     ]
   );
+  if (rows.length === 0) throw new JobCancelledError();
 }
 
 export async function runJobTick(
@@ -172,6 +181,7 @@ export async function runJobTick(
       );
     }
   } catch (error) {
+    if (error instanceof JobCancelledError) return getJob(id);
     const message = error instanceof Error ? error.message : String(error);
     const current = await getJob(id);
     const attempts = current?.attempts ?? claimed.attempts;

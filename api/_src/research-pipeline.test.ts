@@ -155,3 +155,27 @@ test('focused research skips sumble, initiatives, and follow-up', async () => {
   assert.equal(result.step, 'done');
   assert.deepEqual(calls, ['discover', 'pass']);
 });
+
+test('persist failures abort the pipeline before later steps run', async () => {
+  let persistCalls = 0;
+  let chatCalls = 0;
+  await assert.rejects(
+    () =>
+      runToCompletion(initialCheckpoint({ domain: 'example.com' }), {
+        deadlineMs: Date.now() + 30_000,
+        deps: deps({
+          chat: async (...args) => {
+            chatCalls += 1;
+            return deps().chat!(...args);
+          },
+        }),
+        persist: async () => {
+          persistCalls += 1;
+          if (persistCalls === 2) throw new Error('persist stopped');
+        },
+      }),
+    { message: 'persist stopped' }
+  );
+  assert.equal(persistCalls, 2);
+  assert.equal(chatCalls, 0);
+});

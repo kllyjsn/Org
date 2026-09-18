@@ -96,11 +96,13 @@ export default function DeepResearchModal({
 
   const cancel = async () => {
     if (!jobId) return;
+    const activeJobId = jobId;
+    unsubscribe.current?.();
+    unsubscribe.current = null;
     try {
-      await api.cancelResearch(jobId);
+      await api.cancelResearch(activeJobId);
       setResearching(false);
       setJobId(null);
-      unsubscribe.current?.();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'failed to cancel research');
     }
