@@ -48,6 +48,11 @@ export interface Person {
   notes: string;
   /** Marked when the user has met this person (meeting import / panel). */
   metWith?: boolean;
+  /** Latest calendar/email touch from a connected integration. */
+  lastTouchAt?: string | null;
+  meetingCount?: number;
+  emailThreadCount?: number;
+  touchSource?: 'google' | 'microsoft' | 'manual' | null;
   email: string | null;
   linkedin: string | null;
   x: number;
@@ -453,4 +458,25 @@ export interface ProductValueSummary {
     liveOpportunityMaps: number;
     briefingActionRate: number;
   };
+}
+
+export type IntegrationProvider = 'google' | 'microsoft';
+
+export interface IntegrationStatus {
+  id: IntegrationProvider;
+  label: string;
+  configured: boolean;
+  connection: {
+    id: string;
+    accountEmail: string | null;
+    status: 'connected' | 'error' | 'revoked';
+    lastSyncedAt: string | null;
+    lastError: string | null;
+  } | null;
+}
+
+export interface IntegrationSyncResult {
+  maps: number;
+  touchpoints: number;
+  peopleUpdated: number;
 }

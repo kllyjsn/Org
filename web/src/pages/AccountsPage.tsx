@@ -28,6 +28,7 @@ import CreateMapModal from '../components/CreateMapModal';
 import FeedbackInboxModal from '../components/FeedbackInboxModal';
 import FeedbackModal from '../components/FeedbackModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
+import IntegrationsModal from '../components/IntegrationsModal';
 import SellerProfileModal from '../components/SellerProfileModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -227,6 +228,7 @@ export default function AccountsPage() {
   const [showPricing, setShowPricing] = useState(false);
   const [showValue, setShowValue] = useState(false);
   const [showSellerProfile, setShowSellerProfile] = useState(false);
+  const [showIntegrations, setShowIntegrations] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showFeedbackInbox, setShowFeedbackInbox] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
@@ -268,6 +270,7 @@ export default function AccountsPage() {
     const closers: [boolean, () => void][] = [
       [showFeedback, () => setShowFeedback(false)],
       [showFeedbackInbox, () => setShowFeedbackInbox(false)],
+      [showIntegrations, () => setShowIntegrations(false)],
       [showSellerProfile, () => setShowSellerProfile(false)],
       [showValue, () => setShowValue(false)],
       [showPricing, () => setShowPricing(false)],
@@ -288,6 +291,7 @@ export default function AccountsPage() {
   }, [
     showFeedback,
     showFeedbackInbox,
+    showIntegrations,
     showSellerProfile,
     showValue,
     showPricing,
@@ -378,6 +382,11 @@ export default function AccountsPage() {
               icon={<Sparkles size={16} />}
               label="Your company"
               onClick={() => setShowSellerProfile(true)}
+            />
+            <RailButton
+              icon={<Zap size={16} />}
+              label="Integrations"
+              onClick={() => setShowIntegrations(true)}
             />
             <RailButton
               icon={<BarChart3 size={16} />}
@@ -667,6 +676,12 @@ export default function AccountsPage() {
       )}
       {showFeedbackInbox && (
         <FeedbackInboxModal onClose={() => setShowFeedbackInbox(false)} />
+      )}
+      {showIntegrations && workspaceId && (
+        <IntegrationsModal
+          workspaceId={workspaceId}
+          onClose={() => setShowIntegrations(false)}
+        />
       )}
       {showSellerProfile && workspaceId && (
         <SellerProfileModal

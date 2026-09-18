@@ -6,6 +6,8 @@ import type {
   FeedbackCategory,
   FeedbackItem,
   FeedbackStatus,
+  IntegrationStatus,
+  IntegrationSyncResult,
   LoadedMap,
   MapChangeAlert,
   MapComment,
@@ -104,6 +106,22 @@ export const api = {
         body: JSON.stringify({ profile }),
       }
     ),
+
+  listIntegrations: (workspaceId: string) =>
+    req<{ providers: IntegrationStatus[] }>(
+      `/api/workspaces/${workspaceId}/integrations`
+    ),
+  connectIntegration: (workspaceId: string, provider: string) =>
+    req<{ url: string }>(
+      `/api/workspaces/${workspaceId}/integrations/${provider}/connect`,
+      { method: 'POST' }
+    ),
+  syncIntegration: (id: string) =>
+    req<IntegrationSyncResult>(`/api/integrations/${id}/sync`, {
+      method: 'POST',
+    }),
+  disconnectIntegration: (id: string) =>
+    req<{ ok: true }>(`/api/integrations/${id}`, { method: 'DELETE' }),
 
   sendFeedback: (input: {
     category: FeedbackCategory;

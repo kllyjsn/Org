@@ -21,6 +21,18 @@ import {
   verifyTitleClaims,
 } from './research.js';
 import { applyVerification, toResearchedPerson } from './verify-person.js';
+import {
+  encryptionKeyConfigured,
+  encryptSecret,
+  signPayload,
+  signatureMatches,
+} from './crypto.js';
+import { adapterFor, providerStatus } from './integrations/registry.js';
+import {
+  syncIntegration,
+  syncNextDueIntegration,
+  type IntegrationRow,
+} from './integrations/sync.js';
 import { initialCheckpoint } from './research-pipeline.js';
 import {
   cancelJob,
@@ -407,7 +419,12 @@ app.get('/api/cron/refresh', async (c) => {
       `DELETE FROM research_jobs
        WHERE created_at::timestamptz < NOW() - INTERVAL '7 days'`
     );
-    return c.json(await refreshNextDueMap());
+    const refresh = await refreshNextDueMap();
+    const integrationSync = await syncNextDueIntegration().catch((error) => {
+      console.error('integration sync failed', error);
+      return { synced: false };
+    });
+    return c.json({ ...refresh, integrationSync });
   } catch (error) {
     console.error('background refresh failed', error);
     return bad(c, 'background refresh failed', 500);
@@ -900,6 +917,191 @@ app.post('/api/research/jobs/:id/cancel', requireAuth, async (c) => {
   if (!job) return bad(c, 'research job not found', 404);
   const cancelled = await cancelJob(job.id);
   return c.json({ job: cancelled ? researchJobView(cancelled) : researchJobView(job) });
+});
+
+// ---------- integrations ----------
+
+function publicAppUrl(): string {
+  return process.env.PUBLIC_APP_URL || 'http://localhost:5173';
+}
+
+function integrationsConfigured(): boolean {
+  return encryptionKeyConfigured();
+}
+
+app.get('/api/workspaces/:id/integrations', requireAuth, async (c) => {
+  const user = c.get('user');
+  const wsId = param(c, 'id');
+  if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
+  const connections = await query<IntegrationRow>(
+    'SELECT * FROM integrations WHERE workspace_id = $1 AND user_id = $2',
+    [wsId, user.id]
+  );
+  const byProvider = new Map(connections.map((row) => [row.provider, row]));
+  return c.json({
+    providers: providerStatus().map((provider) => {
+      const connection = byProvider.get(provider.id);
+      return {
+        ...provider,
+        connection: connection
+          ? {
+              id: connection.id,
+              accountEmail: connection.account_email,
+              status: connection.status,
+              lastSyncedAt: connection.last_synced_at,
+              lastError: connection.last_error,
+            }
+          : null,
+      };
+    }),
+  });
+});
+
+app.post(
+  '/api/workspaces/:id/integrations/:provider/connect',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const wsId = param(c, 'id');
+    if (!canWrite(await workspaceRoleFor(user, wsId))) {
+      return bad(c, 'insufficient role', 403);
+    }
+    const adapter = adapterFor(param(c, 'provider'));
+    if (!adapter || !adapter.configured() || !integrationsConfigured()) {
+      return bad(c, 'integrations are not configured', 503);
+    }
+    const payload = Buffer.from(
+      JSON.stringify({
+        ws: wsId,
+        uid: user.id,
+        provider: adapter.id,
+        nonce: randomUUID(),
+        exp: Date.now() + 10 * 60_000,
+      })
+    ).toString('base64url');
+    const state = `${payload}.${signPayload(payload)}`;
+    const redirectUri = `${publicAppUrl()}/api/integrations/callback`;
+    return c.json({ url: adapter.authUrl(state, redirectUri) });
+  }
+);
+
+app.get('/api/integrations/callback', async (c) => {
+  const code = c.req.query('code') ?? '';
+  const stateParam = c.req.query('state') ?? '';
+  const redirectBase = `${publicAppUrl()}/app`;
+  const fail = (provider = '') =>
+    c.redirect(`${redirectBase}?integration=${provider}&error=1`);
+
+  const dot = stateParam.lastIndexOf('.');
+  if (!code || dot <= 0) return fail();
+  const payload = stateParam.slice(0, dot);
+  const signature = stateParam.slice(dot + 1);
+  if (!encryptionKeyConfigured() || !signatureMatches(payload, signature)) {
+    return fail();
+  }
+  let state: { ws?: string; uid?: string; provider?: string; exp?: number };
+  try {
+    state = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  } catch {
+    return fail();
+  }
+  const adapter = adapterFor(state.provider ?? '');
+  if (!adapter || !state.ws || !state.uid) return fail(state.provider ?? '');
+  if (!state.exp || state.exp < Date.now()) return fail(adapter.id);
+
+  try {
+    const redirectUri = `${publicAppUrl()}/api/integrations/callback`;
+    const tokens = await adapter.exchangeCode(code, redirectUri);
+    await query(
+      `INSERT INTO integrations
+        (id, workspace_id, user_id, provider, account_email, access_token,
+         refresh_token, expires_at, scopes, status, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'connected',$10)
+       ON CONFLICT (workspace_id, user_id, provider) DO UPDATE SET
+         account_email = EXCLUDED.account_email,
+         access_token = EXCLUDED.access_token,
+         refresh_token = COALESCE(EXCLUDED.refresh_token, integrations.refresh_token),
+         expires_at = EXCLUDED.expires_at,
+         scopes = EXCLUDED.scopes,
+         status = 'connected',
+         last_error = NULL`,
+      [
+        randomUUID(),
+        state.ws,
+        state.uid,
+        adapter.id,
+        tokens.accountEmail,
+        encryptSecret(tokens.accessToken),
+        tokens.refreshToken ? encryptSecret(tokens.refreshToken) : null,
+        tokens.expiresAt,
+        tokens.scopes,
+        now(),
+      ]
+    );
+    const rows = await query<{ id: string }>(
+      'SELECT id FROM integrations WHERE workspace_id = $1 AND user_id = $2 AND provider = $3',
+      [state.ws, state.uid, adapter.id]
+    );
+    if (rows[0]) {
+      void syncIntegration(rows[0].id).catch((error) =>
+        console.error('initial integration sync failed', error)
+      );
+    }
+    return c.redirect(
+      `${redirectBase}?integration=${adapter.id}&connected=1`
+    );
+  } catch (error) {
+    console.error('integration callback failed', error);
+    return fail(adapter.id);
+  }
+});
+
+/** Caller must own the connection row or be an owner of its workspace. */
+async function integrationForUser(
+  user: UserRow,
+  id: string
+): Promise<[IntegrationRow | null, boolean]> {
+  const rows = await query<IntegrationRow>(
+    'SELECT * FROM integrations WHERE id = $1',
+    [id]
+  );
+  const integration = rows[0];
+  if (!integration) return [null, false];
+  if (integration.user_id === user.id) return [integration, true];
+  const role = await workspaceRoleFor(user, integration.workspace_id);
+  return [integration, role === 'owner'];
+}
+
+app.post('/api/integrations/:id/sync', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [integration, allowed] = await integrationForUser(
+    user,
+    param(c, 'id')
+  );
+  if (!integration) return bad(c, 'not found', 404);
+  if (!allowed) return bad(c, 'insufficient role', 403);
+  if (!integrationsConfigured()) {
+    return bad(c, 'integrations are not configured', 503);
+  }
+  try {
+    return c.json(await syncIntegration(integration.id));
+  } catch (error) {
+    console.error('integration sync failed', error);
+    return bad(c, 'sync failed — try again', 502);
+  }
+});
+
+app.delete('/api/integrations/:id', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [integration, allowed] = await integrationForUser(
+    user,
+    param(c, 'id')
+  );
+  if (!integration) return bad(c, 'not found', 404);
+  if (!allowed) return bad(c, 'insufficient role', 403);
+  // Touchpoint rows cascade; touch stats on people stay as last known.
+  await query('DELETE FROM integrations WHERE id = $1', [integration.id]);
+  return c.json({ ok: true });
 });
 
 // ---------- maps ----------
