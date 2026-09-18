@@ -1427,6 +1427,7 @@ function MapInner() {
       [showStrategy, () => setShowStrategy(false)],
       [showBriefing, () => setShowBriefing(false)],
       [showChanges, () => setShowChanges(false)],
+      [committeeOpen, () => setCommitteeOpen(false)],
       [selectedId !== null, () => setSelectedId(null)],
     ];
     const onEscape = (event: KeyboardEvent) => {
@@ -1450,6 +1451,7 @@ function MapInner() {
     showStrategy,
     showBriefing,
     showChanges,
+    committeeOpen,
     selectedId,
   ]);
 
@@ -2750,51 +2752,74 @@ function MapInner() {
           </div>
         )}
 
-        {/* buying-committee coverage pill: compact by default, expands on demand */}
+        {/* buying-committee coverage: a quiet pill with a segmented coverage bar, expanding into a role breakdown */}
         {people.length > 0 && (
-          <div className={`absolute right-2 z-10 flex flex-col items-end gap-1.5 sm:bottom-auto sm:right-4 sm:top-20 ${!readOnly && selectedNodes.length > 1 ? 'bottom-28' : (laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) ? 'bottom-14' : 'bottom-2'}`}>
+          <div className={`absolute right-2 z-10 flex flex-col items-end gap-2 sm:bottom-auto sm:right-4 sm:top-20 ${!readOnly && selectedNodes.length > 1 ? 'bottom-28' : (laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) ? 'bottom-14' : 'bottom-2'}`}>
             <button
               type="button"
               onClick={() => setCommitteeOpen((open) => !open)}
               aria-expanded={committeeOpen}
+              aria-controls="committee-coverage"
               title={`${committeeCovered} of ${COMMITTEE_ROLES.length} buying roles covered`}
-              className="flex items-center gap-2 rounded-full border border-white/80 bg-white/85 py-1 pl-2.5 pr-2 text-[10px] font-semibold uppercase tracking-[.1em] text-slate-500 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl transition hover:bg-white hover:text-slate-700"
+              className={`flex items-center gap-3 rounded-full border bg-white/90 py-1.5 pl-3.5 pr-3 text-xs shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl transition hover:bg-white ${committeeOpen ? 'border-slate-300 text-slate-800' : 'border-white/80 text-slate-600 hover:text-slate-800'}`}
             >
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
-              <span>Committee · {people.length}</span>
-              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-1">
+              <span className="font-semibold">Buying committee</span>
+              <span className="flex items-center gap-[3px]" aria-hidden>
                 {COMMITTEE_ROLES.map((r) => (
                   <span
                     key={r}
-                    className={`h-1.5 w-1.5 rounded-full ${(coverage.get(r) ?? 0) > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
+                    className={`h-1.5 w-3 rounded-full ${(coverage.get(r) ?? 0) > 0 ? ROLE_META[r].dot : 'bg-slate-200'}`}
                   />
                 ))}
               </span>
-              <span className="tabular-nums normal-case tracking-normal text-slate-400">
-                {committeeCovered}/{COMMITTEE_ROLES.length}
+              <span className="tabular-nums text-slate-500">
+                {committeeCovered}<span className="text-slate-400">/{COMMITTEE_ROLES.length}</span>
               </span>
             </button>
             {committeeOpen && (
-              <div className="flex w-52 flex-col gap-1 rounded-2xl border border-white/80 bg-white/95 p-2 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl">
-                {COMMITTEE_ROLES.map((r) => {
-                  const count = coverage.get(r) ?? 0;
-                  return (
-                    <div
-                      key={r}
-                      className={`flex items-center gap-2 rounded-lg px-2 py-1 text-[11px] ${
-                        count > 0 ? ROLE_META[r].chip : 'text-slate-400'
-                      }`}
-                    >
-                      <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${count > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
-                      />
-                      <span className="flex-1">{ROLE_META[r].label}</span>
-                      <span className="tabular-nums font-medium">
-                        {count > 0 ? count : '—'}
-                      </span>
-                    </div>
-                  );
-                })}
+              <div
+                id="committee-coverage"
+                className="w-64 overflow-hidden rounded-2xl border border-white/80 bg-white/95 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl"
+              >
+                <div className="flex items-baseline justify-between px-4 pt-3.5 pb-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-[.1em] text-slate-400">
+                    Coverage
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {people.length} {people.length === 1 ? 'person' : 'people'} · {committeeCovered} of {COMMITTEE_ROLES.length} roles
+                  </span>
+                </div>
+                <ul className="px-2 pb-2">
+                  {COMMITTEE_ROLES.map((r) => {
+                    const count = coverage.get(r) ?? 0;
+                    const covered = count > 0;
+                    return (
+                      <li
+                        key={r}
+                        className="flex items-center gap-3 rounded-xl px-2 py-2 text-[13px]"
+                      >
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${covered ? ROLE_META[r].dot : 'border border-dashed border-slate-300 bg-transparent'}`}
+                        />
+                        <span className={`flex-1 ${covered ? 'font-medium text-slate-800' : 'text-slate-500'}`}>
+                          {ROLE_META[r].label}
+                        </span>
+                        {covered ? (
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${ROLE_META[r].chip}`}>
+                            {count}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">Not identified</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {committeeCovered < COMMITTEE_ROLES.length && (
+                  <p className="border-t border-slate-100 px-4 py-2.5 text-[11px] leading-relaxed text-slate-500">
+                    Set a person’s buying role from their profile to fill the gaps.
+                  </p>
+                )}
               </div>
             )}
           </div>
