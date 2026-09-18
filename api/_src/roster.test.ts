@@ -26,3 +26,19 @@ test('roster merges without downgrading user state', () => {
   assert.equal(row.map_person_id, 'p1');
   assert.equal(row.source, 'sumble');
 });
+
+test('roster uses a provider function hint for unclassified titles', () => {
+  const row = mergeRosterRows(null, {
+    name: 'Taylor Morgan',
+    title: null,
+    location: null,
+    linkedin: null,
+    email: null,
+    managerKey: null,
+    source: 'sumble',
+    sourceUrl: null,
+    functionHint: 'Security',
+  }, '2025-02-01T00:00:00Z');
+  assert.equal(row.function, 'security');
+  assert.equal(row.seniority, 'unknown');
+});

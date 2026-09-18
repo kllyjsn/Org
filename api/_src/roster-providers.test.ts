@@ -14,8 +14,13 @@ test('sumble paginates all people and reports progress', async () => {
   }) as typeof fetch;
   try {
     const progress: number[] = [];
-    const people = await sumbleAllPeople('org', 'key', { max: 2000, deadlineMs: Date.now() + 20_000, onProgress: (n) => progress.push(n) });
-    assert.equal(people.length, 450);
+    const result = await sumbleAllPeople('org', 'key', {
+      max: 2000,
+      deadlineMs: Date.now() + 20_000,
+      onProgress: (n) => progress.push(n),
+    });
+    assert.equal(result.people.length, 450);
+    assert.equal(result.total, 450);
     assert.deepEqual(calls.map((init) => (JSON.parse(String(init.body)) as { offset?: number }).offset), [0, 200, 400]);
     assert.deepEqual(progress, [200, 400, 450]);
   } finally { globalThis.fetch = original; }
@@ -24,7 +29,15 @@ test('sumble paginates all people and reports progress', async () => {
 test('sumble surfaces credit errors', async () => {
   const original = globalThis.fetch;
   globalThis.fetch = (async () => new Response(JSON.stringify({ detail: 'not enough credits' }), { status: 200 })) as typeof fetch;
-  try { await assert.rejects(() => sumbleAllPeople('org', 'key', { deadlineMs: Date.now() + 5000, onProgress: () => undefined }), /not enough credits/); }
+  try {
+    await assert.rejects(
+      () => sumbleAllPeople('org', 'key', {
+        deadlineMs: Date.now() + 5000,
+        onProgress: () => undefined,
+      }),
+      /not enough credits/
+    );
+  }
   finally { globalThis.fetch = original; }
 });
 

@@ -91,11 +91,16 @@ export async function sumbleAllPeople(
   orgId: string | number,
   apiKey: string,
   opts: { max?: number; deadlineMs: number; onProgress: (n: number) => void }
-): Promise<Record<string, unknown>[]> {
+): Promise<{ people: Record<string, unknown>[]; total: number | null }> {
   const max = Math.min(2000, opts.max ?? 2000);
   const out: Record<string, unknown>[] = [];
+  let total: number | null = null;
   const limit = 200;
-  for (let offset = 0; out.length < max && Date.now() < opts.deadlineMs - 1_500; offset += limit) {
+  for (
+    let offset = 0;
+    out.length < max && Date.now() < opts.deadlineMs - 1_500;
+    offset += limit
+  ) {
     const payload = await sumbleCall('/people', {
       filter: { organization_ids: [orgId] },
       select: { attributes: ['name', 'job_title', 'job_level', 'job_function', 'linkedin_url', 'location', 'sumble_url'] },
@@ -106,10 +111,10 @@ export async function sumbleAllPeople(
     const rows = rowsOf(payload, 'people') as Record<string, unknown>[];
     out.push(...rows);
     opts.onProgress(out.length);
-    const total = typeof payload.total === 'number' ? payload.total : null;
+    if (typeof payload.total === 'number') total = payload.total;
     if (rows.length < limit || (total != null && out.length >= Math.min(total, max))) break;
   }
-  return out.slice(0, max);
+  return { people: out.slice(0, max), total };
 }
 
 export async function sumbleRelatedPeople(
@@ -431,8 +436,12 @@ export async function sumbleOrgPeople(
   if (remaining < 2_000) return null;
   const innerDeadline = Date.now() + remaining;
 
-  const [peopleRows, teamsPayload, relatedPayload] = await Promise.all([
-    sumbleAllPeople(orgId, apiKey, { max: 2000, deadlineMs: innerDeadline, onProgress: () => undefined }),
+  const [peopleResult, teamsPayload, relatedPayload] = await Promise.all([
+    sumbleAllPeople(orgId, apiKey, {
+      max: 200,
+      deadlineMs: innerDeadline,
+      onProgress: () => undefined,
+    }).catch(() => ({ people: [], total: null })),
     sumbleCall(
       '/teams',
       {
@@ -477,7 +486,7 @@ export async function sumbleOrgPeople(
     rowsOf(relatedPayload, 'people')
   );
   const people = sumblePeopleToRaw(
-    peopleRows,
+    peopleResult.people,
     teamByName,
     managerByName
   );
@@ -488,6 +497,6 @@ export async function sumbleOrgPeople(
   return {
     companyName: textOf(org?.name),
     people: combined,
-    total: peopleRows.length,
+    total: peopleResult.total,
   };
 }
