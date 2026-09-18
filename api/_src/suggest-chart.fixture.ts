@@ -87,7 +87,7 @@ export function makeRosterFixture(
       seniority,
       managerKey,
       locations[index % locations.length],
-      index % 5 === 0 ? 'csv' : 'sumble',
+      index % 5 < 2 ? 'sumble' : 'csv',
       domain
     ));
   }
@@ -101,15 +101,18 @@ function csvEscape(value: string | null): string {
 
 export function rosterFixtureCsv(rows: RosterPersonRow[]): string {
   const headers = ['name', 'title', 'linkedin', 'email', 'location', 'company', 'manager'];
+  const nameByKey = new Map(rows.map((row) => [row.person_key, row.name]));
   const lines = rows.map((item) =>
     [
       item.name,
       item.title,
-      item.linkedin,
+      null,
       item.email,
       item.location,
       item.domain,
-      item.manager_key,
+      item.manager_key
+        ? nameByKey.get(item.manager_key) ?? null
+        : null,
     ].map(csvEscape).join(',')
   );
   return [headers.join(','), ...lines].join('\n');

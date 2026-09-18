@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { rowsFromCsv } from './csv.js';
+import { personKeyFor } from './roster.js';
 import type { Persona } from './personas.js';
 import { seniorityRank } from './taxonomy.js';
 import {
@@ -187,7 +188,37 @@ test('evidence kinds and CSV manager column', () => {
   );
   const csvRows = rowsFromCsv(rosterFixtureCsv(rows));
   assert.equal(csvRows[0].manager, null);
-  assert.equal(csvRows[1].manager, rows[1].manager_key);
+  assert.equal(csvRows[1].manager, rows[0].name);
+});
+
+test('CSV fixture manager names resolve reporting evidence', () => {
+  const fixture = makeRosterFixture(300);
+  const imported = rowsFromCsv(rosterFixtureCsv(fixture));
+  const roster = imported.map((item, index) => {
+    const source = fixture[index];
+    return {
+      ...source,
+      id: `csv-${index}`,
+      name: item.name,
+      title: item.title,
+      linkedin: item.linkedin,
+      email: item.email,
+      location: item.location,
+      person_key: personKeyFor(item.name, item.linkedin),
+      manager_key: item.manager
+        ? personKeyFor(item.manager, null)
+        : null,
+      source: 'csv' as const,
+      source_url: null,
+      confidence: 'medium' as const,
+    };
+  });
+  const suggestion = buildChartSuggestion({
+    roster,
+    ...emptyMap,
+    options: { limit: 1000, minSeniority: 'ic' },
+  });
+  assert.ok(suggestion.stats.withEvidenceEdges > 100);
 });
 
 test('applyLlmPatch validates ids and names', () => {

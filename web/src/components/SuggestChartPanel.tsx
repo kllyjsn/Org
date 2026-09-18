@@ -64,9 +64,8 @@ export default function SuggestChartPanel({
   const chart = useSession((state) => state.suggestChart);
   const setSuggestion = useSession((state) => state.setSuggestion);
   const mergeRefined = useSession((state) => state.mergeRefined);
-  const confirmAll = useSession((state) => state.confirmAll);
   const confirmHighOnly = useSession((state) => state.confirmHighOnly);
-  const clearSuggestion = useSession((state) => state.clearSuggestion);
+  const applySuggestion = useSession((state) => state.applySuggestion);
   const setSuggestionStatus = useSession((state) => state.setSuggestionStatus);
   const [functions, setFunctions] = useState(() => {
     const selected = new Set(personas.flatMap((persona) => persona.functions));
@@ -130,48 +129,10 @@ export default function SuggestChartPanel({
     }
   };
 
-  const apply = async (declineAll = false) => {
-    if (!chart.suggestion || chart.applying) return;
-    const confirmed = declineAll
-      ? []
-      : chart.suggestion.people.filter(
-          (person) =>
-            chart.confirmed.has(person.rosterId) &&
-            !chart.declined.has(person.rosterId)
-        );
-    const confirmedIds = new Set(confirmed.map((person) => person.rosterId));
-    const accepted = confirmed.map((person) => ({
-      rosterId: person.rosterId,
-      groupId: person.groupId,
-      reportsToRosterId:
-        person.reportsToRosterId && confirmedIds.has(person.reportsToRosterId)
-          ? person.reportsToRosterId
-          : null,
-      reportsToPersonId: person.reportsToPersonId,
-      confidence: person.confidence,
-    }));
-    setSuggestionStatus({ applying: true, error: null });
-    try {
-      await beforeApply?.();
-      const result = await api.applyChartSuggestion(mapId, {
-        accept: { groups: chart.suggestion.groups, people: accepted },
-        decline: {
-          rosterIds: [
-            ...new Set([
-              ...chart.declined,
-              ...(declineAll ? ghostPeople.map((person) => person.rosterId) : []),
-            ]),
-          ],
-        },
-      });
-      onApplied(result.map);
-      clearSuggestion();
-    } catch (error) {
-      setSuggestionStatus({
-        applying: false,
-        error: error instanceof Error ? error.message : 'Could not apply suggestions',
-      });
-    }
+  const apply = async (mode: 'confirmed' | 'all' | 'declineAll') => {
+    if (readOnly || chart.applying) return;
+    const result = await applySuggestion(mapId, mode, beforeApply);
+    if (result) onApplied(result.map);
   };
 
   const appendPreset = (preset: string) => {
@@ -359,13 +320,13 @@ export default function SuggestChartPanel({
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={confirmAll} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+              <button type="button" disabled={chart.applying || readOnly} onClick={() => void apply('all')} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40">
                 Confirm all
               </button>
-              <button type="button" onClick={confirmHighOnly} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+              <button type="button" disabled={chart.applying} onClick={confirmHighOnly} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40">
                 Confirm high-confidence only
               </button>
-              <button type="button" onClick={() => void apply(true)} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600">
+              <button type="button" disabled={chart.applying || readOnly} onClick={() => void apply('declineAll')} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 disabled:opacity-40">
                 Decline all
               </button>
             </div>
@@ -401,7 +362,7 @@ export default function SuggestChartPanel({
             <button
               type="button"
               disabled={chart.applying || readOnly}
-              onClick={() => void apply()}
+              onClick={() => void apply('confirmed')}
               className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
             >
               {chart.applying && <Loader2 size={16} className="animate-spin" />}

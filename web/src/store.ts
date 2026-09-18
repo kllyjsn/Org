@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api } from './api';
 import type {
   ChartSuggestion,
+  LoadedMap,
   MapCoverage,
   Persona,
   PersonaInput,
@@ -70,6 +71,11 @@ interface SessionState {
   setSuggestionStatus: (
     status: Partial<Pick<SuggestChartState, 'generating' | 'applying' | 'error'>>
   ) => void;
+  applySuggestion: (
+    mapId: string,
+    mode: 'confirmed' | 'all' | 'declineAll',
+    beforeApply?: () => Promise<void>
+  ) => Promise<{ map: LoadedMap; added: number; declined: number } | null>;
 }
 
 const COVERAGE_DEBOUNCE_MS = 800;
@@ -302,6 +308,86 @@ export const useSession = create<SessionState>((set, get) => ({
     set((state) => ({
       suggestChart: { ...state.suggestChart, ...status },
     })),
+  applySuggestion: async (mapId, mode, beforeApply) => {
+    const current = get().suggestChart;
+    if (
+      current.mapId !== mapId ||
+      !current.suggestion ||
+      current.applying
+    ) {
+      return null;
+    }
+    const ghosts = current.suggestion.people.filter(
+      (person) => !current.declined.has(person.rosterId)
+    );
+    const accepted =
+      mode === 'declineAll'
+        ? []
+        : ghosts.filter(
+            (person) =>
+              mode === 'all' || current.confirmed.has(person.rosterId)
+          );
+    const acceptedIds = new Set(accepted.map((person) => person.rosterId));
+    const body = {
+      accept: {
+        groups: current.suggestion.groups,
+        people: accepted.map((person) => ({
+          rosterId: person.rosterId,
+          groupId: person.groupId,
+          reportsToRosterId:
+            person.reportsToRosterId &&
+            acceptedIds.has(person.reportsToRosterId)
+              ? person.reportsToRosterId
+              : null,
+          reportsToPersonId: person.reportsToPersonId,
+          confidence: person.confidence,
+        })),
+      },
+      decline: {
+        rosterIds: [
+          ...new Set([
+            ...current.declined,
+            ...(mode === 'declineAll'
+              ? ghosts.map((person) => person.rosterId)
+              : []),
+          ]),
+        ],
+      },
+    };
+    set((state) => ({
+      suggestChart: { ...state.suggestChart, applying: true, error: null },
+    }));
+    try {
+      await beforeApply?.();
+      const result = await api.applyChartSuggestion(mapId, body);
+      set((state) => ({
+        suggestChart: {
+          ...state.suggestChart,
+          mapId: null,
+          suggestion: null,
+          params: {},
+          confirmed: new Set(),
+          declined: new Set(),
+          generating: false,
+          applying: false,
+          error: null,
+        },
+      }));
+      return result;
+    } catch (error) {
+      set((state) => ({
+        suggestChart: {
+          ...state.suggestChart,
+          applying: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Could not apply suggestions',
+        },
+      }));
+      return null;
+    }
+  },
 
   refreshWorkspaces: async () => {
     const { workspaces } = await api.me();
