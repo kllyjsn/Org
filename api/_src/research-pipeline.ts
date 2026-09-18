@@ -1,5 +1,5 @@
 import { activeProvider, chat, type Provider } from './llm.js';
-import { exaPeopleContext } from './exa.js';
+import { exaCompanyProfile, exaPeopleContext } from './exa.js';
 import { sumbleOrgPeople, type SumbleOrgData } from './sumble.js';
 import {
   deadSourceUrls,
@@ -19,7 +19,7 @@ import {
   type ResearchedPerson,
   type StrategicInitiative,
 } from './research.js';
-import type { SellerProfile } from './types.js';
+import type { CompanyProfile, SellerProfile } from './types.js';
 
 export type ResearchStep =
   | 'discover'
@@ -45,6 +45,7 @@ export interface ResearchCheckpoint {
   } | null;
   rawPeople: unknown[];
   companyName: string | null;
+  companyProfile: CompanyProfile | null;
   provider: Provider | null;
   initiatives: StrategicInitiative[];
   deadSources: string[];
@@ -63,6 +64,7 @@ export interface ResearchEvent {
 export interface PipelineDeps {
   chat: typeof chat;
   exaPeopleContext: typeof exaPeopleContext;
+  exaCompanyProfile: typeof exaCompanyProfile;
   sumbleOrgPeople: typeof sumbleOrgPeople;
   resolveSourceUrls: typeof resolveSourceUrls;
   verifyTitleClaims: typeof verifyTitleClaims;
@@ -72,6 +74,7 @@ export interface PipelineDeps {
 const REAL_DEPS: PipelineDeps = {
   chat,
   exaPeopleContext,
+  exaCompanyProfile,
   sumbleOrgPeople,
   resolveSourceUrls,
   verifyTitleClaims,
@@ -182,6 +185,7 @@ export function initialCheckpoint(input: {
       sumble: null,
       rawPeople: fixture.people,
       companyName: fixture.companyName,
+      companyProfile: null,
       provider: 'fixture',
       initiatives: [],
       deadSources: [],
@@ -199,6 +203,7 @@ export function initialCheckpoint(input: {
     sumble: null,
     rawPeople: [],
     companyName: null,
+    companyProfile: null,
     provider: null,
     initiatives: [],
     deadSources: [],
@@ -215,12 +220,14 @@ export function partialResult(cp: ResearchCheckpoint): ResearchResult {
   if (cp.provider === 'fixture') {
     return {
       ...fixtureOrg(cp.domain),
+      companyProfile: cp.companyProfile,
       complete: cp.step === 'done',
       deadSources: cp.deadSources,
     };
   }
   return {
     companyName: cp.companyName,
+    companyProfile: cp.companyProfile,
     domain: cp.domain,
     people: partialPeople(cp),
     provider: cp.provider ?? activeProvider(),
@@ -246,10 +253,18 @@ export async function runStep(
 
   if (current.step === 'discover') {
     try {
-      current.discoveryContext = await deps.exaPeopleContext(
-        current.domain,
-        current.focus ?? undefined
-      );
+      const [discoveryContext, companyProfile] = await Promise.all([
+        deps.exaPeopleContext(current.domain, current.focus ?? undefined),
+        deps
+          .exaCompanyProfile(current.domain)
+          .catch(() => null),
+      ]);
+      current.discoveryContext = discoveryContext;
+      current.companyProfile = companyProfile;
+      if (companyProfile) {
+        current.companyName ??= companyProfile.companyName;
+        opts.emit(event('discover', 'info', 'Company profile captured'));
+      }
       opts.emit(event('discover', 'info', 'Discovery complete'));
     } catch (error) {
       current.discoveryContext = '';

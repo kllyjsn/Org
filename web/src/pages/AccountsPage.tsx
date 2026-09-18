@@ -7,6 +7,7 @@ import {
   BriefcaseBusiness,
   Building2,
   Clock3,
+  FileSpreadsheet,
   Inbox,
   LayoutDashboard,
   Loader2,
@@ -521,6 +522,7 @@ export default function AccountsPage() {
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [pageError, setPageError] = useState('');
+  const [exportingTerritory, setExportingTerritory] = useState(false);
   const workspace = workspaces.find((item) => item.id === workspaceId);
   useDocumentTitle('Accounts — TopDown');
   const totalPeople = maps.reduce((sum, map) => sum + map.peopleCount, 0);
@@ -634,6 +636,23 @@ export default function AccountsPage() {
     }
   };
 
+  const exportTerritory = async () => {
+    if (!workspaceId || maps.length === 0 || exportingTerritory) return;
+    setPageError('');
+    setExportingTerritory(true);
+    try {
+      await api.downloadWorkspaceExport(workspaceId);
+    } catch (err) {
+      setPageError(
+        err instanceof ApiError
+          ? err.message
+          : 'Could not export the territory plan.'
+      );
+    } finally {
+      setExportingTerritory(false);
+    }
+  };
+
   return (
     <div className="flex h-full overflow-hidden bg-[#f6f7f2]">
       <nav
@@ -684,6 +703,16 @@ export default function AccountsPage() {
               icon={<Users size={16} />}
               label="Members"
               onClick={() => setShowMembers(true)}
+            />
+            <RailButton
+              icon={<FileSpreadsheet size={16} />}
+              label={
+                exportingTerritory
+                  ? 'Exporting territory…'
+                  : 'Export territory (.xlsx)'
+              }
+              onClick={() => void exportTerritory()}
+              disabled={maps.length === 0 || exportingTerritory}
             />
           </>
         )}
