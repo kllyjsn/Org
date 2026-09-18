@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test": "tsx --test src/lib/*.test.ts",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.4",
+    "tsx": "^4.19.2",
     "vite": "^5.4.0"
   }
 }
