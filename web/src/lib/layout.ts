@@ -16,7 +16,9 @@ function layoutPositions(
   const hasParent = new Set<string>();
   for (const e of edges) {
     if (e.kind !== 'reports') continue;
-    children.set(e.from, [...(children.get(e.from) ?? []), e.to]);
+    const siblings = children.get(e.from);
+    if (siblings) siblings.push(e.to);
+    else children.set(e.from, [e.to]);
     hasParent.add(e.to);
   }
 
@@ -114,16 +116,19 @@ function lanePositions(
   const lanes = new Map<string, Person[]>();
   for (const person of people) {
     const name = keyOf(person);
-    lanes.set(name, [...(lanes.get(name) ?? []), person]);
+    const members = lanes.get(name);
+    if (members) members.push(person);
+    else lanes.set(name, [person]);
   }
+  const ranks = new Map(people.map((person) => [person.id, seniorityRank(person)]));
 
   const ordered = [...lanes.entries()].sort((a, b) => {
     if (laneRank) {
       const rankDiff = laneRank(a[0]) - laneRank(b[0]);
       if (rankDiff !== 0) return rankDiff;
     }
-    const seniorityA = Math.min(...a[1].map((p) => seniorityRank(p)));
-    const seniorityB = Math.min(...b[1].map((p) => seniorityRank(p)));
+    const seniorityA = Math.min(...a[1].map((p) => ranks.get(p.id)!));
+    const seniorityB = Math.min(...b[1].map((p) => ranks.get(p.id)!));
     if (seniorityA !== seniorityB) return seniorityA - seniorityB;
     if (b[1].length !== a[1].length) return b[1].length - a[1].length;
     return a[0].localeCompare(b[0]);
@@ -142,7 +147,7 @@ function lanePositions(
     // lanes keep their leaders visible); equal ranks cluster by team so
     // business units still sit together.
     const sorted = [...members].sort((a, b) => {
-      const rank = seniorityRank(a) - seniorityRank(b);
+      const rank = ranks.get(a.id)! - ranks.get(b.id)!;
       if (rank !== 0) return rank;
       const teamA = (a.team ?? a.productLine ?? '').toLowerCase();
       const teamB = (b.team ?? b.productLine ?? '').toLowerCase();
@@ -292,8 +297,14 @@ function jobLevelRank(jobLevel: string | null | undefined): number | null {
   return 9;
 }
 
+const rankCache = new WeakMap<Person, number>();
+
 export function seniorityRank(person: Person): number {
-  return jobLevelRank(person.jobLevel) ?? titleRank(person.title);
+  const cached = rankCache.get(person);
+  if (cached !== undefined) return cached;
+  const rank = jobLevelRank(person.jobLevel) ?? titleRank(person.title);
+  rankCache.set(person, rank);
+  return rank;
 }
 
 /**
