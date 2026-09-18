@@ -201,6 +201,10 @@ export interface MapRow {
   company_name: string | null;
   state: MapState;
   is_live_opportunity: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  outcome_at: string | null;
+  outcome_coverage: unknown;
+  stage: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
