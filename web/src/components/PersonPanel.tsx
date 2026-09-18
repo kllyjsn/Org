@@ -13,6 +13,17 @@ import type {
   StrategicInitiative,
 } from '../types';
 
+function touchAgo(iso: string): string {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  if (ms < 0) return 'today';
+  const days = Math.floor(ms / 86_400_000);
+  if (days < 1) return 'today';
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
 const ROLES: BuyingRole[] = [
   'none',
   'champion',
@@ -179,6 +190,25 @@ export default function PersonPanel({
           <p className="line-clamp-2 text-xs leading-5 text-slate-500">
             {person.title}
           </p>
+          {(person.lastTouchAt ||
+            person.meetingCount ||
+            person.emailThreadCount) && (
+            <p className="mt-1 text-[10px] font-medium text-slate-400">
+              {[
+                person.lastTouchAt
+                  ? `Last touch ${touchAgo(person.lastTouchAt)}`
+                  : null,
+                person.meetingCount
+                  ? `${person.meetingCount} meeting${person.meetingCount === 1 ? '' : 's'}`
+                  : null,
+                person.emailThreadCount
+                  ? `${person.emailThreadCount} thread${person.emailThreadCount === 1 ? '' : 's'}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
         </div>
         <button
           onClick={onClose}

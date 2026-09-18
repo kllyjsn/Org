@@ -49,11 +49,26 @@ export default function RosterView({
 }) {
   const [query, setQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState<Set<string>>(new Set());
-  const [metFilter, setMetFilter] = useState<'all' | 'met' | 'unmet'>('all');
+  const [metFilter, setMetFilter] = useState<
+    'all' | 'met' | 'unmet' | 'untouched30'
+  >('all');
   const [sortKey, setSortKey] = useState<SortKey>('org');
 
   const metCount = useMemo(
     () => people.filter((person) => person.metWith).length,
+    [people]
+  );
+
+  const untouchedCount = useMemo(
+    () =>
+      people.filter((person) => {
+        const touchMs = person.lastTouchAt
+          ? Date.parse(person.lastTouchAt)
+          : Number.NaN;
+        return (
+          !Number.isFinite(touchMs) || Date.now() - touchMs > 30 * 86_400_000
+        );
+      }).length,
     [people]
   );
 
@@ -127,6 +142,15 @@ export default function RosterView({
       }
       if (metFilter === 'met' && !person.metWith) return false;
       if (metFilter === 'unmet' && person.metWith) return false;
+      if (metFilter === 'untouched30') {
+        const touchMs = person.lastTouchAt
+          ? Date.parse(person.lastTouchAt)
+          : Number.NaN;
+        const stale =
+          !Number.isFinite(touchMs) ||
+          Date.now() - touchMs > 30 * 86_400_000;
+        if (!stale) return false;
+      }
       return !query.trim() || matchesAllTokens(searchText(person), query);
     });
     return [...filtered].sort(compare);
@@ -228,7 +252,7 @@ export default function RosterView({
             </button>
           )}
           <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            {(['all', 'met', 'unmet'] as const).map((value) => (
+            {(['all', 'met', 'unmet', 'untouched30'] as const).map((value) => (
               <button
                 key={value}
                 type="button"
@@ -246,6 +270,8 @@ export default function RosterView({
                   </span>
                 ) : value === 'unmet' ? (
                   'Not met'
+                ) : value === 'untouched30' ? (
+                  `Untouched 30d (${untouchedCount})`
                 ) : (
                   'All'
                 )}

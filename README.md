@@ -40,6 +40,13 @@ npm run dev                 # api :8787  +  web :5173 (proxies /api)
 Open http://localhost:5173 — register an account (creates a personal
 workspace), then "New map" → paste a domain.
 
+## Integrations
+
+Optional Google/Microsoft calendar + email sync stamps `lastTouchAt`,
+meeting counts, and `metWith` on mapped people. Set the provider OAuth
+client env vars plus `INTEGRATION_ENCRYPTION_KEY` (tokens are AES-256-GCM
+encrypted at rest); without them the UI shows providers as Not configured.
+
 ## Notes
 
 - Auth is minimal email/password + session cookie — structured to swap in

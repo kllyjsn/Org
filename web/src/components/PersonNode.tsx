@@ -19,6 +19,11 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
     p.researchStatus === 'conflicting' ||
     p.researchStatus === 'possibly_stale' ||
     p.freshness === 'stale';
+  const touchMs = p.lastTouchAt ? Date.parse(p.lastTouchAt) : Number.NaN;
+  const staleTouch =
+    Number.isFinite(touchMs) &&
+    Date.now() - touchMs > 30 * 86_400_000 &&
+    ['champion', 'economic_buyer', 'decision_maker'].includes(p.role ?? 'none');
 
   return (
     <div
@@ -71,6 +76,12 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
             >
               <span className={`h-1.5 w-1.5 rounded-full ${role.dot}`} />
               {role.label}
+              {staleTouch && (
+                <span
+                  title="No touch in 30+ days"
+                  className="ml-0.5 h-1.5 w-1.5 rounded-full bg-amber-400"
+                />
+              )}
             </span>
           )}
           {p.metWith && (
