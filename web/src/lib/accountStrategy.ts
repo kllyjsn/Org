@@ -11,6 +11,9 @@ import type {
   StakeholderPlanEntry,
 } from '../types';
 
+// Strategy selection and route scoring must stay in sync with
+// api/_src/strategy.ts.
+
 export type { AccountStrategyPlan, StakeholderPlanEntry, StrategyTask, Stance };
 
 export const EMPTY_PLAN: AccountStrategyPlan = {
@@ -109,7 +112,8 @@ const TARGET_PRIORITY: Record<Person['role'], number> = {
 function personScore(
   person: Person,
   priorities: Record<Person['role'], number>,
-  sellerProfile: SellerProfile | null
+  sellerProfile: SellerProfile | null,
+  includeMetBonus = false
 ): number {
   const executive =
     /\b(chief|ceo|cto|cio|cfo|coo|president|vp|vice president|head)\b/i.test(
@@ -122,7 +126,8 @@ function personScore(
     personProductFit(person, sellerProfile) +
     executive +
     Math.min((person.sources ?? []).length, 5) * 2 +
-    (person.confidence === 'high' ? 8 : person.confidence === 'medium' ? 4 : 0)
+    (person.confidence === 'high' ? 8 : person.confidence === 'medium' ? 4 : 0) +
+    (includeMetBonus && person.metWith ? 12 : 0)
   );
 }
 
@@ -449,8 +454,8 @@ export function computeStrategy(input: StrategyInput): StrategyOutput {
   const byId = new Map(people.map((person) => [person.id, person]));
   const autoEntry = [...people].sort(
     (a, b) =>
-      personScore(b, ROLE_PRIORITY, sellerProfile) -
-        personScore(a, ROLE_PRIORITY, sellerProfile) ||
+      personScore(b, ROLE_PRIORITY, sellerProfile, true) -
+        personScore(a, ROLE_PRIORITY, sellerProfile, true) ||
       a.name.localeCompare(b.name)
   )[0];
   const entry = plan.entryPersonId ? byId.get(plan.entryPersonId) : autoEntry;

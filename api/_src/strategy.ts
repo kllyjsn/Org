@@ -1,7 +1,15 @@
 import { chat } from './llm.js';
 import { extractJson } from './research.js';
 import type { BriefingInsight } from './briefing.js';
-import type { MapState, Person, SellerProfile } from './types.js';
+import type {
+  MapEdge,
+  MapState,
+  Person,
+  SellerProfile,
+} from './types.js';
+
+// Strategy selection and route scoring must stay in sync with
+// web/src/lib/accountStrategy.ts.
 
 export interface StrategyContext {
   entry?: Person;
@@ -40,10 +48,10 @@ export interface StrategyInsights {
 
 const ROLE_PRIORITY: Record<Person['role'], number> = {
   champion: 100,
-  economic_buyer: 90,
-  decision_maker: 80,
-  technical_buyer: 70,
-  influencer: 50,
+  influencer: 75,
+  technical_buyer: 65,
+  decision_maker: 55,
+  economic_buyer: 50,
   blocker: 10,
   none: 0,
 };
@@ -58,10 +66,179 @@ const TARGET_PRIORITY: Record<Person['role'], number> = {
   none: 0,
 };
 
-export function strategyContext(state: MapState): StrategyContext {
+type BuyingFunction =
+  | 'engineering'
+  | 'security'
+  | 'data'
+  | 'revenue'
+  | 'marketing'
+  | 'finance'
+  | 'people'
+  | 'operations';
+
+const FUNCTION_SIGNALS: Record<BuyingFunction, RegExp> = {
+  engineering:
+    /\b(developer|development|engineering|software|api|platform|infrastructure|cloud|devops|sre|architecture|technical|technology|cto|cio)\b/i,
+  security:
+    /\b(security|cyber|identity|compliance|risk|privacy|ciso|trust)\b/i,
+  data: /\b(data|analytics|machine learning|artificial intelligence|\bai\b|insights|database)\b/i,
+  revenue:
+    /\b(revenue|sales|account executive|customer success|go.to.market|\bgtm\b|commercial|cro)\b/i,
+  marketing:
+    /\b(marketing|brand|demand generation|growth|communications|cmo)\b/i,
+  finance:
+    /\b(finance|financial|payments|billing|treasury|procurement|purchasing|cfo|controller)\b/i,
+  people:
+    /\b(people|human resources|\bhr\b|talent|recruiting|workforce|chro)\b/i,
+  operations:
+    /\b(operations|operational|supply chain|workflows?|productivity|coo)\b/i,
+};
+
+function functionsIn(value: string): BuyingFunction[] {
+  return (Object.entries(FUNCTION_SIGNALS) as [BuyingFunction, RegExp][])
+    .filter(([, pattern]) => pattern.test(value))
+    .map(([name]) => name);
+}
+
+function sellerBuyingFunctions(profile: SellerProfile | null): BuyingFunction[] {
+  if (!profile) return [];
+  const scores = new Map<BuyingFunction, number>();
+  const add = (values: string[], weight: number) => {
+    for (const name of functionsIn(values.join(' '))) {
+      scores.set(name, (scores.get(name) ?? 0) + weight);
+    }
+  };
+  add(profile.products, 3);
+  add(profile.useCases, 3);
+  add([profile.positioning], 2);
+  add([profile.summary], 1);
+  add(profile.targetCustomers, 1);
+  const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]);
+  const strongest = ranked[0]?.[1] ?? 0;
+  return ranked
+    .filter(([, score]) => score >= Math.max(2, strongest * 0.6))
+    .slice(0, 2)
+    .map(([name]) => name);
+}
+
+function personProductFit(
+  person: Person,
+  profile: SellerProfile | null
+): number {
+  const sellerFunctions = new Set(sellerBuyingFunctions(profile));
+  if (sellerFunctions.size === 0) return 0;
+  const personFunctions = functionsIn(
+    [person.title, person.department, person.team, person.productLine]
+      .filter(Boolean)
+      .join(' ')
+  );
+  const matches = personFunctions.filter((name) => sellerFunctions.has(name));
+  if (matches.length > 0) return 70 + (matches.length - 1) * 10;
+  return personFunctions.length > 0 ? -110 : -30;
+}
+
+function personScore(
+  person: Person,
+  priorities: Record<Person['role'], number>,
+  sellerProfile: SellerProfile | null,
+  includeMetBonus = false
+): number {
+  const executive =
+    /\b(chief|ceo|cto|cio|cfo|coo|president|vp|vice president|head)\b/i.test(
+      person.title
+    )
+      ? 18
+      : 0;
+  return (
+    priorities[person.role ?? 'none'] +
+    personProductFit(person, sellerProfile) +
+    executive +
+    Math.min((person.sources ?? []).length, 5) * 2 +
+    (person.confidence === 'high' ? 8 : person.confidence === 'medium' ? 4 : 0) +
+    (includeMetBonus && person.metWith ? 12 : 0)
+  );
+}
+
+type Hop = { id: string; inferred: boolean; influence: boolean };
+
+function findPath(
+  people: Person[],
+  edges: MapEdge[],
+  startId: string,
+  targetId: string
+): { ids: string[]; hops: Hop[] } {
+  if (startId === targetId) return { ids: [startId], hops: [] };
+  const known = new Set(people.map((person) => person.id));
+  const adjacency = new Map<string, Hop[]>();
+  for (const edge of edges) {
+    if (!known.has(edge.from) || !known.has(edge.to)) continue;
+    const hop = {
+      id: edge.to,
+      inferred: Boolean(edge.inferred),
+      influence: edge.kind === 'influence',
+    };
+    const reverse = {
+      id: edge.from,
+      inferred: Boolean(edge.inferred),
+      influence: edge.kind === 'influence',
+    };
+    adjacency.set(edge.from, [...(adjacency.get(edge.from) ?? []), hop]);
+    adjacency.set(edge.to, [...(adjacency.get(edge.to) ?? []), reverse]);
+  }
+  const distance = new Map<string, number>([[startId, 0]]);
+  const previous = new Map<string, { from: string; hop: Hop }>();
+  const open = new Set(known);
+  while (open.size > 0) {
+    const current = [...open].sort(
+      (a, b) => (distance.get(a) ?? Infinity) - (distance.get(b) ?? Infinity)
+    )[0];
+    if (!current || !Number.isFinite(distance.get(current) ?? Infinity)) break;
+    open.delete(current);
+    if (current === targetId) break;
+    for (const hop of adjacency.get(current) ?? []) {
+      const cost = hop.influence ? 1 : hop.inferred ? 2.2 : 1.4;
+      const nextDistance = (distance.get(current) ?? 0) + cost;
+      if (nextDistance < (distance.get(hop.id) ?? Infinity)) {
+        distance.set(hop.id, nextDistance);
+        previous.set(hop.id, { from: current, hop });
+      }
+    }
+  }
+  if (!previous.has(targetId)) return { ids: [], hops: [] };
+  const ids = [targetId];
+  const hops: Hop[] = [];
+  while (ids[0] !== startId) {
+    const previousHop = previous.get(ids[0]);
+    if (!previousHop) return { ids: [], hops: [] };
+    hops.unshift(previousHop.hop);
+    ids.unshift(previousHop.from);
+  }
+  return { ids, hops };
+}
+
+function routePath(
+  people: Person[],
+  edges: MapEdge[],
+  start: Person | undefined,
+  target: Person | undefined
+): Person[] {
+  if (!start || !target) return [];
+  const { ids } = findPath(people, edges, start.id, target.id);
+  return ids
+    .map((id) => people.find((person) => person.id === id))
+    .filter((person): person is Person => Boolean(person));
+}
+
+export function strategyContext(
+  state: MapState,
+  sellerProfile: SellerProfile | null = null
+): StrategyContext {
   const peopleById = new Map(state.people.map((person) => [person.id, person]));
   const autoEntry = [...state.people].sort(
-    (a, b) => (ROLE_PRIORITY[b.role] ?? 0) - (ROLE_PRIORITY[a.role] ?? 0)
+    (a, b) =>
+      personScore(b, ROLE_PRIORITY, sellerProfile, true) -
+        personScore(a, ROLE_PRIORITY, sellerProfile, true) ||
+      a.name.localeCompare(b.name)
   )[0];
   const entry = state.meta.strategy?.entryPersonId
     ? (peopleById.get(state.meta.strategy.entryPersonId) ?? autoEntry)
@@ -71,49 +248,19 @@ export function strategyContext(state: MapState): StrategyContext {
       .filter((person) => person.id !== entry?.id)
       .sort(
         (a, b) =>
-          (TARGET_PRIORITY[b.role] ?? 0) - (TARGET_PRIORITY[a.role] ?? 0)
+          personScore(b, TARGET_PRIORITY, sellerProfile) -
+            personScore(a, TARGET_PRIORITY, sellerProfile) ||
+          a.name.localeCompare(b.name)
       )[0] ?? entry;
   const target = state.meta.strategy?.targetPersonId
     ? (peopleById.get(state.meta.strategy.targetPersonId) ?? autoTarget)
     : autoTarget;
-  const pathIds =
-    entry && target
-      ? (() => {
-          const adjacency = new Map<string, string[]>();
-          for (const edge of state.edges ?? []) {
-            adjacency.set(edge.from, [
-              ...(adjacency.get(edge.from) ?? []),
-              edge.to,
-            ]);
-            adjacency.set(edge.to, [
-              ...(adjacency.get(edge.to) ?? []),
-              edge.from,
-            ]);
-          }
-          const queue = [entry.id];
-          const previous = new Map<string, string>();
-          const seen = new Set(queue);
-          while (queue.length > 0) {
-            const current = queue.shift()!;
-            if (current === target.id) break;
-            for (const next of adjacency.get(current) ?? []) {
-              if (seen.has(next)) continue;
-              seen.add(next);
-              previous.set(next, current);
-              queue.push(next);
-            }
-          }
-          if (!seen.has(target.id)) return [];
-          const ids = [target.id];
-          while (ids[0] !== entry.id) {
-            const previousId = previous.get(ids[0]);
-            if (!previousId) return [];
-            ids.unshift(previousId);
-          }
-          return ids;
-        })()
-      : [];
-  const pathNames = pathIds.map((id) => peopleById.get(id)?.name ?? id);
+  const pathNames = routePath(
+    state.people,
+    state.edges ?? [],
+    entry,
+    target
+  ).map((person) => person.name);
   const risks = [
     ...state.people
       .filter((person) => person.role === 'blocker')

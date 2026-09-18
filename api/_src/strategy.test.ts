@@ -121,3 +121,96 @@ test('strategy context falls back when plan overrides are missing', () => {
     'Automatic Buyer',
   ]);
 });
+
+test('strategy context mirrors scored selection and weighted paths', () => {
+  const state = {
+    people: [
+      {
+        id: 'alex',
+        name: 'Alex Morgan',
+        title: 'Champion',
+        department: null,
+        role: 'champion',
+        confidence: 'high',
+        sources: ['source'],
+      },
+      {
+        id: 'jordan',
+        name: 'Jordan Lee',
+        title: 'Operations Director',
+        department: 'Operations',
+        role: 'influencer',
+        confidence: 'high',
+        sources: ['source'],
+        metWith: true,
+      },
+      {
+        id: 'casey',
+        name: 'Casey Rivera',
+        title: 'Economic Buyer',
+        department: null,
+        role: 'economic_buyer',
+        confidence: 'high',
+        sources: ['source'],
+      },
+      {
+        id: 'sam',
+        name: 'Sam Chen',
+        title: 'Decision Maker',
+        department: null,
+        role: 'decision_maker',
+        confidence: 'high',
+        sources: ['source'],
+      },
+    ],
+    edges: [
+      {
+        id: 'direct-inferred',
+        from: 'jordan',
+        to: 'casey',
+        kind: 'reports',
+        inferred: true,
+      },
+      {
+        id: 'via-sam',
+        from: 'jordan',
+        to: 'sam',
+        kind: 'influence',
+      },
+      {
+        id: 'sam-casey',
+        from: 'sam',
+        to: 'casey',
+        kind: 'influence',
+      },
+    ],
+    meta: {
+      domain: 'target.test',
+      companyName: 'Target',
+      strategy: undefined,
+    },
+  } as unknown as MapState;
+  const sellerProfile = {
+    companyName: 'Seller',
+    domain: 'seller.test',
+    summary: 'Operations workflow platform',
+    products: ['workflow automation'],
+    targetCustomers: ['operations teams'],
+    useCases: ['operations workflows'],
+    proofPoints: [],
+    competitors: [],
+    positioning: 'Operations productivity',
+    researchedAt: '',
+  };
+  const context = strategyContext(state, sellerProfile);
+
+  // Jordan wins entry on operations product fit and the met-with bonus, while
+  // Casey wins target priority over Sam (100 versus 90).
+  assert.equal(context.entry?.id, 'jordan');
+  assert.equal(context.target?.id, 'casey');
+  assert.deepEqual(context.pathNames, [
+    'Jordan Lee',
+    'Sam Chen',
+    'Casey Rivera',
+  ]);
+});

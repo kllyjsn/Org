@@ -1105,7 +1105,7 @@ app.get('/api/maps/:id/strategy', requireAuth, async (c) => {
   const insights = await deepenAccountStrategy(
     state,
     sellerProfile,
-    strategyContext(state)
+    strategyContext(state, sellerProfile)
   );
   await query(
     `INSERT INTO account_strategies
