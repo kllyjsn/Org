@@ -30,6 +30,10 @@ import {
 } from './crypto.js';
 import { adapterFor, providerStatus } from './integrations/registry.js';
 import { committeeCoverage } from './notifications/coverage.js';
+import { analyzeTranscript } from './transcripts/analyze.js';
+import { applyAnalysisToPeople, applyAnalysisToStrategy } from './transcripts/apply.js';
+import { configured as gongConfigured, fetchTranscript, listCalls } from './transcripts/gong.js';
+import { normalizeTranscript } from './transcripts/parse.js';
 import {
   enqueuePreMeetingBriefs,
   enqueueWeeklyCoverage,
@@ -85,6 +89,8 @@ import type {
   WorkspaceRow,
   SellerProfile,
   AccountStrategyPlan,
+  StanceSignal,
+  TranscriptAnalysis,
 } from './types.js';
 
 type Vars = { user: UserRow };
@@ -270,6 +276,43 @@ function sanitizeStrategyPlan(
           row.stance === 'unknown'
             ? row.stance
             : 'unknown';
+        const SIGNALS = new Set([
+          'support',
+          'objection',
+          'question',
+          'budget',
+          'timeline',
+          'authority',
+          'competitor',
+        ]);
+        const evidence = Array.isArray(row.evidence)
+          ? row.evidence
+              .slice(0, 8)
+              .map((item) => {
+                const e =
+                  item && typeof item === 'object'
+                    ? (item as Record<string, unknown>)
+                    : {};
+                const signal: StanceSignal =
+                  typeof e.signal === 'string' && SIGNALS.has(e.signal)
+                    ? (e.signal as StanceSignal)
+                    : 'question';
+                return {
+                  quote:
+                    typeof e.quote === 'string' ? e.quote.slice(0, 2000) : '',
+                  signal,
+                  transcriptId:
+                    typeof e.transcriptId === 'string'
+                      ? e.transcriptId.slice(0, 200)
+                      : '',
+                  title:
+                    typeof e.title === 'string' ? e.title.slice(0, 300) : null,
+                  occurredAt:
+                    typeof e.occurredAt === 'string' ? e.occurredAt : null,
+                };
+              })
+              .filter((item) => item.quote !== '')
+          : [];
         return [
           id,
           {
@@ -279,6 +322,10 @@ function sanitizeStrategyPlan(
                 ? row.nextStep.slice(0, 500)
                 : '',
             note: typeof row.note === 'string' ? row.note.slice(0, 500) : '',
+            ...(evidence.length > 0 ? { evidence } : {}),
+            ...(row.stanceSource === 'manual' || row.stanceSource === 'transcript'
+              ? { stanceSource: row.stanceSource as 'manual' | 'transcript' }
+              : {}),
           },
         ];
       })
@@ -1391,6 +1438,343 @@ app.post(
     return c.json(committeeCoverage(map.state as MapState));
   }
 );
+
+// ---------- transcripts ----------
+
+interface TranscriptRow {
+  id: string;
+  workspace_id: string;
+  map_id: string;
+  source: 'paste' | 'upload' | 'gong';
+  external_id: string | null;
+  title: string | null;
+  occurred_at: string | null;
+  transcript: string;
+  analysis: TranscriptAnalysis | null;
+  analysis_error: string | null;
+  applied_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+// List shape ships transcriptChars only; the full text loads on demand.
+function toCallTranscript(row: TranscriptRow, includeText = false) {
+  return {
+    id: row.id,
+    mapId: row.map_id,
+    source: row.source,
+    externalId: row.external_id,
+    title: row.title,
+    occurredAt: row.occurred_at,
+    analysis: row.analysis,
+    analysisError: row.analysis_error,
+    appliedAt: row.applied_at,
+    createdAt: row.created_at,
+    transcriptChars: row.transcript.length,
+    ...(includeText ? { transcript: row.transcript } : {}),
+  };
+}
+
+async function runTranscriptAnalysis(
+  map: MapRow,
+  row: TranscriptRow
+): Promise<{ analysis: TranscriptAnalysis | null; error: string | null }> {
+  const state = map.state as MapState;
+  const workspace = await query<{ seller_profile: SellerProfile | null }>(
+    'SELECT seller_profile FROM workspaces WHERE id = $1',
+    [map.workspace_id]
+  );
+  try {
+    const analysis = await analyzeTranscript(
+      {
+        companyName: state.meta?.companyName ?? map.domain,
+        domain: map.domain,
+        title: row.title,
+        occurredAt: row.occurred_at,
+        people: (state.people ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          title: p.title,
+          role: p.role,
+        })),
+        sellerSummary: workspace[0]?.seller_profile?.summary ?? null,
+        transcript: row.transcript,
+      },
+      state.people ?? [],
+      { demoFixture: state.meta?.provider === 'fixture' }
+    );
+    return { analysis, error: null };
+  } catch (error) {
+    return {
+      analysis: null,
+      error: error instanceof Error ? error.message : 'analysis failed',
+    };
+  }
+}
+
+async function persistAnalysis(
+  rowId: string,
+  result: { analysis: TranscriptAnalysis | null; error: string | null }
+) {
+  await query(
+    'UPDATE call_transcripts SET analysis = $1, analysis_error = $2 WHERE id = $3',
+    [result.analysis ? JSON.stringify(result.analysis) : null, result.error, rowId]
+  );
+}
+
+app.get('/api/maps/:id/transcripts', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const rows = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE map_id = $1 ORDER BY created_at DESC',
+    [map.id]
+  );
+  return c.json({
+    transcripts: rows.map((row) => toCallTranscript(row)),
+    gongConfigured: gongConfigured(),
+  });
+});
+
+app.post('/api/maps/:id/transcripts', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const body = await c.req.json().catch(() => null);
+  const source = body?.source === 'upload' ? 'upload' : 'paste';
+  const text = typeof body?.text === 'string' ? body.text : '';
+  if (text.length < 200 || text.length > 400_000) {
+    return bad(c, 'transcript must be 200–400,000 characters', 400);
+  }
+  const normalized = normalizeTranscript(
+    text,
+    typeof body?.filename === 'string' ? body.filename : undefined
+  );
+  const id = randomUUID();
+  await query(
+    `INSERT INTO call_transcripts
+      (id, workspace_id, map_id, source, external_id, title, occurred_at,
+       transcript, created_by, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      id,
+      map.workspace_id,
+      map.id,
+      source,
+      id, // paste/upload dedupe on the row's own id
+      typeof body?.title === 'string' ? body.title.slice(0, 300) : null,
+      typeof body?.occurredAt === 'string' ? body.occurredAt : null,
+      normalized,
+      user.id,
+      now(),
+    ]
+  );
+  const rows = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE id = $1',
+    [id]
+  );
+  const row = rows[0];
+  // Synchronous analyze — a slow model shouldn't lose the row.
+  const result = await runTranscriptAnalysis(map, row);
+  await persistAnalysis(id, result);
+  if (result.analysis) {
+    await recordAnalytics({
+      eventName: 'transcript_analyzed',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: { source },
+    });
+  }
+  const saved = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE id = $1',
+    [id]
+  );
+  return c.json({ transcript: toCallTranscript(saved[0]) });
+});
+
+app.post('/api/maps/:id/transcripts/gong/import', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  if (!gongConfigured()) {
+    return bad(c, 'gong is not configured', 503);
+  }
+  const body = await c.req.json().catch(() => null);
+  const days =
+    typeof body?.days === 'number' && body.days > 0 && body.days <= 90
+      ? body.days
+      : 30;
+  const state = map.state as MapState;
+  const calls = await listCalls(
+    new Date(Date.now() - days * 86_400_000).toISOString(),
+    new Date().toISOString(),
+    map.domain,
+    state.people ?? []
+  );
+  const imported: ReturnType<typeof toCallTranscript>[] = [];
+  for (const call of calls.slice(0, 5)) {
+    const id = randomUUID();
+    let transcript: string;
+    try {
+      transcript = await fetchTranscript(call.id);
+    } catch (error) {
+      console.error('gong transcript fetch failed', call.id, error);
+      continue;
+    }
+    if (transcript.length < 200) continue;
+    const inserted = await query<TranscriptRow>(
+      `INSERT INTO call_transcripts
+        (id, workspace_id, map_id, source, external_id, title, occurred_at,
+         transcript, created_by, created_at)
+       VALUES ($1,$2,$3,'gong',$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (map_id, source, external_id) DO NOTHING
+       RETURNING *`,
+      [
+        id,
+        map.workspace_id,
+        map.id,
+        call.id,
+        call.title,
+        call.started,
+        transcript,
+        user.id,
+        now(),
+      ]
+    );
+    const row = inserted[0];
+    if (!row) continue; // already imported
+    const result = await runTranscriptAnalysis(map, row);
+    await persistAnalysis(row.id, result);
+    if (result.analysis) {
+      await recordAnalytics({
+        eventName: 'transcript_analyzed',
+        userId: user.id,
+        workspaceId: map.workspace_id,
+        mapId: map.id,
+        properties: { source: 'gong' },
+      });
+    }
+    const saved = await query<TranscriptRow>(
+      'SELECT * FROM call_transcripts WHERE id = $1',
+      [row.id]
+    );
+    imported.push(toCallTranscript(saved[0]));
+  }
+  return c.json({ imported: imported.length, transcripts: imported });
+});
+
+async function transcriptForMap(
+  mapId: string,
+  tid: string
+): Promise<TranscriptRow | null> {
+  const rows = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE id = $1 AND map_id = $2',
+    [tid, mapId]
+  );
+  return rows[0] ?? null;
+}
+
+app.get('/api/maps/:id/transcripts/:tid', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const row = await transcriptForMap(map.id, param(c, 'tid'));
+  if (!row) return bad(c, 'not found', 404);
+  return c.json({ transcript: toCallTranscript(row, true) });
+});
+
+app.post('/api/maps/:id/transcripts/:tid/reanalyze', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const row = await transcriptForMap(map.id, param(c, 'tid'));
+  if (!row) return bad(c, 'not found', 404);
+  const result = await runTranscriptAnalysis(map, row);
+  await persistAnalysis(row.id, result);
+  if (result.analysis) {
+    await recordAnalytics({
+      eventName: 'transcript_analyzed',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: { source: row.source },
+    });
+  }
+  const saved = await query<TranscriptRow>(
+    'SELECT * FROM call_transcripts WHERE id = $1',
+    [row.id]
+  );
+  return c.json({ transcript: toCallTranscript(saved[0]) });
+});
+
+app.post('/api/maps/:id/transcripts/:tid/apply', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const row = await transcriptForMap(map.id, param(c, 'tid'));
+  if (!row) return bad(c, 'not found', 404);
+  if (!row.analysis) return bad(c, 'transcript has no analysis to apply', 400);
+  const body = await c.req.json().catch(() => null);
+  const overrides =
+    body?.overrides && typeof body.overrides === 'object'
+      ? (body.overrides as Record<string, string | null>)
+      : {};
+  const state = map.state as MapState;
+  const { plan, touchedPersonIds } = applyAnalysisToStrategy(
+    state.meta?.strategy,
+    row.analysis,
+    { id: row.id, title: row.title, occurredAt: row.occurred_at },
+    overrides
+  );
+  const nextState = applyAnalysisToPeople(
+    { ...state, meta: { ...state.meta, strategy: plan } },
+    touchedPersonIds,
+    row.occurred_at
+  );
+
+  // Same persistence path as PATCH: snapshot the prior state, then write.
+  await query(
+    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
+  );
+  await query(
+    'UPDATE maps SET state = $1, updated_at = $2 WHERE id = $3',
+    [JSON.stringify(nextState), now(), map.id]
+  );
+  await query(
+    `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
+     (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
+    [map.id]
+  );
+  await query(
+    'UPDATE call_transcripts SET applied_at = $1 WHERE id = $2',
+    [now(), row.id]
+  );
+  await recordAnalytics({
+    eventName: 'transcript_applied',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: { touched_people: touchedPersonIds.length },
+  });
+  return c.json({ state: nextState });
+});
+
+app.delete('/api/maps/:id/transcripts/:tid', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const row = await transcriptForMap(map.id, param(c, 'tid'));
+  if (!row) return bad(c, 'not found', 404);
+  await query('DELETE FROM call_transcripts WHERE id = $1', [row.id]);
+  return c.json({ ok: true });
+});
 
 // ---------- maps ----------
 

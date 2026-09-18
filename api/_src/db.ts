@@ -202,6 +202,23 @@ CREATE INDEX IF NOT EXISTS idx_notification_channels_workspace
   ON notification_channels(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_due
   ON notification_outbox(sent_at, scheduled_for);
+CREATE TABLE IF NOT EXISTS call_transcripts (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source IN ('paste','upload','gong')),
+  external_id TEXT,
+  title TEXT,
+  occurred_at TEXT,
+  transcript TEXT NOT NULL,
+  analysis JSONB,
+  analysis_error TEXT,
+  applied_at TEXT,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  UNIQUE(map_id, source, external_id)
+);
+CREATE INDEX IF NOT EXISTS idx_call_transcripts_map ON call_transcripts(map_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
 CREATE INDEX IF NOT EXISTS research_jobs_status_idx
   ON research_jobs (status, created_at);

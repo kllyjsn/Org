@@ -54,6 +54,12 @@ roll-up are delivered via Slack webhooks and (with `RESEND_API_KEY`) email.
 Slack webhook URLs are encrypted at rest with `INTEGRATION_ENCRYPTION_KEY`;
 a `/api/cron/notify` tick (every 15 min) queues briefs and flushes the outbox.
 
+## Call transcripts
+
+Paste, upload (.txt/.vtt/.srt), or import Gong calls to infer stakeholder
+stance into the strategy plan — every stance carries verbatim quotes as
+evidence. Gong import needs `GONG_ACCESS_KEY` + `GONG_ACCESS_KEY_SECRET`.
+
 ## Notes
 
 - Auth is minimal email/password + session cookie — structured to swap in

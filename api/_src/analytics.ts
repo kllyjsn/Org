@@ -13,6 +13,8 @@ export type ProductEventName =
   | 'deep_research_completed'
   | 'comment_added'
   | 'person_verified'
+  | 'transcript_analyzed'
+  | 'transcript_applied'
   | 'share_created'
   | 'live_opportunity_set';
 
