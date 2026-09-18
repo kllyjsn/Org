@@ -16,6 +16,7 @@ import {
   Plus,
   Radar,
   Sparkles,
+  Target,
   Trash2,
   Users,
   Workflow,
@@ -30,6 +31,7 @@ import FeedbackInboxModal from '../components/FeedbackInboxModal';
 import FeedbackModal from '../components/FeedbackModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
 import SellerProfileModal from '../components/SellerProfileModal';
+import PersonasModal from '../components/PersonasModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
@@ -514,6 +516,7 @@ export default function AccountsPage() {
   const [showPricing, setShowPricing] = useState(false);
   const [showValue, setShowValue] = useState(false);
   const [showSellerProfile, setShowSellerProfile] = useState(false);
+  const [showPersonas, setShowPersonas] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showFeedbackInbox, setShowFeedbackInbox] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
@@ -557,6 +560,7 @@ export default function AccountsPage() {
       [showFeedback, () => setShowFeedback(false)],
       [showFeedbackInbox, () => setShowFeedbackInbox(false)],
       [showSellerProfile, () => setShowSellerProfile(false)],
+      [showPersonas, () => setShowPersonas(false)],
       [showValue, () => setShowValue(false)],
       [showPricing, () => setShowPricing(false)],
       [showMembers, () => setShowMembers(false)],
@@ -577,6 +581,7 @@ export default function AccountsPage() {
     showFeedback,
     showFeedbackInbox,
     showSellerProfile,
+    showPersonas,
     showValue,
     showPricing,
     showMembers,
@@ -683,6 +688,11 @@ export default function AccountsPage() {
               icon={<Sparkles size={16} />}
               label="Your company"
               onClick={() => setShowSellerProfile(true)}
+            />
+            <RailButton
+              icon={<Target size={16} />}
+              label="Personas"
+              onClick={() => setShowPersonas(true)}
             />
             <RailButton
               icon={<BarChart3 size={16} />}
@@ -994,6 +1004,9 @@ export default function AccountsPage() {
             void refreshWorkspaces();
           }}
         />
+      )}
+      {showPersonas && workspaceId && (
+        <PersonasModal onClose={() => setShowPersonas(false)} />
       )}
       </div>
     </div>

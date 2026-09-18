@@ -9,6 +9,9 @@ import type {
   LoadedMap,
   MapChangeAlert,
   MapComment,
+  MapCoverage,
+  Persona,
+  PersonaInput,
   MapListItem,
   MapPresence,
   MapState,
@@ -266,6 +269,21 @@ export const api = {
         body: JSON.stringify({ profile }),
       }
     ),
+
+  listPersonas: (workspaceId: string) =>
+    req<{ personas: Persona[] }>(`/api/workspaces/${workspaceId}/personas`),
+  savePersonas: (workspaceId: string, personas: PersonaInput[]) =>
+    req<{ personas: Persona[] }>(`/api/workspaces/${workspaceId}/personas`, {
+      method: 'PUT',
+      body: JSON.stringify({ personas }),
+    }),
+  suggestPersonas: (workspaceId: string) =>
+    req<{ personas: PersonaInput[]; source: 'llm' | 'fallback' }>(
+      `/api/workspaces/${workspaceId}/personas/suggest`,
+      { method: 'POST' }
+    ),
+  getMapCoverage: (mapId: string) =>
+    req<MapCoverage>(`/api/maps/${mapId}/coverage`),
 
   sendFeedback: (input: {
     category: FeedbackCategory;
