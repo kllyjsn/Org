@@ -46,6 +46,11 @@ export interface Person {
   notes: string;
   /** Marked when the user has met this person (meeting import / panel). */
   metWith?: boolean;
+  /** Latest calendar/email touch from a connected integration. */
+  lastTouchAt?: string | null;
+  meetingCount?: number;
+  emailThreadCount?: number;
+  touchSource?: 'google' | 'microsoft' | 'manual' | null;
   email: string | null;
   linkedin: string | null;
   x: number;
