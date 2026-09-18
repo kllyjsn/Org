@@ -89,7 +89,13 @@ import MeetingsImportModal from '../components/MeetingsImportModal';
 import RailButton, { RailSeparator } from '../components/RailButton';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
-import { applyLanes, applyLayout, laneKey, LANE_COL_GAP } from '../lib/layout';
+import {
+  applyLanes,
+  applyLayout,
+  laneKey,
+  lanesInterleave,
+  LANE_COL_GAP,
+} from '../lib/layout';
 import type { LaneGrouping } from '../lib/layout';
 import { computeLaneView } from '../lib/laneView';
 import { useIsMobile } from '../lib/useIsMobile';
@@ -115,6 +121,15 @@ import type {
 } from '../types';
 
 const nodeTypes = { person: PersonNode, lane: LaneHeaderNode, more: MoreNode };
+
+const COMMITTEE_ROLES: BuyingRole[] = [
+  'champion',
+  'economic_buyer',
+  'decision_maker',
+  'technical_buyer',
+  'influencer',
+  'blocker',
+];
 
 // Tighter column spacing on phones so two lanes fit the viewport.
 const MOBILE_COL_GAP = 270;
@@ -292,12 +307,20 @@ function MapInner() {
         // Default view for accounts with meeting coverage: met/unmet lanes
         // segmented by team. Pure arrangement — nothing marked dirty.
         let anchorPeople = map.state.people;
-        if ((map.state.people ?? []).some((person) => person.metWith)) {
-          setLaneGrouping('met');
+        const hasMet = (map.state.people ?? []).some(
+          (person) => person.metWith
+        );
+        const grouping = hasMet
+          ? 'met'
+          : lanesInterleave(map.state.people ?? [])
+            ? 'department'
+            : null;
+        if (grouping) {
+          if (hasMet) setLaneGrouping('met');
           anchorPeople = applyLanes(
             map.state.people,
             isMobile ? 2 : 4,
-            'met',
+            grouping,
             isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
           );
           const pos = new Map(
@@ -572,6 +595,7 @@ function MapInner() {
   const [expandedLanes, setExpandedLanes] = useState<Set<string>>(new Set());
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
   const [showAllLanes, setShowAllLanes] = useState(false);
+  const [committeeOpen, setCommitteeOpen] = useState(false);
   const [laneGrouping, setLaneGrouping] = useState<LaneGrouping>('department');
   const laneOf = useCallback(
     (person: Person) => laneKey(person, laneGrouping),
@@ -619,11 +643,13 @@ function MapInner() {
       id: `lane:${header.lane}`,
       type: 'lane',
       position: { x: header.x, y: header.y },
-      width: 340,
+      width: header.span * (isMobile ? MOBILE_COL_GAP : LANE_COL_GAP) - 40,
       height: 34,
       data: {
         label: header.lane,
         count: header.count,
+        span: header.span,
+        colGap: isMobile ? MOBILE_COL_GAP : LANE_COL_GAP,
         shown: header.shown,
         expanded: header.expanded,
         onToggle: toggleLane,
@@ -684,6 +710,43 @@ function MapInner() {
     }
     return counts;
   }, [people]);
+  const committeeCovered = COMMITTEE_ROLES.filter(
+    (r) => (coverage.get(r) ?? 0) > 0
+  ).length;
+
+  const relayLanes = useCallback(
+    (ns: Node<PersonNodeData>[]) => {
+      const laid = applyLanes(
+        ns.map((n) => ({
+          ...n.data.person,
+          x: n.position.x,
+          y: n.position.y,
+        })),
+        isMobile ? 2 : 4,
+        laneGrouping,
+        isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
+      );
+      const pos = new Map(laid.map((p) => [p.id, { x: p.x, y: p.y }]));
+      return ns.map((n) => ({
+        ...n,
+        position: pos.get(n.id) ?? n.position,
+      }));
+    },
+    [isMobile, laneGrouping]
+  );
+
+  const lanesChanged = useCallback(
+    (before: Node<PersonNodeData>[], after: Node<PersonNodeData>[]) => {
+      const prev = new Map(
+        before.map((n) => [n.id, laneKey(n.data.person, laneGrouping)])
+      );
+      return after.some((n) => {
+        const was = prev.get(n.id);
+        return was !== undefined && was !== laneKey(n.data.person, laneGrouping);
+      });
+    },
+    [laneGrouping]
+  );
 
   const updatePerson = useCallback(
     (updated: Person) => {
@@ -707,27 +770,7 @@ function MapInner() {
         );
         // Under the met split a met flip changes the person's lane — relay
         // so the card physically joins the other band.
-        const positioned = metChanged
-          ? (() => {
-              const laid = applyLanes(
-                next.map((n) => ({
-                  ...n.data.person,
-                  x: n.position.x,
-                  y: n.position.y,
-                })),
-                isMobile ? 2 : 4,
-                'met',
-                isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
-              );
-              const pos = new Map(
-                laid.map((p) => [p.id, { x: p.x, y: p.y }])
-              );
-              return next.map((n) => ({
-                ...n,
-                position: pos.get(n.id) ?? n.position,
-              }));
-            })()
-          : next;
+        const positioned = metChanged ? relayLanes(next) : next;
         setEdges((es) => {
           markDirty(positioned, es);
           return es;
@@ -735,7 +778,7 @@ function MapInner() {
         return positioned;
       });
     },
-    [setNodes, setEdges, markDirty, recordHistory, laneGrouping, isMobile]
+    [setNodes, setEdges, markDirty, recordHistory, laneGrouping, relayLanes]
   );
 
   const setManager = useCallback(
@@ -848,28 +891,11 @@ function MapInner() {
           }),
           ...additions,
         ];
-        // Under the met split, imported matches belong in the Met lane.
+        // Imported matches belong in the Met lane under the met split, and
+        // unmatched names land in their lane band rather than a loose row.
         const positioned =
-          laneGrouping === 'met'
-            ? (() => {
-                const laid = applyLanes(
-                  next.map((n) => ({
-                    ...n.data.person,
-                    x: n.position.x,
-                    y: n.position.y,
-                  })),
-                  isMobile ? 2 : 4,
-                  'met',
-                  isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
-                );
-                const pos = new Map(
-                  laid.map((p) => [p.id, { x: p.x, y: p.y }])
-                );
-                return next.map((n) => ({
-                  ...n,
-                  position: pos.get(n.id) ?? n.position,
-                }));
-              })()
+          laneGrouping === 'met' || unmatched.length > 0
+            ? relayLanes(next)
             : next;
         setEdges((es) => {
           markDirty(positioned, es);
@@ -887,7 +913,7 @@ function MapInner() {
       setEdges,
       setNodes,
       laneGrouping,
-      isMobile,
+      relayLanes,
     ]
   );
 
@@ -1954,8 +1980,10 @@ function MapInner() {
           });
           added += 1;
         }
-        markDirty(next, edges);
-        return next;
+        const finalNodes =
+          added > 0 || lanesChanged(items, next) ? relayLanes(next) : next;
+        markDirty(finalNodes, edges);
+        return finalNodes;
       });
       setImportNotice(
         updated + added === 0
@@ -1964,7 +1992,7 @@ function MapInner() {
       );
       window.setTimeout(() => setImportNotice(''), 5_000);
     },
-    [readOnly, recordHistory, rf, setNodes, markDirty, edges]
+    [readOnly, recordHistory, rf, setNodes, markDirty, edges, relayLanes, lanesChanged]
   );
 
   const mergeResearch = useCallback(
@@ -2197,14 +2225,18 @@ function MapInner() {
       }
       metaRef.current = nextMeta;
       setMeta(nextMeta);
-      setNodes(nextNodes);
+      const finalNodes =
+        added > 0 || lanesChanged(nodes, nextNodes)
+          ? relayLanes(nextNodes)
+          : nextNodes;
+      setNodes(finalNodes);
       setEdges(nextEdges);
-      markDirty(nextNodes, nextEdges);
-      const addedIds = nextNodes.slice(nodes.length).map((node) => node.id);
+      markDirty(finalNodes, nextEdges);
+      const addedIds = finalNodes.slice(nodes.length).map((node) => node.id);
       if (addedIds.length > 0) {
         window.setTimeout(() => {
           void rf.fitView({
-            nodes: nextNodes.filter((node) => addedIds.includes(node.id)),
+            nodes: finalNodes.filter((node) => addedIds.includes(node.id)),
             padding: 0.5,
             duration: 450,
           });
@@ -2219,6 +2251,8 @@ function MapInner() {
       nodes,
       readOnly,
       recordHistory,
+      relayLanes,
+      lanesChanged,
       rf,
       setEdges,
       setNodes,
@@ -2647,37 +2681,53 @@ function MapInner() {
           </div>
         )}
 
-        {/* buying-committee coverage strip */}
+        {/* buying-committee coverage pill: compact by default, expands on demand */}
         {people.length > 0 && (
-          <div className={`pointer-events-none absolute right-2 z-10 max-w-[calc(100%-1rem)] rounded-full border border-white/80 bg-white/85 px-2 py-1 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl sm:bottom-auto sm:left-4 sm:right-auto sm:top-20 sm:rounded-2xl sm:px-3.5 sm:py-2.5 ${!readOnly && selectedNodes.length > 1 ? 'bottom-28' : (laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) ? 'bottom-14' : 'bottom-2'}`}>
-            <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[.08em] text-slate-400 sm:mb-1.5 sm:gap-2 sm:text-[10px] sm:tracking-[.12em]">
+          <div className={`absolute right-2 z-10 flex flex-col items-end gap-1.5 sm:bottom-auto sm:right-4 sm:top-20 ${!readOnly && selectedNodes.length > 1 ? 'bottom-28' : (laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) ? 'bottom-14' : 'bottom-2'}`}>
+            <button
+              type="button"
+              onClick={() => setCommitteeOpen((open) => !open)}
+              aria-expanded={committeeOpen}
+              title={`${committeeCovered} of ${COMMITTEE_ROLES.length} buying roles covered`}
+              className="flex items-center gap-2 rounded-full border border-white/80 bg-white/85 py-1 pl-2.5 pr-2 text-[10px] font-semibold uppercase tracking-[.1em] text-slate-500 shadow-[0_10px_35px_rgba(15,23,42,.08)] backdrop-blur-xl transition hover:bg-white hover:text-slate-700"
+            >
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#c9f04b] ring-2 ring-slate-950" />
-              <span className="sm:hidden">Committee · {people.length}</span>
-              <span className="hidden sm:inline">Buying committee · {people.length} people</span>
-            </div>
-            <div className="hidden flex-wrap gap-1.5 sm:flex">
-              {(['champion', 'economic_buyer', 'decision_maker', 'technical_buyer', 'influencer', 'blocker'] as BuyingRole[]).map(
-                (r) => {
+              <span>Committee · {people.length}</span>
+              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-1">
+                {COMMITTEE_ROLES.map((r) => (
+                  <span
+                    key={r}
+                    className={`h-1.5 w-1.5 rounded-full ${(coverage.get(r) ?? 0) > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
+                  />
+                ))}
+              </span>
+              <span className="tabular-nums normal-case tracking-normal text-slate-400">
+                {committeeCovered}/{COMMITTEE_ROLES.length}
+              </span>
+            </button>
+            {committeeOpen && (
+              <div className="flex w-52 flex-col gap-1 rounded-2xl border border-white/80 bg-white/95 p-2 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl">
+                {COMMITTEE_ROLES.map((r) => {
                   const count = coverage.get(r) ?? 0;
                   return (
-                    <span
+                    <div
                       key={r}
-                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        count > 0
-                          ? ROLE_META[r].chip
-                          : 'bg-slate-100 text-slate-400'
+                      className={`flex items-center gap-2 rounded-lg px-2 py-1 text-[11px] ${
+                        count > 0 ? ROLE_META[r].chip : 'text-slate-400'
                       }`}
                     >
                       <span
-                        className={`h-1.5 w-1.5 rounded-full ${count > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${count > 0 ? ROLE_META[r].dot : 'bg-slate-300'}`}
                       />
-                      {ROLE_META[r].label}
-                      {count > 0 && ` · ${count}`}
-                    </span>
+                      <span className="flex-1">{ROLE_META[r].label}</span>
+                      <span className="tabular-nums font-medium">
+                        {count > 0 ? count : '—'}
+                      </span>
+                    </div>
                   );
-                }
-              )}
-            </div>
+                })}
+              </div>
+            )}
           </div>
         )}
 

@@ -58,8 +58,8 @@ export function applyLayout(people: Person[], edges: MapEdge[]): Person[] {
 
 export const LANE_COLUMNS = 4;
 export const LANE_COL_GAP = 300;
-export const LANE_ROW_GAP = 200;
-const LANE_GAP = 140;
+export const LANE_ROW_GAP = 160;
+const LANE_GAP = 100;
 
 /** The lane a person belongs to — shared by layout and lane headers. */
 export function personLane(person: Person): string {
@@ -130,7 +130,13 @@ function lanePositions(
   });
 
   const pos = new Map<string, { x: number; y: number }>();
-  let laneTop = 0;
+  // Lanes pack side by side into bands: each takes only the columns it
+  // needs, so single-row lanes share a band instead of every lane getting
+  // a full-width strip. A lane with >= perRow members spans all columns
+  // and always sits alone in its band.
+  let bandTop = 0;
+  let col = 0;
+  let bandRows = 0;
   for (const [, members] of ordered) {
     // Seniority first so each lane reads as a leadership stack (and collapsed
     // lanes keep their leaders visible); equal ranks cluster by team so
@@ -143,18 +149,28 @@ function lanePositions(
       if (teamA !== teamB) return teamA.localeCompare(teamB);
       return a.name.localeCompare(b.name);
     });
+    const span = laneSpan(sorted.length, perRow);
+    const rows = Math.ceil(sorted.length / span);
+    if (col > 0 && col + span > perRow) {
+      bandTop += bandRows * LANE_ROW_GAP + LANE_GAP;
+      col = 0;
+      bandRows = 0;
+    }
     sorted.forEach((person, index) => {
-      const column = index % perRow;
-      const row = Math.floor(index / perRow);
       pos.set(person.id, {
-        x: column * colGap,
-        y: laneTop + row * LANE_ROW_GAP,
+        x: (col + (index % span)) * colGap,
+        y: bandTop + Math.floor(index / span) * LANE_ROW_GAP,
       });
     });
-    const rows = Math.ceil(sorted.length / perRow);
-    laneTop += rows * LANE_ROW_GAP + LANE_GAP;
+    col += span;
+    bandRows = Math.max(bandRows, rows);
   }
   return pos;
+}
+
+/** Columns a lane of `count` members occupies (never more than `columns`). */
+export function laneSpan(count: number, columns: number): number {
+  return Math.min(count, Math.max(1, columns));
 }
 
 export function departmentLanePositions(
@@ -189,6 +205,54 @@ export function applyLanes(
     colGap
   );
   return people.map((p) => ({ ...p, ...(pos.get(p.id) ?? { x: p.x, y: p.y }) }));
+}
+
+/**
+ * True when saved positions no longer read as lane bands: some lane's
+ * vertical extent overlaps another's, so headers would stack and cards
+ * would collide. Happens when people are appended in an ad-hoc grid or
+ * change department after layout.
+ */
+export function lanesInterleave(
+  people: Person[],
+  keyOf: (person: Person) => string = personLane
+): boolean {
+  const lanes = new Map<
+    string,
+    { minX: number; maxX: number; minY: number; maxY: number }
+  >();
+  for (const person of people) {
+    const name = keyOf(person);
+    const box = lanes.get(name);
+    if (box) {
+      box.minX = Math.min(box.minX, person.x);
+      box.maxX = Math.max(box.maxX, person.x);
+      box.minY = Math.min(box.minY, person.y);
+      box.maxY = Math.max(box.maxY, person.y);
+    } else {
+      lanes.set(name, {
+        minX: person.x,
+        maxX: person.x,
+        minY: person.y,
+        maxY: person.y,
+      });
+    }
+  }
+  // Two lanes interleave when their bounding boxes overlap both axes —
+  // cards are ~250px wide and need a half-row of vertical clearance.
+  const boxes = [...lanes.values()];
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      const overlapX = a.minX < b.maxX + 250 && b.minX < a.maxX + 250;
+      const overlapY =
+        a.minY < b.maxY + LANE_ROW_GAP / 2 &&
+        b.minY < a.maxY + LANE_ROW_GAP / 2;
+      if (overlapX && overlapY) return true;
+    }
+  }
+  return false;
 }
 
 /**
