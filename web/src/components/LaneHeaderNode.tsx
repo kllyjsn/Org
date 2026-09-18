@@ -1,4 +1,5 @@
-import { memo, useState } from 'react';
+import { memo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { NodeProps } from 'reactflow';
 import { deptColor } from '../lib/colors';
 import type { EvidenceKind } from '../types';
@@ -20,7 +21,10 @@ export interface LaneHeaderData {
 }
 
 function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
-  const [whyOpen, setWhyOpen] = useState(false);
+  const [whyOpen, setWhyOpen] = useState<{ left: number; top: number } | null>(
+    null
+  );
+  const whyButton = useRef<HTMLButtonElement>(null);
   const collapsible = data.shown !== undefined && data.shown < data.count;
   const expanded = data.expanded === true;
   const width =
@@ -67,12 +71,21 @@ function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
             <button
               type="button"
               className="nodrag nopan pointer-events-auto rounded-full border border-dashed border-[#5b4cf0] px-2 py-1 text-[9px] font-semibold text-[#5144d7]"
-              onClick={() => setWhyOpen((open) => !open)}
+              ref={whyButton}
+              onClick={() => {
+                if (whyOpen) return setWhyOpen(null);
+                const rect = whyButton.current?.getBoundingClientRect();
+                if (rect) setWhyOpen({ left: rect.left, top: rect.bottom + 6 });
+              }}
             >
               Why this structure?
             </button>
-            {whyOpen && (
-              <div className="pointer-events-auto absolute left-0 top-8 z-20 w-64 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-xl">
+            {whyOpen &&
+              createPortal(
+              <div
+                className="fixed z-50 w-64 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-xl"
+                style={whyOpen}
+              >
                 <div className="mb-2 flex items-center justify-between">
                   <span className="font-semibold text-slate-800">Evidence</span>
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold capitalize">
@@ -95,7 +108,8 @@ function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
                     </div>
                   ) : null
                 )}
-              </div>
+              </div>,
+              document.body
             )}
           </div>
         )}
