@@ -14,6 +14,8 @@ interface InviteInfo {
   expiresAt: string;
   hasAccount: boolean;
   status: 'ok' | 'expired' | 'accepted';
+  accessScope: 'all' | 'selected';
+  accountNames: string[];
 }
 
 export default function InvitePage() {
@@ -116,6 +118,11 @@ export default function InvitePage() {
           <span className="font-medium text-slate-700">{invite.email}</span> to
           join.
         </p>
+        {invite.accessScope === 'selected' && invite.accountNames.length > 0 && (
+          <p className="mb-5 text-sm text-slate-500">
+            You'll get access to: {invite.accountNames.join(', ')}
+          </p>
+        )}
         <form onSubmit={submit} className="space-y-3 text-left">
           <input
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500"
@@ -166,6 +173,11 @@ export default function InvitePage() {
           ? 'Adding you to the workspace…'
           : `An account already exists for ${invite.email}.`}
       </p>
+      {invite.accessScope === 'selected' && invite.accountNames.length > 0 && (
+        <p className="mb-5 text-sm text-slate-500">
+          You'll get access to: {invite.accountNames.join(', ')}
+        </p>
+      )}
       {!signedInAsInvited && (
         <button
           onClick={() =>
