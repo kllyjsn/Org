@@ -5,6 +5,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { query, now } from './db.js';
+import { ensureDefaultPersonas } from './personas.js';
 import type { UserRow, MemberRow } from './types.js';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -63,6 +64,7 @@ export async function createWorkspaceForUser(
     'INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES ($1,$2,$3,$4)',
     [id, userId, 'owner', now()]
   );
+  await ensureDefaultPersonas(id);
   return { id, name, plan: 'free' };
 }
 

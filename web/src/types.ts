@@ -1,3 +1,5 @@
+import type { Fn, Seniority } from './lib/taxonomy';
+
 export type BuyingRole =
   | 'champion'
   | 'economic_buyer'
@@ -148,6 +150,45 @@ export interface Workspace {
   role: 'owner' | 'member' | 'viewer';
   plan: 'free' | 'pro';
   seller_profile: SellerProfile | null;
+}
+
+export type PersonaBuyingRole =
+  | 'economic_buyer'
+  | 'champion'
+  | 'decision_maker'
+  | 'technical_buyer'
+  | 'influencer'
+  | 'blocker';
+
+/** Workspace-level targeting persona (function set + seniority floor). */
+export interface Persona {
+  id: string;
+  name: string;
+  /** Canonical `Fn` values; empty means any function. */
+  functions: Fn[];
+  /** Inclusive floor: 'vp' means VP and above. */
+  minSeniority: Seniority;
+  titleKeywords: string[];
+  buyingRole: PersonaBuyingRole | null;
+  required: boolean;
+  sortOrder: number;
+}
+
+export type PersonaInput = Omit<Persona, 'id' | 'sortOrder'> & { id?: string };
+
+export interface PersonaCoverage {
+  personaId: string;
+  name: string;
+  required: boolean;
+  matches: { personId: string; name: string; title: string }[];
+  covered: boolean;
+}
+
+export interface MapCoverage {
+  personas: PersonaCoverage[];
+  coveredCount: number;
+  requiredCount: number;
+  totalCovered: number;
 }
 
 export interface SellerProfile {

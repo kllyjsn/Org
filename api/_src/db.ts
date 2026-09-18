@@ -161,6 +161,20 @@ CREATE TABLE IF NOT EXISTS workspace_invites (
   accepted_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_workspace_invites_ws ON workspace_invites(workspace_id);
+CREATE TABLE IF NOT EXISTS personas (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  functions TEXT[] NOT NULL,
+  min_seniority TEXT NOT NULL,
+  title_keywords TEXT[] NOT NULL DEFAULT '{}',
+  buying_role TEXT,
+  required BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_personas_workspace ON personas(workspace_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_share_links_map ON share_links(map_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_workspace_time
