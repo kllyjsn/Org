@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import AccountsPage from './pages/AccountsPage';
 import MapPage from './pages/MapPage';
 import SharePage from './pages/SharePage';
+import InvitePage from './pages/InvitePage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading, load } = useSession();
@@ -36,6 +37,7 @@ export default function App() {
       <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/s/:token" element={<SharePage />} />
+      <Route path="/invite/:token" element={<InvitePage />} />
       <Route
         path="/app"
         element={

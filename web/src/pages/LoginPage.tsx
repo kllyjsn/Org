@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
   BarChart3,
@@ -72,6 +72,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   useDocumentTitle('Sign in — TopDown');
   const [busy, setBusy] = useState(false);
+  const [searchParams] = useSearchParams();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -80,7 +81,10 @@ export default function LoginPage() {
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, password, name, workspaceName || undefined);
-      navigate('/app', { replace: true });
+      const next = searchParams.get('next');
+      navigate(next && next.startsWith('/') ? next : '/app', {
+        replace: true,
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'something went wrong');
     } finally {
