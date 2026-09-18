@@ -100,6 +100,7 @@ import {
   laneKey,
   lanesInterleave,
   LANE_COL_GAP,
+  NODE_H,
 } from '../lib/layout';
 import type { LaneGrouping } from '../lib/layout';
 import { computeLaneView } from '../lib/laneView';
@@ -737,9 +738,9 @@ function MapInner() {
     const headers: Node<LaneHeaderData>[] = view.headers.map((header) => ({
       id: `lane:${header.lane}`,
       type: 'lane',
-      position: { x: header.x, y: header.y },
+      position: { x: header.x, y: header.y - (isMobile ? 38 : 0) },
       width: header.span * (isMobile ? MOBILE_COL_GAP : LANE_COL_GAP) - 40,
-      height: 34,
+      height: isMobile ? 72 : 34,
       data: {
         label: header.lane,
         count: header.count,
@@ -761,7 +762,7 @@ function MapInner() {
       type: 'more',
       position: { x: tile.x, y: tile.y },
       width: 250,
-      height: 52,
+      height: isMobile ? 72 : 52,
       style: { width: 250 },
       data: { count: tile.count, lane: tile.lane, onExpand: toggleLane },
       draggable: false,
@@ -817,12 +818,23 @@ function MapInner() {
         current.ids.has(node.id)
       );
       if (currentMatched.length !== current.ids.size) return;
-      rf.fitView({
-        nodes: currentMatched,
-        padding: current.single ? 1.3 : 0.35,
-        duration: 450,
-        maxZoom: 1,
-      });
+      const flow = document.querySelector('.react-flow') as HTMLElement | null;
+      const bounds = getNodesBounds(
+        currentMatched.map((node) => ({
+          ...node,
+          width: node.width ?? 250,
+          height: node.height ?? NODE_H,
+        }))
+      );
+      const vp = getViewportForBounds(
+        bounds,
+        flow?.clientWidth ?? window.innerWidth,
+        flow?.clientHeight ?? window.innerHeight,
+        0.4,
+        1,
+        current.single ? 0.6 : 0.35
+      );
+      rf.setViewport(vp, { duration: 450 });
       pendingFocus.current = null;
     });
     return () => window.cancelAnimationFrame(frame);

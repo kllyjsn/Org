@@ -134,7 +134,7 @@ export function generateFixturePeople(
       notes: '',
       email: null,
       linkedin: null,
-      metWith: random() < 0.1,
+      metWith: false,
       x: 0,
       y: 0,
     };

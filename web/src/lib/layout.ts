@@ -1,7 +1,7 @@
 import type { MapEdge, MapState, Person, ResearchResult } from '../types';
 
 const NODE_W = 280;
-const NODE_H = 170;
+export const NODE_H = 170;
 
 /**
  * Tidy-tree layout over `reports` edges: depth → y, leaf order → x,

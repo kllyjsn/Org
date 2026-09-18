@@ -51,7 +51,7 @@ function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
                 : `Show all ${data.count} in ${data.label}`
             }
             aria-expanded={expanded}
-            className="nodrag pointer-events-auto min-h-[44px] min-w-[44px] rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[#5b4cf0] shadow-sm ring-1 ring-slate-200 transition hover:bg-[#f5f4ff] hover:ring-[#5b4cf0]/40 sm:min-h-0 sm:min-w-0"
+            className="nodrag pointer-events-auto min-h-[72px] min-w-[72px] rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[#5b4cf0] shadow-sm ring-1 ring-slate-200 transition hover:bg-[#f5f4ff] hover:ring-[#5b4cf0]/40 sm:min-h-0 sm:min-w-0"
           >
             {expanded ? 'Show fewer' : `Show all ${data.count}`}
           </button>
