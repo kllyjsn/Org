@@ -1,5 +1,11 @@
 import type {
   AccountBriefing,
+  CallTranscript,
+  CrmAccount,
+  CrmOpportunity,
+  CrmPullResult,
+  CrmPushResult,
+  CrmStatus,
   StrategyInsights,
   AccountAgentAnswer,
   AccountAgentMessage,
@@ -13,10 +19,12 @@ import type {
   MapComment,
   MapListItem,
   MapPresence,
+  DealStage,
   MapState,
   MapVersion,
   NotificationsResponse,
   Person,
+  PortfolioResponse,
   ProductEventName,
   ProductValueSummary,
   ResearchEvent,
@@ -124,6 +132,56 @@ export const api = {
   disconnectIntegration: (id: string) =>
     req<{ ok: true }>(`/api/integrations/${id}`, { method: 'DELETE' }),
 
+  crmStatus: (mapId: string) =>
+    req<CrmStatus>(`/api/maps/${mapId}/crm/status`),
+  crmSearchAccounts: (integrationId: string, q: string) =>
+    req<{ accounts: CrmAccount[] }>(
+      `/api/integrations/${integrationId}/crm/accounts?q=${encodeURIComponent(q)}`
+    ),
+  crmListOpportunities: (integrationId: string, accountId: string) =>
+    req<{ opportunities: CrmOpportunity[] }>(
+      `/api/integrations/${integrationId}/crm/accounts/${accountId}/opportunities`
+    ),
+  crmLink: (
+    mapId: string,
+    body: {
+      integrationId: string;
+      accountId: string;
+      accountName: string;
+      opportunityId?: string;
+      opportunityName?: string;
+      stage?: string;
+      amount?: number;
+      closeDate?: string;
+    }
+  ) =>
+    req<{ state: MapState }>(`/api/maps/${mapId}/crm/link`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  crmUnlink: (mapId: string) =>
+    req<{ state: MapState }>(`/api/maps/${mapId}/crm/link`, {
+      method: 'DELETE',
+    }),
+  crmPull: (mapId: string, createUnmatched: boolean) =>
+    req<CrmPullResult>(`/api/maps/${mapId}/crm/pull`, {
+      method: 'POST',
+      body: JSON.stringify({ createUnmatched }),
+    }),
+  crmPush: (mapId: string) =>
+    req<CrmPushResult>(`/api/maps/${mapId}/crm/push`, { method: 'POST' }),
+
+  getPortfolio: (workspaceId: string) =>
+    req<PortfolioResponse>(`/api/workspaces/${workspaceId}/portfolio`),
+  setOutcome: (
+    mapId: string,
+    body: { outcome: 'open' | 'won' | 'lost'; stage?: DealStage | null }
+  ) =>
+    req<{ ok: true; outcome: string; stage: string | null }>(
+      `/api/maps/${mapId}/outcome`,
+      { method: 'PATCH', body: JSON.stringify(body) }
+    ),
+
   listNotifications: (workspaceId: string) =>
     req<NotificationsResponse>(`/api/workspaces/${workspaceId}/notifications`),
   addSlackChannel: (workspaceId: string, url: string, label: string) =>
@@ -162,6 +220,52 @@ export const api = {
     req<{ ok: true }>(`/api/workspaces/${workspaceId}/notifications/prefs`, {
       method: 'PATCH',
       body: JSON.stringify(prefs),
+    }),
+
+  listTranscripts: (mapId: string) =>
+    req<{ transcripts: CallTranscript[]; gongConfigured: boolean }>(
+      `/api/maps/${mapId}/transcripts`
+    ),
+  getTranscript: (mapId: string, tid: string) =>
+    req<{ transcript: CallTranscript & { transcript: string } }>(
+      `/api/maps/${mapId}/transcripts/${tid}`
+    ),
+  addTranscript: (
+    mapId: string,
+    input: {
+      source: 'paste' | 'upload';
+      title?: string;
+      occurredAt?: string;
+      text: string;
+      filename?: string;
+    }
+  ) =>
+    req<{ transcript: CallTranscript }>(`/api/maps/${mapId}/transcripts`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  importGongCalls: (mapId: string, days = 30) =>
+    req<{ imported: number; transcripts: CallTranscript[] }>(
+      `/api/maps/${mapId}/transcripts/gong/import`,
+      { method: 'POST', body: JSON.stringify({ days }) }
+    ),
+  reanalyzeTranscript: (mapId: string, tid: string) =>
+    req<{ transcript: CallTranscript }>(
+      `/api/maps/${mapId}/transcripts/${tid}/reanalyze`,
+      { method: 'POST' }
+    ),
+  applyTranscript: (
+    mapId: string,
+    tid: string,
+    overrides?: Record<string, string | null>
+  ) =>
+    req<{ state: MapState }>(
+      `/api/maps/${mapId}/transcripts/${tid}/apply`,
+      { method: 'POST', body: JSON.stringify({ overrides: overrides ?? {} }) }
+    ),
+  deleteTranscript: (mapId: string, tid: string) =>
+    req<{ ok: true }>(`/api/maps/${mapId}/transcripts/${tid}`, {
+      method: 'DELETE',
     }),
 
   sendFeedback: (input: {

@@ -1,4 +1,3 @@
-import type { ChangeEvent, RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -17,6 +16,7 @@ import {
   Rows3,
   Share2,
   Sparkles,
+  PhoneCall,
   Undo2,
   UserCheck,
   UserPlus,
@@ -33,6 +33,7 @@ export interface MapRailProps {
   onBriefing: () => void;
   onStrategy: () => void;
   onMeetings: () => void;
+  onCalls: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -40,9 +41,7 @@ export interface MapRailProps {
   onAddPerson: () => void;
   laneGrouping: LaneGrouping;
   onAutoLayout: (mode: LaneGrouping) => void;
-  onImportCrm: () => void;
-  crmInputRef: RefObject<HTMLInputElement>;
-  onCrmFile: (event: ChangeEvent<HTMLInputElement>) => void;
+  onCrm: () => void;
   onHistory: () => void;
   onChanges: () => void;
   hasInitiatives: boolean;
@@ -64,6 +63,7 @@ export default function MapRail({
   onBriefing,
   onStrategy,
   onMeetings,
+  onCalls,
   onUndo,
   onRedo,
   canUndo,
@@ -71,9 +71,7 @@ export default function MapRail({
   onAddPerson,
   laneGrouping,
   onAutoLayout,
-  onImportCrm,
-  crmInputRef,
-  onCrmFile,
+  onCrm,
   onHistory,
   onChanges,
   hasInitiatives,
@@ -134,6 +132,11 @@ export default function MapRail({
             label="Meetings"
             onClick={onMeetings}
           />
+          <RailButton
+            icon={<PhoneCall size={16} />}
+            label="Calls"
+            onClick={onCalls}
+          />
           <RailSeparator />
           <RailButton
             icon={<Undo2 size={16} />}
@@ -172,16 +175,8 @@ export default function MapRail({
           />
           <RailButton
             icon={<FileUp size={16} />}
-            label="Import CRM"
-            onClick={onImportCrm}
-          />
-          <input
-            ref={crmInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            aria-label="Import CRM CSV"
-            className="hidden"
-            onChange={onCrmFile}
+            label="CRM"
+            onClick={onCrm}
           />
           <RailButton
             icon={<History size={16} />}

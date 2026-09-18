@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api';
-import { computeStrategy, renderBrief } from '../lib/accountStrategy';
+import { computeStrategy, patchStakeholder, renderBrief } from '../lib/accountStrategy';
 import type { StrategyOutput } from '../lib/accountStrategy';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import type {
@@ -81,13 +81,59 @@ interface RoutesProps {
   onFocusPeople: (people: Person[]) => void;
 }
 
+/** Collapsed "from call" marker + expandable verbatim quotes. */
+function EvidenceTag({
+  evidence,
+}: {
+  evidence?: import('../types').StanceEvidence[];
+}) {
+  const [open, setOpen] = useState(false);
+  if (!evidence || evidence.length === 0) {
+    return (
+      <span className="ml-1.5 rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700">
+        from call
+      </span>
+    );
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="ml-1.5 rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-700 hover:bg-sky-100"
+        title="Stance inferred from a call transcript — show quotes"
+      >
+        from call
+      </button>
+      {open && (
+        <div className="mt-1.5 max-w-[240px] space-y-1">
+          {evidence.map((item, index) => (
+            <blockquote
+              key={index}
+              className="border-l-2 border-sky-200 pl-1.5 text-[10px] italic text-slate-500"
+              title={`${item.title ?? 'Call'}${item.occurredAt ? ` · ${item.occurredAt.slice(0, 10)}` : ''}`}
+            >
+              “{item.quote}”
+            </blockquote>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 interface StakeholdersProps {
   strategy: StrategyOutput;
   plan: AccountStrategyPlan;
   readOnly: boolean;
   onUpdate: (
     id: string,
-    patch: Partial<{ stance: Stance; nextStep: string; note: string }>
+    patch: Partial<{
+      stance: Stance;
+      nextStep: string;
+      note: string;
+      stanceSource: 'manual' | 'transcript';
+    }>
   ) => void;
   onFocusPeople: (people: Person[]) => void;
 }
@@ -185,18 +231,14 @@ export default function AccountStrategyModal({
   };
   const updateStakeholder = (
     id: string,
-    patch: Partial<{ stance: Stance; nextStep: string; note: string }>
+    patch: Partial<{
+      stance: Stance;
+      nextStep: string;
+      note: string;
+      stanceSource: 'manual' | 'transcript';
+    }>
   ) => {
-    const current = plan.stakeholders[id] ?? {
-      stance: 'unknown' as Stance,
-      nextStep: '',
-      note: '',
-    };
-    onUpdatePlan(
-      changed(plan, {
-        stakeholders: { ...plan.stakeholders, [id]: { ...current, ...patch } },
-      })
-    );
+    onUpdatePlan(patchStakeholder(plan, id, patch));
   };
   const addTask = (task: StrategyTask) =>
     onUpdatePlan(changed(plan, { tasks: [...plan.tasks, task] }));
@@ -759,6 +801,9 @@ function Stakeholders({
                       <option key={stance}>{stance}</option>
                     ))}
                   </select>
+                  {value.stanceSource === 'transcript' && (
+                    <EvidenceTag evidence={value.evidence} />
+                  )}
                 </td>
                 <td className="p-3">
                   <input

@@ -206,6 +206,7 @@ async function listThreads(
 
 export const googleAdapter: ProviderAdapter = {
   id: 'google',
+  kind: 'calendar',
   label: 'Google',
   configured,
   authUrl(state: string, redirectUri: string): string {

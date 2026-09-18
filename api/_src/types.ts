@@ -44,6 +44,12 @@ export interface Person {
   conflictingTitles?: string[];
   researchStatus?: 'verified' | 'possibly_stale' | 'conflicting';
   notes: string;
+  /** Linked CRM contact record. */
+  crm?: {
+    provider: 'hubspot' | 'salesforce';
+    contactId: string;
+    url: string | null;
+  };
   /** Marked when the user has met this person (meeting import / panel). */
   metWith?: boolean;
   /** Latest calendar/email touch from a connected integration. */
@@ -76,13 +82,44 @@ export interface MapMeta {
   nextRefreshAt?: string | null;
   initiatives?: StrategicInitiative[];
   strategy?: AccountStrategyPlan;
+  /** CRM link: which account/opportunity this map tracks. */
+  crm?: {
+    provider: 'hubspot' | 'salesforce';
+    accountId: string;
+    accountName: string;
+    opportunityId: string | null;
+    opportunityName: string | null;
+    stage: string | null;
+    amount: number | null;
+    closeDate: string | null;
+    linkedAt: string;
+    lastPulledAt: string | null;
+    lastPushedAt: string | null;
+  };
 }
 
 export type Stance = 'advocate' | 'neutral' | 'skeptic' | 'unknown';
+export type StanceSignal =
+  | 'support'
+  | 'objection'
+  | 'question'
+  | 'budget'
+  | 'timeline'
+  | 'authority'
+  | 'competitor';
+export interface StanceEvidence {
+  quote: string;
+  signal: StanceSignal;
+  transcriptId: string;
+  title: string | null;
+  occurredAt: string | null;
+}
 export interface StakeholderPlanEntry {
   stance: Stance;
   nextStep: string;
   note: string;
+  evidence?: StanceEvidence[];
+  stanceSource?: 'manual' | 'transcript';
 }
 export interface StrategyTask {
   id: string;
@@ -164,6 +201,10 @@ export interface MapRow {
   company_name: string | null;
   state: MapState;
   is_live_opportunity: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  outcome_at: string | null;
+  outcome_coverage: unknown;
+  stage: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -177,3 +218,38 @@ export interface ShareLinkRow {
   created_at: string;
 }
 
+
+export interface TranscriptQuote {
+  text: string;
+  signal: StanceSignal;
+}
+export interface TranscriptSpeaker {
+  speakerLabel: string;
+  matchedName: string | null;
+  matchedPersonId: string | null;
+  inferredTitle: string | null;
+  stance: Stance;
+  confidence: Confidence;
+  quotes: TranscriptQuote[];
+  summary: string;
+}
+export interface TranscriptAnalysis {
+  speakers: TranscriptSpeaker[];
+  nextSteps: string[];
+  risks: string[];
+  provider: string | null;
+  analyzedAt: string;
+}
+export interface CallTranscript {
+  id: string;
+  mapId: string;
+  source: 'paste' | 'upload' | 'gong';
+  externalId: string | null;
+  title: string | null;
+  occurredAt: string | null;
+  analysis: TranscriptAnalysis | null;
+  analysisError: string | null;
+  appliedAt: string | null;
+  createdAt: string;
+  transcriptChars: number;
+}
