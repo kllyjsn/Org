@@ -72,6 +72,7 @@ import MoreNode from '../components/MoreNode';
 import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
 import CallsModal from '../components/CallsModal';
+import CrmModal from '../components/CrmModal';
 import MeetingsImportModal from '../components/MeetingsImportModal';
 import MapRail from '../components/MapRail';
 import RosterView from '../components/RosterView';
@@ -209,6 +210,7 @@ function MapInner() {
   useDocumentTitle(`${mapName || 'Map'} — TopDown`);
   const [showMeetings, setShowMeetings] = useState(false);
   const [showCalls, setShowCalls] = useState(false);
+  const [showCrm, setShowCrm] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -239,7 +241,6 @@ function MapInner() {
   const editTimer = useRef<number | null>(null);
   const dragHistoryRecorded = useRef(false);
   const clipboard = useRef<CanvasSnapshot | null>(null);
-  const crmInput = useRef<HTMLInputElement | null>(null);
   const metaRef = useRef<MapState['meta'] | null>(null);
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   const remoteUpdatedAt = useRef('');
@@ -1443,6 +1444,7 @@ function MapInner() {
       [showDeepResearch, () => setShowDeepResearch(false)],
       [showMeetings, () => setShowMeetings(false)],
       [showCalls, () => setShowCalls(false)],
+      [showCrm, () => setShowCrm(false)],
       [showShare, () => setShowShare(false)],
       [showHistory, () => setShowHistory(false)],
       [showInitiatives, () => setShowInitiatives(false)],
@@ -1468,6 +1470,7 @@ function MapInner() {
     showDeepResearch,
     showMeetings,
     showCalls,
+    showCrm,
     showShare,
     showHistory,
     showInitiatives,
@@ -2361,9 +2364,7 @@ function MapInner() {
         onAddPerson={() => addPerson()}
         laneGrouping={laneGrouping}
         onAutoLayout={autoLayout}
-        onImportCrm={() => crmInput.current?.click()}
-        crmInputRef={crmInput}
-        onCrmFile={(event) => void importCrmCsv(event)}
+        onCrm={() => setShowCrm(true)}
         onHistory={openHistory}
         onChanges={() => setShowChanges(true)}
         hasInitiatives={(meta?.initiatives?.length ?? 0) > 0}
@@ -2799,6 +2800,15 @@ function MapInner() {
           people={people}
           onApply={applyMeetings}
           onClose={() => setShowMeetings(false)} />
+      )}
+      {showCrm && mapId && (
+        <CrmModal
+          mapId={mapId}
+          workspaceId={workspaceId}
+          readOnly={readOnly}
+          onApply={applyTranscriptState}
+          onCsvImport={(event) => void importCrmCsv(event)}
+          onClose={() => setShowCrm(false)} />
       )}
       {showCalls && mapId && (
         <CallsModal

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, ShieldCheck, Trash2 } from 'lucide-react';
+import { ExternalLink, Loader2, ShieldCheck, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { ROLE_META } from '../lib/colors';
 import { evidenceScore } from '../lib/researchQuality';
@@ -190,6 +190,25 @@ export default function PersonPanel({
           <p className="line-clamp-2 text-xs leading-5 text-slate-500">
             {person.title}
           </p>
+          {person.crm && (
+            <p className="mt-1">
+              {person.crm.url ? (
+                <a
+                  href={person.crm.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 hover:bg-indigo-100"
+                >
+                  {person.crm.provider === 'salesforce' ? 'Salesforce' : 'HubSpot'}
+                  <ExternalLink size={10} />
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                  {person.crm.provider === 'salesforce' ? 'Salesforce' : 'HubSpot'}
+                </span>
+              )}
+            </p>
+          )}
           {(person.lastTouchAt ||
             person.meetingCount ||
             person.emailThreadCount) && (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowUpRight,
   BarChart3,
@@ -215,6 +215,7 @@ function PricingModal({
 
 export default function AccountsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     user,
     workspaces,
@@ -230,7 +231,9 @@ export default function AccountsPage() {
   const [showPricing, setShowPricing] = useState(false);
   const [showValue, setShowValue] = useState(false);
   const [showSellerProfile, setShowSellerProfile] = useState(false);
-  const [showIntegrations, setShowIntegrations] = useState(false);
+  const [showIntegrations, setShowIntegrations] = useState(
+    () => searchParams.get('open') === 'integrations'
+  );
   const [showNotifications, setShowNotifications] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showFeedbackInbox, setShowFeedbackInbox] = useState(false);
