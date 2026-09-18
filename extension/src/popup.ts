@@ -431,11 +431,19 @@ async function currentPage(): Promise<{ tabId: number; ctx: PageContext | null; 
   if (!tab?.id || !/^https:\/\/(www\.)?linkedin\.com\//.test(url)) {
     return { tabId: tab?.id ?? -1, ctx: null, url };
   }
+  const tabId = tab.id;
+  const parse = () =>
+    sendToTab<Extract<ContentResponse, { type: 'page' }>>(tabId, { type: 'parse' });
   try {
-    const res = await sendToTab<Extract<ContentResponse, { type: 'page' }>>(tab.id, { type: 'parse' });
-    return { tabId: tab.id, ctx: res.context, url };
+    return { tabId, ctx: (await parse()).context, url };
   } catch {
-    return { tabId: tab.id, ctx: null, url };
+    // Tab was open before the extension was installed/reloaded: inject on demand.
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+      return { tabId, ctx: (await parse()).context, url };
+    } catch {
+      return { tabId, ctx: null, url };
+    }
   }
 }
 

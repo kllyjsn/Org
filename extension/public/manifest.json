@@ -21,7 +21,7 @@
     "page": "options.html",
     "open_in_tab": false
   },
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["https://api.topdown.sh/*"],
   "optional_host_permissions": ["http://localhost/*", "https://*/*"],
   "content_scripts": [
