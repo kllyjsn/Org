@@ -88,11 +88,10 @@ function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
                   ] as const
                 ).map(([kind, label]) =>
                   data.suggested?.evidenceCounts[kind] ? (
-                    <div key={kind} className="flex justify-between gap-2 py-0.5">
-                      <span>{label}</span>
-                      <span className="font-semibold text-slate-800">
-                        {data.suggested.evidenceCounts[kind]}
-                      </span>
+                    <div key={kind} className="py-0.5">
+                      {data.suggested.evidenceCounts[kind]}{' '}
+                      {kind === 'sumble_relationship' ? 'edges from ' : 'from '}
+                      {label}
                     </div>
                   ) : null
                 )}

@@ -77,6 +77,7 @@ export default function SuggestChartPanel({
   const [guidance, setGuidance] = useState('');
   const [personasOnly, setPersonasOnly] = useState(false);
   const [refineText, setRefineText] = useState('');
+  const [tookMs, setTookMs] = useState<number | null>(null);
   const selectedPeople = useMemo(
     () =>
       (chart.suggestion?.people ?? []).filter(
@@ -118,6 +119,7 @@ export default function SuggestChartPanel({
     setSuggestionStatus({ generating: true, error: null });
     try {
       const result = await api.suggestChart(mapId, params);
+      setTookMs(result.tookMs);
       if (refined) mergeRefined(result.suggestion, params);
       else setSuggestion(mapId, result.suggestion, params);
     } catch (error) {
@@ -346,6 +348,7 @@ export default function SuggestChartPanel({
           <>
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
               {stats.suggested} suggested of {stats.candidates} candidates · {stats.withEvidenceEdges} evidence-backed edges
+              {tookMs !== null && ` · took ${tookMs} ms`}
               {chart.params.guidance && <span> · guidance applied</span>}
             </div>
             <div className="flex flex-wrap gap-1.5">
