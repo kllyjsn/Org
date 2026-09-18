@@ -3421,7 +3421,7 @@ function MapInner() {
         )}
 
         {ghostPeople.length > 0 && (
-          <div className={`pointer-events-auto absolute left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/80 bg-white/95 px-3 py-1.5 text-xs text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl ${isMobile ? 'bottom-20' : 'top-16'}`}>
+          <div className={`pointer-events-auto absolute left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 whitespace-nowrap rounded-2xl border border-white/80 bg-white/95 px-3 py-1.5 text-xs text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl ${isMobile ? 'bottom-20' : 'top-16'}`}>
             <span className="font-semibold">{ghostPeople.length} suggested</span>
             <button
               type="button"
