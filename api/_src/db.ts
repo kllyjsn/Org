@@ -114,7 +114,27 @@ CREATE TABLE IF NOT EXISTS feedback (
   status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','reviewing','resolved')),
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS research_jobs (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  map_id TEXT REFERENCES maps(id) ON DELETE SET NULL,
+  domain TEXT NOT NULL,
+  focus TEXT,
+  status TEXT NOT NULL CHECK (status IN ('queued','running','done','failed','cancelled')),
+  checkpoint JSONB NOT NULL,
+  events JSONB NOT NULL DEFAULT '[]',
+  partial JSONB,
+  result JSONB,
+  error TEXT,
+  lease_until TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
+CREATE INDEX IF NOT EXISTS research_jobs_status_idx
+  ON research_jobs (status, created_at);
 ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS cursor_x DOUBLE PRECISION;
 ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS cursor_y DOUBLE PRECISION;
 ALTER TABLE map_presence ADD COLUMN IF NOT EXISTS selected_person_id TEXT;
