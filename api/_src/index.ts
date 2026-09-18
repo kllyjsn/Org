@@ -28,8 +28,24 @@ import {
   signPayload,
   signatureMatches,
 } from './crypto.js';
-import { adapterFor, providerStatus } from './integrations/registry.js';
+import {
+  crmAdapterFor,
+  oauthAdapterFor,
+  providerStatus,
+} from './integrations/registry.js';
+import {
+  applyPushResults,
+  contactsToPush,
+  mergeCrmContacts,
+} from './integrations/crm-sync.js';
+import type { CrmSession } from './integrations/crm-types.js';
 import { committeeCoverage } from './notifications/coverage.js';
+import {
+  mapPortfolioRow,
+  portfolioSummary,
+  type DealStage,
+  type PortfolioInput,
+} from './portfolio.js';
 import { analyzeTranscript } from './transcripts/analyze.js';
 import { applyAnalysisToPeople, applyAnalysisToStrategy } from './transcripts/apply.js';
 import { configured as gongConfigured, fetchTranscript, listCalls } from './transcripts/gong.js';
@@ -44,6 +60,7 @@ import {
 import {
   syncIntegration,
   syncNextDueIntegration,
+  withFreshToken,
   type IntegrationRow,
 } from './integrations/sync.js';
 import { initialCheckpoint } from './research-pipeline.js';
@@ -453,6 +470,25 @@ function sanitizeState(input: unknown): MapState {
         } as StrategicInitiative;
       }),
       ...(strategy ? { strategy } : {}),
+      ...(meta.crm && typeof meta.crm === 'object'
+        ? {
+            crm: {
+              provider:
+                meta.crm.provider === 'salesforce' ? 'salesforce' : 'hubspot',
+              accountId: String(meta.crm.accountId ?? ''),
+              accountName: String(meta.crm.accountName ?? ''),
+              opportunityId: meta.crm.opportunityId ?? null,
+              opportunityName: meta.crm.opportunityName ?? null,
+              stage: meta.crm.stage ?? null,
+              amount:
+                typeof meta.crm.amount === 'number' ? meta.crm.amount : null,
+              closeDate: meta.crm.closeDate ?? null,
+              linkedAt: meta.crm.linkedAt ?? '',
+              lastPulledAt: meta.crm.lastPulledAt ?? null,
+              lastPushedAt: meta.crm.lastPushedAt ?? null,
+            },
+          }
+        : {}),
     },
   };
 }
@@ -1043,7 +1079,7 @@ app.post(
     if (!canWrite(await workspaceRoleFor(user, wsId))) {
       return bad(c, 'insufficient role', 403);
     }
-    const adapter = adapterFor(param(c, 'provider'));
+    const adapter = oauthAdapterFor(param(c, 'provider'));
     if (!adapter || !adapter.configured() || !integrationsConfigured()) {
       return bad(c, 'integrations are not configured', 503);
     }
@@ -1082,7 +1118,7 @@ app.get('/api/integrations/callback', async (c) => {
   } catch {
     return fail();
   }
-  const adapter = adapterFor(state.provider ?? '');
+  const adapter = oauthAdapterFor(state.provider ?? '');
   if (!adapter || !state.ws || !state.uid) return fail(state.provider ?? '');
   if (!state.exp || state.exp < Date.now()) return fail(adapter.id);
 
@@ -1092,14 +1128,15 @@ app.get('/api/integrations/callback', async (c) => {
     await query(
       `INSERT INTO integrations
         (id, workspace_id, user_id, provider, account_email, access_token,
-         refresh_token, expires_at, scopes, status, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'connected',$10)
+         refresh_token, expires_at, scopes, instance_url, status, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'connected',$11)
        ON CONFLICT (workspace_id, user_id, provider) DO UPDATE SET
          account_email = EXCLUDED.account_email,
          access_token = EXCLUDED.access_token,
          refresh_token = COALESCE(EXCLUDED.refresh_token, integrations.refresh_token),
          expires_at = EXCLUDED.expires_at,
          scopes = EXCLUDED.scopes,
+         instance_url = COALESCE(EXCLUDED.instance_url, integrations.instance_url),
          status = 'connected',
          last_error = NULL`,
       [
@@ -1112,6 +1149,7 @@ app.get('/api/integrations/callback', async (c) => {
         tokens.refreshToken ? encryptSecret(tokens.refreshToken) : null,
         tokens.expiresAt,
         tokens.scopes,
+        tokens.instanceUrl ?? null,
         now(),
       ]
     );
@@ -1119,7 +1157,7 @@ app.get('/api/integrations/callback', async (c) => {
       'SELECT id FROM integrations WHERE workspace_id = $1 AND user_id = $2 AND provider = $3',
       [state.ws, state.uid, adapter.id]
     );
-    if (rows[0]) {
+    if (rows[0] && adapter.kind !== 'crm') {
       void syncIntegration(rows[0].id).catch((error) =>
         console.error('initial integration sync failed', error)
       );
@@ -1179,6 +1217,339 @@ app.delete('/api/integrations/:id', requireAuth, async (c) => {
   // Touchpoint rows cascade; touch stats on people stay as last known.
   await query('DELETE FROM integrations WHERE id = $1', [integration.id]);
   return c.json({ ok: true });
+});
+
+// ---------- crm ----------
+
+/** Caller must have a usable CRM integration in the row's workspace. */
+async function crmIntegrationForUser(
+  user: UserRow,
+  integrationId: string
+): Promise<[IntegrationRow | null, string | null]> {
+  const rows = await query<IntegrationRow>(
+    'SELECT * FROM integrations WHERE id = $1',
+    [integrationId]
+  );
+  const integration = rows[0];
+  if (!integration || !crmAdapterFor(integration.provider)) {
+    return [null, null];
+  }
+  const role = await workspaceRoleFor(user, integration.workspace_id);
+  return [integration, role];
+}
+
+async function crmSessionFor(
+  integration: IntegrationRow
+): Promise<{ session: CrmSession; adapter: ReturnType<typeof crmAdapterFor> }> {
+  const adapter = crmAdapterFor(integration.provider);
+  if (!adapter) throw new Error(`unknown provider ${integration.provider}`);
+  const { accessToken, instanceUrl } = await withFreshToken(integration);
+  return { session: { accessToken, instanceUrl }, adapter };
+}
+
+app.get('/api/integrations/:id/crm/accounts', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [integration, role] = await crmIntegrationForUser(user, param(c, 'id'));
+  if (!integration) return bad(c, 'not a CRM connection', 404);
+  if (!role) return bad(c, 'not a member', 403);
+  const { session, adapter } = await crmSessionFor(integration);
+  const q = c.req.query('q') ?? '';
+  return c.json({ accounts: await adapter!.searchAccounts(session, q) });
+});
+
+app.get(
+  '/api/integrations/:id/crm/accounts/:accountId/opportunities',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const [integration, role] = await crmIntegrationForUser(
+      user,
+      param(c, 'id')
+    );
+    if (!integration) return bad(c, 'not a CRM connection', 404);
+    if (!role) return bad(c, 'not a member', 403);
+    const { session, adapter } = await crmSessionFor(integration);
+    return c.json({
+      opportunities: await adapter!.listOpportunities(
+        session,
+        param(c, 'accountId')
+      ),
+    });
+  }
+);
+
+async function persistMapState(
+  map: MapRow,
+  state: MapState,
+  userId: string
+): Promise<void> {
+  await query(
+    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), map.id, map.name, JSON.stringify(map.state), userId, now()]
+  );
+  await query(
+    'UPDATE maps SET state = $1, updated_at = $2 WHERE id = $3',
+    [JSON.stringify(state), now(), map.id]
+  );
+  await query(
+    `DELETE FROM map_versions WHERE map_id = $1 AND id NOT IN
+     (SELECT id FROM map_versions WHERE map_id = $1 ORDER BY created_at DESC LIMIT 50)`,
+    [map.id]
+  );
+}
+
+app.post('/api/maps/:id/crm/link', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const body = await c.req.json().catch(() => null);
+  const integration = await query<IntegrationRow>(
+    'SELECT * FROM integrations WHERE id = $1 AND workspace_id = $2',
+    [typeof body?.integrationId === 'string' ? body.integrationId : '', map.workspace_id]
+  );
+  const row = integration[0];
+  const adapter = row ? crmAdapterFor(row.provider) : null;
+  if (!row || !adapter) return bad(c, 'not a CRM connection', 400);
+  const state = map.state as MapState;
+  const nextState: MapState = {
+    ...state,
+    meta: {
+      ...state.meta,
+      crm: {
+        provider: adapter.id,
+        accountId: String(body?.accountId ?? ''),
+        accountName: String(body?.accountName ?? ''),
+        opportunityId:
+          typeof body?.opportunityId === 'string' ? body.opportunityId : null,
+        opportunityName:
+          typeof body?.opportunityName === 'string' ? body.opportunityName : null,
+        stage: typeof body?.stage === 'string' ? body.stage : null,
+        amount: typeof body?.amount === 'number' ? body.amount : null,
+        closeDate: typeof body?.closeDate === 'string' ? body.closeDate : null,
+        linkedAt: now(),
+        lastPulledAt: state.meta?.crm?.lastPulledAt ?? null,
+        lastPushedAt: state.meta?.crm?.lastPushedAt ?? null,
+      },
+    },
+  };
+  await persistMapState(map, nextState, user.id);
+  return c.json({ state: nextState });
+});
+
+app.delete('/api/maps/:id/crm/link', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const state = map.state as MapState;
+  const meta = { ...state.meta };
+  delete meta.crm;
+  const nextState = { ...state, meta };
+  await persistMapState(map, nextState, user.id);
+  return c.json({ state: nextState });
+});
+
+app.get('/api/maps/:id/crm/status', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const state = map.state as MapState;
+  const integrations = await query<IntegrationRow>(
+    `SELECT * FROM integrations WHERE workspace_id = $1 AND status = 'connected'`,
+    [map.workspace_id]
+  );
+  return c.json({
+    crm: state.meta?.crm ?? null,
+    connections: integrations
+      .map((row) => {
+        const adapter = crmAdapterFor(row.provider);
+        return adapter
+          ? {
+              id: row.id,
+              provider: adapter.id,
+              label: adapter.label,
+              configured: adapter.configured(),
+            }
+          : null;
+      })
+      .filter(Boolean),
+  });
+});
+
+app.post('/api/maps/:id/crm/pull', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const state = map.state as MapState;
+  const link = state.meta?.crm;
+  if (!link) return bad(c, 'map is not linked to a CRM account', 400);
+  const body = await c.req.json().catch(() => null);
+  const integrations = await query<IntegrationRow>(
+    `SELECT * FROM integrations WHERE workspace_id = $1 AND provider = $2 AND status = 'connected' ORDER BY last_synced_at DESC NULLS LAST LIMIT 1`,
+    [map.workspace_id, link.provider]
+  );
+  const integration = integrations[0];
+  if (!integration) return bad(c, `no connected ${link.provider} account`, 400);
+  const { session, adapter } = await crmSessionFor(integration);
+  const contacts = await adapter!.listContacts(
+    session,
+    link.accountId,
+    link.opportunityId ?? undefined
+  );
+  const merged = mergeCrmContacts(state, contacts, adapter!.id, {
+    createUnmatched: body?.createUnmatched === true,
+  });
+  const nextState: MapState = {
+    ...merged.state,
+    meta: { ...merged.state.meta, crm: { ...link, lastPulledAt: now() } },
+  };
+  await persistMapState(map, nextState, user.id);
+  await recordAnalytics({
+    eventName: 'crm_pulled',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: {
+      provider: link.provider,
+      matched: merged.matched,
+      created: merged.created,
+    },
+  });
+  return c.json({
+    state: nextState,
+    matched: merged.matched,
+    created: merged.created,
+    updated: merged.updated,
+  });
+});
+
+app.post('/api/maps/:id/crm/push', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const state = map.state as MapState;
+  const link = state.meta?.crm;
+  if (!link) return bad(c, 'map is not linked to a CRM account', 400);
+  const integrations = await query<IntegrationRow>(
+    `SELECT * FROM integrations WHERE workspace_id = $1 AND provider = $2 AND status = 'connected' ORDER BY last_synced_at DESC NULLS LAST LIMIT 1`,
+    [map.workspace_id, link.provider]
+  );
+  const integration = integrations[0];
+  if (!integration) return bad(c, `no connected ${link.provider} account`, 400);
+  const { session, adapter } = await crmSessionFor(integration);
+  await adapter!.ensureSchema(session);
+  const rows = contactsToPush(state).slice(0, 100);
+  const results: { personId: string; crmId: string; url: string | null }[] = [];
+  const failed: { personId: string; error: string }[] = [];
+  for (const row of rows) {
+    try {
+      const pushed = await adapter!.pushContact(session, row, {
+        accountId: link.accountId,
+        opportunityId: link.opportunityId,
+      });
+      results.push({ personId: row.personId, ...pushed });
+    } catch (error) {
+      failed.push({
+        personId: row.personId,
+        error: error instanceof Error ? error.message : 'push failed',
+      });
+    }
+  }
+  const nextState: MapState = applyPushResults(
+    {
+      ...state,
+      meta: { ...state.meta, crm: { ...link, lastPushedAt: now() } },
+    },
+    results,
+    adapter!.id
+  );
+  await persistMapState(map, nextState, user.id);
+  await recordAnalytics({
+    eventName: 'crm_pushed',
+    userId: user.id,
+    workspaceId: map.workspace_id,
+    mapId: map.id,
+    properties: {
+      provider: link.provider,
+      pushed: results.length,
+      failed: failed.length,
+    },
+  });
+  return c.json({ state: nextState, pushed: results.length, failed });
+});
+
+// ---------- portfolio ----------
+
+// O(maps) in-process rollup — fine at current map counts.
+app.get('/api/workspaces/:id/portfolio', requireAuth, async (c) => {
+  const user = c.get('user');
+  const workspaceId = param(c, 'id');
+  if (!(await workspaceRoleFor(user, workspaceId))) {
+    return bad(c, 'not a member', 403);
+  }
+  const maps = await query<PortfolioInput>(
+    `SELECT id, name, domain, company_name, is_live_opportunity, outcome,
+            outcome_at, outcome_coverage, stage, state, updated_at, created_by
+     FROM maps WHERE workspace_id = $1`,
+    [workspaceId]
+  );
+  const rows = maps.map((m) => mapPortfolioRow(m));
+  return c.json({
+    rows,
+    summary: portfolioSummary(rows),
+    generatedAt: now(),
+  });
+});
+
+app.patch('/api/maps/:id/outcome', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  if (!canWrite(role)) return bad(c, 'viewers cannot edit', 403);
+  const body = await c.req.json().catch(() => null);
+  const outcome = body?.outcome;
+  const stage: DealStage | null =
+    body?.stage === 'discovery' ||
+    body?.stage === 'evaluation' ||
+    body?.stage === 'proposal' ||
+    body?.stage === 'negotiation' ||
+    body?.stage === 'closed'
+      ? body.stage
+      : null;
+  if (outcome !== 'open' && outcome !== 'won' && outcome !== 'lost') {
+    return bad(c, 'outcome must be open, won, or lost');
+  }
+  const state = map.state as MapState;
+  const closing = outcome !== 'open';
+  await query(
+    `UPDATE maps SET outcome = $1, outcome_at = $2, outcome_coverage = $3,
+            stage = $4, updated_at = $5 WHERE id = $6`,
+    [
+      outcome,
+      closing ? now() : null,
+      // snapshot committee coverage at the moment the outcome is set
+      closing ? JSON.stringify(committeeCoverage(state)) : null,
+      stage,
+      now(),
+      map.id,
+    ]
+  );
+  if (closing || map.outcome !== 'open') {
+    await recordAnalytics({
+      eventName: 'outcome_set',
+      userId: user.id,
+      workspaceId: map.workspace_id,
+      mapId: map.id,
+      properties: {
+        outcome,
+        score: closing ? committeeCoverage(state).score : null,
+      },
+    });
+  }
+  return c.json({ ok: true, outcome, stage });
 });
 
 // ---------- notifications ----------
@@ -1784,6 +2155,7 @@ app.get('/api/maps', requireAuth, async (c) => {
   if (!(await workspaceRoleFor(user, wsId))) return bad(c, 'not a member', 403);
   const rows = await query<MapRow>(
     `SELECT id, name, domain, company_name, state, is_live_opportunity,
+            outcome, outcome_at, stage,
             created_by, created_at, updated_at
      FROM maps WHERE workspace_id = $1 ORDER BY updated_at DESC`,
     [wsId]

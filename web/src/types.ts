@@ -46,6 +46,12 @@ export interface Person {
   /** Structured seniority from enrichment (CXO/VP/Director/…) when known. */
   jobLevel?: string | null;
   notes: string;
+  /** Linked CRM contact record. */
+  crm?: {
+    provider: 'hubspot' | 'salesforce';
+    contactId: string;
+    url: string | null;
+  };
   /** Marked when the user has met this person (meeting import / panel). */
   metWith?: boolean;
   /** Latest calendar/email touch from a connected integration. */
@@ -81,6 +87,20 @@ export interface MapMeta {
   nextRefreshAt?: string | null;
   initiatives?: StrategicInitiative[];
   strategy?: AccountStrategyPlan;
+  /** CRM link: which account/opportunity this map tracks. */
+  crm?: {
+    provider: 'hubspot' | 'salesforce';
+    accountId: string;
+    accountName: string;
+    opportunityId: string | null;
+    opportunityName: string | null;
+    stage: string | null;
+    amount: number | null;
+    closeDate: string | null;
+    linkedAt: string;
+    lastPulledAt: string | null;
+    lastPushedAt: string | null;
+  };
 }
 
 export type Stance = 'advocate' | 'neutral' | 'skeptic' | 'unknown';
@@ -196,6 +216,9 @@ export interface MapListItem {
   created_at: string;
   updated_at: string;
   is_live_opportunity: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  outcomeAt: string | null;
+  stage: string | null;
   peopleCount: number;
   initiativeCount: number;
 }
@@ -208,6 +231,9 @@ export interface LoadedMap {
   company_name: string | null;
   state: MapState;
   is_live_opportunity: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  outcomeAt: string | null;
+  stage: string | null;
   role: 'owner' | 'member' | 'viewer';
   created_by: string;
   created_at: string;
@@ -479,11 +505,12 @@ export interface ProductValueSummary {
   };
 }
 
-export type IntegrationProvider = 'google' | 'microsoft';
+export type IntegrationProvider = 'google' | 'microsoft' | 'hubspot' | 'salesforce';
 
 export interface IntegrationStatus {
   id: IntegrationProvider;
   label: string;
+  kind: 'calendar' | 'crm';
   configured: boolean;
   connection: {
     id: string;
@@ -572,4 +599,120 @@ export interface CallTranscript {
   appliedAt: string | null;
   createdAt: string;
   transcriptChars: number;
+}
+
+export type CrmProvider = 'hubspot' | 'salesforce';
+
+export interface CrmAccount {
+  id: string;
+  name: string;
+  domain: string | null;
+  url: string | null;
+}
+
+export interface CrmOpportunity {
+  id: string;
+  name: string;
+  stage: string | null;
+  amount: number | null;
+  closeDate: string | null;
+  url: string | null;
+}
+
+export interface CrmConnection {
+  id: string;
+  provider: CrmProvider;
+  label: string;
+  configured: boolean;
+}
+
+export interface CrmStatus {
+  crm: MapState['meta']['crm'] | null;
+  connections: CrmConnection[];
+}
+
+export interface CrmPullResult {
+  state: MapState;
+  matched: number;
+  created: number;
+  updated: number;
+}
+
+export interface CrmPushResult {
+  state: MapState;
+  pushed: number;
+  failed: { personId: string; error: string }[];
+}
+
+export type DealStage =
+  | 'discovery'
+  | 'evaluation'
+  | 'proposal'
+  | 'negotiation'
+  | 'closed';
+
+export type CoverageBand = 'strong' | 'moderate' | 'weak';
+
+export type RiskFlag =
+  | 'single_threaded'
+  | 'coverage_gap'
+  | 'no_economic_buyer'
+  | 'stale_30d';
+
+export interface CommitteeCoverage {
+  keyRoles: {
+    role: BuyingRole;
+    covered: boolean;
+    people: { name: string; metWith: boolean; lastTouchAt: string | null }[];
+  }[];
+  coveredCount: number;
+  missingRoles: BuyingRole[];
+  untouchedKeyPeople: Person[];
+  threadCount: number;
+  singleThreaded: boolean;
+  score: number;
+}
+
+export interface PortfolioRow {
+  id: string;
+  name: string;
+  domain: string;
+  companyName: string | null;
+  isLiveOpportunity: boolean;
+  outcome: 'open' | 'won' | 'lost';
+  outcomeAt: string | null;
+  stage: DealStage;
+  coverage: CommitteeCoverage;
+  knownPeople: number;
+  expectedKnown: number;
+  gap: number;
+  singleThreaded: boolean;
+  untouchedKeyCount: number;
+  amount: number | null;
+  closeDate: string | null;
+  crmStage: string | null;
+  lastActivityAt: string | null;
+  riskFlags: RiskFlag[];
+  outcomeCoverageScore: number | null;
+}
+
+export interface PortfolioSummary {
+  total: number;
+  live: number;
+  byBand: Record<CoverageBand, number>;
+  singleThreaded: number;
+  withGaps: number;
+  atRiskLive: number;
+  winLoss: {
+    byBand: Record<
+      CoverageBand,
+      { won: number; lost: number; winRate: number | null }
+    >;
+  };
+}
+
+export interface PortfolioResponse {
+  rows: PortfolioRow[];
+  summary: PortfolioSummary;
+  generatedAt: string;
 }

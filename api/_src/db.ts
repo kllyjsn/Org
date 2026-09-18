@@ -55,6 +55,10 @@ CREATE TABLE IF NOT EXISTS maps (
   updated_at TEXT NOT NULL
 );
 ALTER TABLE maps ADD COLUMN IF NOT EXISTS is_live_opportunity BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE maps ADD COLUMN IF NOT EXISTS outcome TEXT NOT NULL DEFAULT 'open';
+ALTER TABLE maps ADD COLUMN IF NOT EXISTS outcome_at TEXT;
+ALTER TABLE maps ADD COLUMN IF NOT EXISTS outcome_coverage JSONB;
+ALTER TABLE maps ADD COLUMN IF NOT EXISTS stage TEXT;
 CREATE TABLE IF NOT EXISTS share_links (
   token TEXT PRIMARY KEY,
   map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
@@ -171,6 +175,23 @@ CREATE TABLE IF NOT EXISTS touchpoints (
 );
 CREATE INDEX IF NOT EXISTS idx_touchpoints_map ON touchpoints(map_id);
 CREATE INDEX IF NOT EXISTS idx_integrations_workspace ON integrations(workspace_id);
+-- CRM providers join google/microsoft; the inline CHECK can't be altered,
+-- so swap it for a named constraint covering the full set.
+DO $$
+DECLARE c RECORD;
+BEGIN
+  FOR c IN
+    SELECT conname FROM pg_constraint
+    WHERE conrelid = 'integrations'::regclass AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%provider%'
+  LOOP
+    EXECUTE format('ALTER TABLE integrations DROP CONSTRAINT %I', c.conname);
+  END LOOP;
+END $$;
+ALTER TABLE integrations
+  ADD CONSTRAINT integrations_provider_check
+  CHECK (provider IN ('google','microsoft','hubspot','salesforce'));
+ALTER TABLE integrations ADD COLUMN IF NOT EXISTS instance_url TEXT;
 ALTER TABLE workspace_members
   ADD COLUMN IF NOT EXISTS notify_email BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE workspace_members

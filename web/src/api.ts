@@ -1,6 +1,11 @@
 import type {
   AccountBriefing,
   CallTranscript,
+  CrmAccount,
+  CrmOpportunity,
+  CrmPullResult,
+  CrmPushResult,
+  CrmStatus,
   StrategyInsights,
   AccountAgentAnswer,
   AccountAgentMessage,
@@ -14,10 +19,12 @@ import type {
   MapComment,
   MapListItem,
   MapPresence,
+  DealStage,
   MapState,
   MapVersion,
   NotificationsResponse,
   Person,
+  PortfolioResponse,
   ProductEventName,
   ProductValueSummary,
   ResearchEvent,
@@ -124,6 +131,56 @@ export const api = {
     }),
   disconnectIntegration: (id: string) =>
     req<{ ok: true }>(`/api/integrations/${id}`, { method: 'DELETE' }),
+
+  crmStatus: (mapId: string) =>
+    req<CrmStatus>(`/api/maps/${mapId}/crm/status`),
+  crmSearchAccounts: (integrationId: string, q: string) =>
+    req<{ accounts: CrmAccount[] }>(
+      `/api/integrations/${integrationId}/crm/accounts?q=${encodeURIComponent(q)}`
+    ),
+  crmListOpportunities: (integrationId: string, accountId: string) =>
+    req<{ opportunities: CrmOpportunity[] }>(
+      `/api/integrations/${integrationId}/crm/accounts/${accountId}/opportunities`
+    ),
+  crmLink: (
+    mapId: string,
+    body: {
+      integrationId: string;
+      accountId: string;
+      accountName: string;
+      opportunityId?: string;
+      opportunityName?: string;
+      stage?: string;
+      amount?: number;
+      closeDate?: string;
+    }
+  ) =>
+    req<{ state: MapState }>(`/api/maps/${mapId}/crm/link`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  crmUnlink: (mapId: string) =>
+    req<{ state: MapState }>(`/api/maps/${mapId}/crm/link`, {
+      method: 'DELETE',
+    }),
+  crmPull: (mapId: string, createUnmatched: boolean) =>
+    req<CrmPullResult>(`/api/maps/${mapId}/crm/pull`, {
+      method: 'POST',
+      body: JSON.stringify({ createUnmatched }),
+    }),
+  crmPush: (mapId: string) =>
+    req<CrmPushResult>(`/api/maps/${mapId}/crm/push`, { method: 'POST' }),
+
+  getPortfolio: (workspaceId: string) =>
+    req<PortfolioResponse>(`/api/workspaces/${workspaceId}/portfolio`),
+  setOutcome: (
+    mapId: string,
+    body: { outcome: 'open' | 'won' | 'lost'; stage?: DealStage | null }
+  ) =>
+    req<{ ok: true; outcome: string; stage: string | null }>(
+      `/api/maps/${mapId}/outcome`,
+      { method: 'PATCH', body: JSON.stringify(body) }
+    ),
 
   listNotifications: (workspaceId: string) =>
     req<NotificationsResponse>(`/api/workspaces/${workspaceId}/notifications`),

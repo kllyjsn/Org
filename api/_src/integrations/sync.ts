@@ -3,7 +3,7 @@ import { decryptSecret, encryptSecret } from '../crypto.js';
 import { now, query } from '../db.js';
 import { canonicalPersonName } from '../research.js';
 import { normalizeEmail } from '../identity.js';
-import { adapterFor } from './registry.js';
+import { adapterFor, oauthAdapterFor } from './registry.js';
 import type { CalendarEvent, EmailThread } from './types.js';
 import type { MapRow, MapState, Person } from '../types.js';
 
@@ -11,7 +11,8 @@ export interface IntegrationRow {
   id: string;
   workspace_id: string;
   user_id: string;
-  provider: 'google' | 'microsoft';
+  provider: 'google' | 'microsoft' | 'hubspot' | 'salesforce';
+  instance_url?: string | null;
   account_email: string | null;
   access_token: string;
   refresh_token: string | null;
@@ -310,7 +311,7 @@ async function syncCore(
     const { state: nextState, changed } = applyTouchStats(
       map.state as MapState,
       stats,
-      integration.provider
+      integration.provider as 'google' | 'microsoft'
     );
     if (changed > 0) {
       peopleUpdated += changed;
@@ -330,6 +331,38 @@ async function syncCore(
  * touchpoint upserts, per-map stat derivation. Status/last_error persist on
  * the integration either way.
  */
+/**
+ * Decrypt the access token, refreshing + persisting it when it expires
+ * within 60s. Shared by the touchpoint sync and the CRM routes.
+ */
+export async function withFreshToken(
+  integration: IntegrationRow
+): Promise<{ accessToken: string; instanceUrl: string | null }> {
+  let accessToken = decryptSecret(integration.access_token);
+  let instanceUrl = integration.instance_url ?? null;
+  const expiryMs = integration.expires_at
+    ? Date.parse(integration.expires_at)
+    : Number.POSITIVE_INFINITY;
+  const adapter = oauthAdapterFor(integration.provider);
+  if (expiryMs < Date.now() + 60_000 && integration.refresh_token && adapter) {
+    const refreshed = await adapter.refresh(
+      decryptSecret(integration.refresh_token)
+    );
+    accessToken = refreshed.accessToken;
+    instanceUrl = refreshed.instanceUrl ?? instanceUrl;
+    await query(
+      'UPDATE integrations SET access_token = $1, expires_at = $2, instance_url = $3 WHERE id = $4',
+      [
+        encryptSecret(refreshed.accessToken),
+        refreshed.expiresAt,
+        instanceUrl,
+        integration.id,
+      ]
+    );
+  }
+  return { accessToken, instanceUrl };
+}
+
 export async function syncIntegration(integrationId: string): Promise<SyncResult> {
   const rows = await query<IntegrationRow>(
     'SELECT * FROM integrations WHERE id = $1',
@@ -341,25 +374,7 @@ export async function syncIntegration(integrationId: string): Promise<SyncResult
   if (!adapter) throw new Error(`unknown provider ${integration.provider}`);
 
   try {
-    let accessToken = decryptSecret(integration.access_token);
-    const expiryMs = integration.expires_at
-      ? Date.parse(integration.expires_at)
-      : Number.POSITIVE_INFINITY;
-    if (expiryMs < Date.now() + 60_000 && integration.refresh_token) {
-      const refreshed = await adapter.refresh(
-        decryptSecret(integration.refresh_token)
-      );
-      accessToken = refreshed.accessToken;
-      await query(
-        'UPDATE integrations SET access_token = $1, expires_at = $2 WHERE id = $3',
-        [
-          encryptSecret(refreshed.accessToken),
-          refreshed.expiresAt,
-          integration.id,
-        ]
-      );
-    }
-
+    const { accessToken } = await withFreshToken(integration);
     const result = await syncCore(integration, accessToken);
     await query(
       `UPDATE integrations
