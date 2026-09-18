@@ -1,5 +1,6 @@
 import type {
   AccountBriefing,
+  StrategyInsights,
   AccountAgentAnswer,
   AccountAgentMessage,
   FeedbackCategory,
@@ -303,6 +304,10 @@ export const api = {
     ),
   getBriefing: (mapId: string) =>
     req<AccountBriefing>(`/api/maps/${mapId}/briefing`),
+  getStrategyInsights: (mapId: string, refresh = false) =>
+    req<StrategyInsights>(
+      `/api/maps/${mapId}/strategy${refresh ? '?refresh=1' : ''}`
+    ),
   askMap: (mapId: string, messages: AccountAgentMessage[]) =>
     req<AccountAgentAnswer>(`/api/maps/${mapId}/ask`, {
       method: 'POST',

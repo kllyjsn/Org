@@ -26,6 +26,7 @@ import type {
 } from '../types';
 import type { AgentCommandResult } from '../lib/agentCanvas';
 import { tokenMatch } from '../lib/searchText';
+import { useFocusTrap } from '../lib/useFocusTrap';
 
 export type PaletteAction =
   | 'layout'
@@ -156,6 +157,8 @@ export default function CommandPalette({
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -304,6 +307,10 @@ export default function CommandPalette({
       }}
     >
       <motion.div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search and commands"
         initial={{ y: -12, opacity: 0, scale: 0.985 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
         exit={{ y: -8, opacity: 0, scale: 0.99 }}
@@ -320,6 +327,16 @@ export default function CommandPalette({
             ref={inputRef}
             value={query}
             disabled={loading}
+            aria-label="Search people, commands, or ask about the account"
+            role="combobox"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-controls="cmdk-list"
+            aria-activedescendant={
+              conversation.length === 0 && choices.length > 0
+                ? `cmdk-opt-${activeIndex}`
+                : undefined
+            }
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Escape') onClose();
@@ -523,13 +540,19 @@ export default function CommandPalette({
                 </div>
               ))}
               {loading && (
-                <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500">
+                <div
+                  role="status"
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500"
+                >
                   <Loader2 size={14} className="animate-spin text-[#5b4cf0]" />
                   Reading the map and its evidence…
                 </div>
               )}
               {error && (
-                <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <div
+                  role="alert"
+                  className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                >
                   {error}
                 </div>
               )}
@@ -543,11 +566,11 @@ export default function CommandPalette({
                 </div>
               )}
               {query && choices.length === 1 && (
-                <div className="px-3 py-3 text-sm text-slate-500">
+                <div role="status" className="px-3 py-3 text-sm text-slate-500">
                   No exact people match. Ask TopDown about the account instead.
                 </div>
               )}
-              <div className="space-y-1">
+              <div id="cmdk-list" role="listbox" className="space-y-1">
                 {choices.map((choice, index) => {
                   const active = index === activeIndex;
                   if (choice.kind === 'person') {
@@ -555,6 +578,9 @@ export default function CommandPalette({
                     return (
                       <button
                         key={person.id}
+                        role="option"
+                        id={`cmdk-opt-${index}`}
+                        aria-selected={active}
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => run(choice)}
                         className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
@@ -591,6 +617,9 @@ export default function CommandPalette({
                     return (
                       <button
                         key={choice.id}
+                        role="option"
+                        id={`cmdk-opt-${index}`}
+                        aria-selected={active}
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => run(choice)}
                         className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
@@ -615,6 +644,9 @@ export default function CommandPalette({
                   return (
                     <button
                       key="agent"
+                      role="option"
+                      id={`cmdk-opt-${index}`}
+                      aria-selected={active}
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => run(choice)}
                       className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${

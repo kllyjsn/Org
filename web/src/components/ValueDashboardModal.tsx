@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   Clock3,
@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type { ProductValueSummary } from '../types';
 
 function formatMinutes(minutes: number): string {
@@ -55,6 +56,8 @@ export default function ValueDashboardModal({
 }) {
   const [summary, setSummary] = useState<ProductValueSummary | null>(null);
   const [error, setError] = useState('');
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   useEffect(() => {
     api
@@ -65,13 +68,22 @@ export default function ValueDashboardModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-[#f6f7f2] shadow-2xl sm:max-w-5xl sm:rounded-3xl">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="value-dashboard-modal-title"
+        className="max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-[#f6f7f2] shadow-2xl sm:max-w-5xl sm:rounded-3xl"
+      >
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200/80 bg-[#f6f7f2]/95 px-5 py-5 backdrop-blur-xl sm:px-7">
           <div>
             <div className="mb-2 text-[10px] font-semibold uppercase tracking-[.18em] text-[#5b4cf0]">
               Value realized
             </div>
-            <h2 className="text-3xl font-semibold tracking-[-0.05em] text-slate-950">
+            <h2
+              id="value-dashboard-modal-title"
+              className="text-3xl font-semibold tracking-[-0.05em] text-slate-950"
+            >
               What TopDown is doing for you.
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">

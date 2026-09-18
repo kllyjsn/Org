@@ -8,7 +8,7 @@ export default function RailButton({
   icon,
   label,
   onClick,
-  active = false,
+  active,
   accent = false,
   disabled = false,
 }: {
@@ -26,6 +26,7 @@ export default function RailButton({
       disabled={disabled}
       title={label}
       aria-label={label}
+      aria-pressed={active === undefined ? undefined : active}
       className={`flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl transition sm:h-9 sm:w-full sm:justify-start sm:px-3 ${
         active
           ? 'bg-white/15 text-white'
@@ -34,7 +35,7 @@ export default function RailButton({
             : 'text-slate-400 hover:bg-white/10 hover:text-white'
       } ${disabled ? 'cursor-not-allowed opacity-35' : ''}`}
     >
-      <span className="shrink-0">{icon}</span>
+      <span className="shrink-0" aria-hidden="true">{icon}</span>
       <span className="hidden truncate text-[13px] font-medium sm:block">
         {label}
       </span>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Building2, Loader2, Search, Sparkles, UsersRound, X } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type { Person, ResearchEvent, ResearchResult } from '../types';
 
 export default function DeepResearchModal({
@@ -33,6 +34,8 @@ export default function DeepResearchModal({
   const [error, setError] = useState('');
   const [merged, setMerged] = useState('');
   const unsubscribe = useRef<(() => void) | null>(null);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   useEffect(() => {
     return () => {
@@ -110,14 +113,23 @@ export default function DeepResearchModal({
 
   return (
     <div className="fixed inset-0 z-[65] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-[28px] bg-[#f9faf7] p-5 shadow-2xl sm:rounded-[28px] sm:p-7">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="deep-research-modal-title"
+        className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-[28px] bg-[#f9faf7] p-5 shadow-2xl sm:rounded-[28px] sm:p-7"
+      >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
               <Sparkles size={13} />
               Targeted enrichment
             </div>
-            <h2 className="text-3xl font-semibold tracking-[-0.045em] text-slate-950">
+            <h2
+              id="deep-research-modal-title"
+              className="text-3xl font-semibold tracking-[-0.045em] text-slate-950"
+            >
               Deepen this account.
             </h2>
             <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
@@ -142,6 +154,7 @@ export default function DeepResearchModal({
                 if (event.key === 'Enter' && !researching) void run();
               }}
               placeholder="Payments team, security leadership, or a person…"
+              aria-label="Deep research focus"
               disabled={researching}
               className="min-w-0 flex-1 bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-400 focus-visible:!outline-none"
             />
@@ -183,7 +196,10 @@ export default function DeepResearchModal({
         )}
 
         {researching && (
-          <div className="mt-5 overflow-hidden rounded-2xl bg-slate-950 p-4 text-white">
+          <div
+            role="status"
+            className="mt-5 overflow-hidden rounded-2xl bg-slate-950 p-4 text-white"
+          >
             <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
               <span>Deep research · {domain}</span>
               <span>
@@ -207,7 +223,10 @@ export default function DeepResearchModal({
         )}
 
         {error && (
-          <div className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div
+            role="alert"
+            className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700"
+          >
             {error}
           </div>
         )}

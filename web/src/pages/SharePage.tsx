@@ -25,6 +25,7 @@ import MoreNode from '../components/MoreNode';
 import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
 import { useIsMobile } from '../lib/useIsMobile';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { computeLaneView } from '../lib/laneView';
 import type { MapState } from '../types';
 
@@ -47,6 +48,9 @@ function ShareInner() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const rf = useReactFlow();
+  useDocumentTitle(
+    `${shared?.company_name || shared?.name || 'Shared map'} (shared) — TopDown`
+  );
   const openingFitOptions = isMobile
     ? { padding: 0.1, minZoom: 0.62, maxZoom: 0.9 }
     : { padding: 0.2, minZoom: 0.45 };
@@ -186,6 +190,7 @@ function ShareInner() {
       selectable: false,
       connectable: false,
       deletable: false,
+      focusable: false,
       zIndex: -1,
     }));
     const tiles: Node<MoreNodeData>[] = view.tiles.map((tile) => ({
@@ -200,12 +205,17 @@ function ShareInner() {
       selectable: false,
       connectable: false,
       deletable: false,
+      focusable: false,
     }));
     const visibleNodes = nodes
       .filter((node) => view.visibleIds.has(node.id))
       .map((node) => {
+        const person = node.data.person;
+        const ariaLabel = `${person.name}${person.title ? ', ' + person.title : ''}${person.department ? ', ' + person.department : ''}`;
         const pos = view.posOverride.get(node.id);
-        return pos ? { ...node, position: pos } : node;
+        return pos
+          ? { ...node, position: pos, ariaLabel }
+          : { ...node, ariaLabel };
       });
     return {
       nodes: [...headers, ...tiles, ...visibleNodes],
@@ -213,6 +223,21 @@ function ShareInner() {
       hiddenCount: view.hiddenCount,
     };
   }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, toggleLane]);
+
+  const displayEdges = useMemo(() => {
+    const nameById = new Map(
+      nodes.map((n) => [n.data.person.id, n.data.person.name])
+    );
+    return edges.map((edge) => {
+      const sourceName = nameById.get(edge.source) ?? edge.source;
+      const targetName = nameById.get(edge.target) ?? edge.target;
+      const ariaLabel =
+        edge.data?.kind === 'reports'
+          ? `${targetName} reports to ${sourceName}`
+          : `${sourceName} influences ${targetName}${edge.data?.label ? ': ' + edge.data.label : ''}`;
+      return { ...edge, ariaLabel };
+    });
+  }, [edges, nodes]);
 
   const exportPng = useCallback(async () => {
     const el = document.querySelector('.react-flow__viewport') as HTMLElement;
@@ -243,7 +268,9 @@ function ShareInner() {
   if (error) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-500">
-        <p className="text-lg font-medium">{error}</p>
+        <p role="alert" className="text-lg font-medium">
+          {error}
+        </p>
         <p className="text-sm">This share link may have been revoked or expired.</p>
         <Link to="/" className="mt-2 text-sm text-indigo-600 hover:underline">
           TopDown — build your own account maps →
@@ -289,19 +316,37 @@ function ShareInner() {
         </Link>
       </header>
 
-      <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="relative min-h-0 flex-1 bg-[#f6f7f2]"
+      >
+        <h1 className="sr-only">
+          {shared.company_name || shared.name || 'Shared map'}
+        </h1>
         <ReactFlow
           nodes={laneView.nodes}
-          edges={edges}
+          edges={displayEdges}
+          nodesFocusable
           onNodeClick={(_, n) => {
             if (n.type !== 'person') return;
             setSelectedId(n.id);
           }}
           onPaneClick={() => setSelectedId(null)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            const nodeEl = (event.target as HTMLElement).closest<HTMLElement>(
+              '.react-flow__node'
+            );
+            const id = nodeEl?.dataset.id;
+            if (!id || id.startsWith('lane:') || id.startsWith('more:')) return;
+            event.preventDefault();
+            setSelectedId(id);
+          }}
           nodeTypes={nodeTypes}
           nodesDraggable={false}
           nodesConnectable={false}
-          edgesFocusable={false}
+          edgesFocusable
           fitView
           fitViewOptions={openingFitOptions}
           minZoom={0.2}
@@ -363,7 +408,7 @@ function ShareInner() {
             />
           )}
         </AnimatePresence>
-      </div>
+      </main>
     </div>
   );
 }

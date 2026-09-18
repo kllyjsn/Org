@@ -45,6 +45,20 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+.react-flow__node.selectable:focus-visible,
+.react-flow__node:focus-visible,
+.react-flow__edge:focus-visible {
+  outline: 2px solid var(--td-violet);
+  outline-offset: 2px;
+  border-radius: 16px;
+}
+
+[role='button']:focus-visible,
+[tabindex]:not([tabindex='-1']):focus-visible {
+  outline: 2px solid var(--td-violet);
+  outline-offset: 2px;
+}
+
 .react-flow__node {
   font-family: inherit;
 }
@@ -104,4 +118,14 @@ textarea:focus-visible {
   box-shadow:
     0 1px 2px rgb(15 23 42 / 4%),
     0 16px 40px rgb(15 23 42 / 7%);
+}
+
+/* a11y: contrast floors for muted text (WCAG 1.4.3) */
+@layer utilities {
+  .text-slate-400 {
+    color: #5d6b7e;
+  }
+  .text-slate-500 {
+    color: #55637a;
+  }
 }

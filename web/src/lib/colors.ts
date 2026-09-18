@@ -38,20 +38,20 @@ export const ROLE_META: Record<
 };
 
 const DEPT_PALETTE = [
-  'bg-indigo-500',
-  'bg-sky-500',
-  'bg-emerald-500',
-  'bg-amber-500',
-  'bg-rose-500',
-  'bg-violet-500',
-  'bg-cyan-500',
-  'bg-fuchsia-500',
-  'bg-lime-500',
-  'bg-orange-500',
+  'bg-indigo-700',
+  'bg-sky-700',
+  'bg-emerald-700',
+  'bg-amber-700',
+  'bg-rose-700',
+  'bg-violet-700',
+  'bg-cyan-700',
+  'bg-fuchsia-700',
+  'bg-lime-700',
+  'bg-orange-700',
 ];
 
 export function deptColor(department: string | null): string {
-  if (!department) return 'bg-slate-400';
+  if (!department) return 'bg-slate-600';
   let h = 0;
   for (const ch of department) h = (h * 31 + ch.charCodeAt(0)) % 9973;
   return DEPT_PALETTE[h % DEPT_PALETTE.length];

@@ -10,6 +10,8 @@ import {
   deepenAccountBriefing,
 } from './briefing.js';
 import type { AccountBriefing } from './briefing.js';
+import { deepenAccountStrategy, strategyContext } from './strategy.js';
+import type { StrategyInsights } from './strategy.js';
 import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
 import { query, now } from './db.js';
@@ -56,6 +58,7 @@ import type {
   ShareLinkRow,
   WorkspaceRow,
   SellerProfile,
+  AccountStrategyPlan,
 } from './types.js';
 
 type Vars = { user: UserRow };
@@ -217,6 +220,83 @@ function mapRefinementCounts(previous: MapState, next: MapState) {
   return { fieldChanges, relationshipChanges };
 }
 
+function sanitizeStrategyPlan(
+  input: unknown
+): AccountStrategyPlan | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const value = input as Record<string, unknown>;
+  const rawStakeholders =
+    value.stakeholders && typeof value.stakeholders === 'object'
+      ? (value.stakeholders as Record<string, unknown>)
+      : {};
+  const stakeholders = Object.fromEntries(
+    Object.entries(rawStakeholders)
+      .slice(0, 500)
+      .map(([id, item]) => {
+        const row =
+          item && typeof item === 'object'
+            ? (item as Record<string, unknown>)
+            : {};
+        const stance: AccountStrategyPlan['stakeholders'][string]['stance'] =
+          row.stance === 'advocate' ||
+          row.stance === 'neutral' ||
+          row.stance === 'skeptic' ||
+          row.stance === 'unknown'
+            ? row.stance
+            : 'unknown';
+        return [
+          id,
+          {
+            stance,
+            nextStep:
+              typeof row.nextStep === 'string'
+                ? row.nextStep.slice(0, 500)
+                : '',
+            note: typeof row.note === 'string' ? row.note.slice(0, 500) : '',
+          },
+        ];
+      })
+  );
+  const tasks = Array.isArray(value.tasks)
+    ? value.tasks
+        .slice(0, 50)
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const row = item as Record<string, unknown>;
+          if (typeof row.id !== 'string' || typeof row.title !== 'string') {
+            return null;
+          }
+          return {
+            id: row.id.slice(0, 200),
+            title: row.title.slice(0, 500),
+            done: row.done === true,
+            ...(typeof row.personId === 'string'
+              ? { personId: row.personId.slice(0, 200) }
+              : {}),
+            source:
+              row.source === 'manual'
+                ? ('manual' as const)
+                : ('generated' as const),
+            createdAt: typeof row.createdAt === 'string' ? row.createdAt : '',
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+    : [];
+  return {
+    ...(typeof value.entryPersonId === 'string' ||
+    value.entryPersonId === null
+      ? { entryPersonId: value.entryPersonId }
+      : {}),
+    ...(typeof value.targetPersonId === 'string' ||
+    value.targetPersonId === null
+      ? { targetPersonId: value.targetPersonId }
+      : {}),
+    stakeholders,
+    tasks,
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
+  };
+}
+
 function sanitizeState(input: unknown): MapState {
   const s = (input ?? {}) as Partial<MapState>;
   // Normalize sub-fields too — stored states are read by every surface
@@ -252,6 +332,7 @@ function sanitizeState(input: unknown): MapState {
     }
   );
   const meta = (s.meta ?? {}) as MapState['meta'];
+  const strategy = sanitizeStrategyPlan(meta.strategy);
   return {
     people,
     edges,
@@ -298,6 +379,7 @@ function sanitizeState(input: unknown): MapState {
             : [],
         } as StrategicInitiative;
       }),
+      ...(strategy ? { strategy } : {}),
     },
   };
 }
@@ -1150,6 +1232,51 @@ app.get('/api/maps/:id/briefing', requireAuth, async (c) => {
     ]
   );
   return c.json(deepBriefing);
+});
+
+app.get('/api/maps/:id/strategy', requireAuth, async (c) => {
+  const user = c.get('user');
+  const [map, role] = await mapForUser(user, param(c, 'id'));
+  if (!map || !role) return bad(c, 'not found', 404);
+  const state = map.state as MapState;
+  const workspaces = await query<{ seller_profile: SellerProfile | null }>(
+    'SELECT seller_profile FROM workspaces WHERE id = $1',
+    [map.workspace_id]
+  );
+  const sellerProfile = workspaces[0]?.seller_profile ?? null;
+  const cached = await query<{ insights: StrategyInsights }>(
+    `SELECT insights FROM account_strategies
+     WHERE map_id = $1
+       AND map_updated_at = $2
+       AND seller_profile IS NOT DISTINCT FROM $3::jsonb
+       AND generated_at::timestamptz > NOW() - INTERVAL '6 hours'`,
+    [map.id, map.updated_at, sellerProfile]
+  );
+  if (!c.req.query('refresh') && cached[0]) return c.json(cached[0].insights);
+
+  const insights = await deepenAccountStrategy(
+    state,
+    sellerProfile,
+    strategyContext(state, sellerProfile)
+  );
+  await query(
+    `INSERT INTO account_strategies
+       (map_id, map_updated_at, seller_profile, insights, generated_at)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (map_id) DO UPDATE SET
+       map_updated_at = EXCLUDED.map_updated_at,
+       seller_profile = EXCLUDED.seller_profile,
+       insights = EXCLUDED.insights,
+       generated_at = EXCLUDED.generated_at`,
+    [
+      map.id,
+      map.updated_at,
+      sellerProfile,
+      insights,
+      insights.generatedAt,
+    ]
+  );
+  return c.json(insights);
 });
 
 app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => {

@@ -17,6 +17,8 @@ import ReactFlow, {
 } from 'reactflow';
 import type { Connection, EdgeChange, Node, NodeChange } from 'reactflow';
 import { influenceEdge, reportsEdge } from '../lib/flowEdges';
+import { useFocusTrap } from '../lib/useFocusTrap';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 import type { EdgeData, FlowEdge } from '../lib/flowEdges';
 
 function edgeToMap(e: FlowEdge): MapEdge {
@@ -112,6 +114,7 @@ import {
 import type {
   AccountAgentAction,
   AccountAgentMessage,
+  AccountStrategyPlan,
   BriefingAction,
   BuyingRole,
   MapEdge,
@@ -218,12 +221,17 @@ function MapInner() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<EdgeData>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'canvas' | 'roster'>('canvas');
+  useDocumentTitle(`${mapName || 'Map'} — TopDown`);
   const [showMeetings, setShowMeetings] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [loaded, setLoaded] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showInitiatives, setShowInitiatives] = useState(false);
+  const historyTrapRef = useRef<HTMLDivElement>(null);
+  const initiativesTrapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(historyTrapRef, showHistory);
+  useFocusTrap(initiativesTrapRef, showInitiatives);
   const [showStrategy, setShowStrategy] = useState(false);
   const [showBriefing, setShowBriefing] = useState(false);
   const [briefingEntry, setBriefingEntry] = useState<
@@ -495,6 +503,17 @@ function MapInner() {
     [persist, readOnly]
   );
 
+  const updateStrategyPlan = useCallback(
+    (plan: AccountStrategyPlan) => {
+      if (readOnly || !metaRef.current) return;
+      const nextMeta = { ...metaRef.current, strategy: plan };
+      metaRef.current = nextMeta;
+      setMeta(nextMeta);
+      markDirty(nodes, edges);
+    },
+    [edges, markDirty, nodes, readOnly]
+  );
+
   const recordHistory = useCallback(() => {
     if (readOnly) return;
     setPast((items) => [...items.slice(-49), snapshot(nodes, edges)]);
@@ -671,6 +690,7 @@ function MapInner() {
       selectable: false,
       connectable: false,
       deletable: false,
+      focusable: false,
       zIndex: -1,
     }));
     const tiles: Node<MoreNodeData>[] = view.tiles.map((tile) => ({
@@ -685,13 +705,16 @@ function MapInner() {
       selectable: false,
       connectable: false,
       deletable: false,
+      focusable: false,
     }));
     const visibleNodes = nodes
       .filter((node) => view.visibleIds.has(node.id))
       .map((node) => {
-        if (node.dragging) return node;
+        const person = node.data.person;
+        const ariaLabel = `${person.name}${person.title ? ', ' + person.title : ''}${person.department ? ', ' + person.department : ''}`;
+        if (node.dragging) return { ...node, ariaLabel };
         const pos = view.posOverride.get(node.id);
-        return pos ? { ...node, position: pos } : node;
+        return pos ? { ...node, position: pos, ariaLabel } : { ...node, ariaLabel };
       });
     return {
       nodes: [...headers, ...tiles, ...visibleNodes],
@@ -701,6 +724,19 @@ function MapInner() {
   }, [nodes, isMobile, expandedLanes, collapsedLanes, showAllLanes, laneOf, toggleLane]);
 
   const displayNodes = laneView.nodes;
+
+  const displayEdges = useMemo(() => {
+    const nameById = new Map(people.map((person) => [person.id, person.name]));
+    return edges.map((edge) => {
+      const sourceName = nameById.get(edge.source) ?? edge.source;
+      const targetName = nameById.get(edge.target) ?? edge.target;
+      const ariaLabel =
+        edge.data?.kind === 'reports'
+          ? `${targetName} reports to ${sourceName}`
+          : `${sourceName} influences ${targetName}${edge.data?.label ? ': ' + edge.data.label : ''}`;
+      return { ...edge, ariaLabel };
+    });
+  }, [edges, people]);
 
   const knownSourceUrls = useMemo(() => {
     const urls = new Set<string>();
@@ -2380,6 +2416,7 @@ function MapInner() {
               ref={crmInput}
               type="file"
               accept=".csv,text/csv"
+              aria-label="Import CRM CSV"
               className="hidden"
               onChange={(event) => void importCrmCsv(event)}
             />
@@ -2426,7 +2463,9 @@ function MapInner() {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-2 backdrop-blur sm:gap-3 sm:px-4">
+          <h1 className="sr-only">{mapName || 'Account map'}</h1>
           <input
+            aria-label="Map name"
             className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-slate-900 outline-none hover:border-slate-300 focus:border-[#5b4cf0] sm:w-56 sm:flex-none"
             value={mapName}
             onChange={(e) => setMapName(e.target.value)}
@@ -2464,7 +2503,10 @@ function MapInner() {
             </button>
           )}
           <div className="hidden flex-1 sm:block" />
-          <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
+          <span
+            role="status"
+            className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline"
+          >
             {saveState === 'saving'
               ? 'Saving…'
               : saveState === 'dirty'
@@ -2489,9 +2531,16 @@ function MapInner() {
           </div>
         </header>
 
-      <div className="relative min-h-0 flex-1 bg-[#f6f7f2]">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="relative min-h-0 flex-1 bg-[#f6f7f2]"
+      >
         {importNotice && (
-          <div className="absolute right-3 top-3 z-40 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
+          <div
+            role="status"
+            className="absolute right-3 top-3 z-40 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"
+          >
             {importNotice}
           </div>
         )}
@@ -2522,7 +2571,9 @@ function MapInner() {
         </button>
         <ReactFlow
           nodes={displayNodes}
-          edges={edges}
+          edges={displayEdges}
+          nodesFocusable
+          edgesFocusable
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={onConnect}
@@ -2550,6 +2601,26 @@ function MapInner() {
             }
           }}
           onPaneClick={() => setSelectedId(null)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            const nodeEl = (event.target as HTMLElement).closest<HTMLElement>(
+              '.react-flow__node'
+            );
+            const id = nodeEl?.dataset.id;
+            if (!id || id.startsWith('lane:') || id.startsWith('more:')) return;
+            const person = people.find((p) => p.id === id);
+            if (!person) return;
+            event.preventDefault();
+            setSelectedId(id);
+            if (person.groupId) {
+              setNodes((items) =>
+                items.map((node) => ({
+                  ...node,
+                  selected: node.data.person.groupId === person.groupId,
+                }))
+              );
+            }
+          }}
           onPointerMove={(event) => {
             cursorRef.current = rf.screenToFlowPosition({
               x: event.clientX,
@@ -2766,7 +2837,7 @@ function MapInner() {
             />
           )}
         </AnimatePresence>
-      </div>
+      </main>
       </div>
 
       {showShare && mapId && (
@@ -2796,10 +2867,18 @@ function MapInner() {
       )}
       {showHistory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+          <div
+            ref={historyTrapRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-modal-title"
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+          >
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="font-semibold text-slate-900">Version history</h2>
+                <h2 id="history-modal-title" className="font-semibold text-slate-900">
+                  Version history
+                </h2>
                 <p className="text-xs text-slate-500">
                   Restore an earlier collaborative save.
                 </p>
@@ -2844,14 +2923,23 @@ function MapInner() {
       )}
       {showInitiatives && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-3xl sm:rounded-3xl sm:p-7">
+          <div
+            ref={initiativesTrapRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="initiatives-modal-title"
+            className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-3xl sm:rounded-3xl sm:p-7"
+          >
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
                   <Lightbulb size={13} />
                   Why this account changes now
                 </div>
-                <h2 className="text-3xl font-semibold tracking-[-0.045em] text-slate-950">
+                <h2
+                  id="initiatives-modal-title"
+                  className="text-3xl font-semibold tracking-[-0.045em] text-slate-950"
+                >
                   Initiative intelligence
                 </h2>
                 <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">
@@ -2944,16 +3032,30 @@ function MapInner() {
       )}
       {showStrategy && meta && (
         <AccountStrategyModal
+          mapId={mapId ?? null}
+          readOnly={readOnly}
           companyName={meta.companyName}
           domain={domain}
           people={people}
           edges={edges.map(edgeToMap)}
           initiatives={meta.initiatives ?? []}
           sellerProfile={sellerProfile}
+          plan={meta.strategy ?? { stakeholders: {}, tasks: [], updatedAt: '' }}
+          onUpdatePlan={updateStrategyPlan}
           onClose={() => setShowStrategy(false)}
-          onFocusPerson={(person) => {
+          onFocusPeople={(matches) => {
             setShowStrategy(false);
-            focusPeople([person]);
+            focusPeople(matches);
+          }}
+          onOpenDeepResearch={(focus) => {
+            if (readOnly) return;
+            setShowStrategy(false);
+            setDeepResearchFocus(focus);
+            setShowDeepResearch(true);
+          }}
+          onOpenInitiatives={() => {
+            setShowStrategy(false);
+            setShowInitiatives(true);
           }}
         />
       )}

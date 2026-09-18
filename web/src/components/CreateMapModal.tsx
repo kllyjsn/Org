@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Building2, Loader2, Search, Sparkles, Users } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { stateFromResearch } from '../lib/layout';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import type {
   MapState,
   Person,
@@ -74,6 +75,8 @@ export default function CreateMapModal({
   const [creating, setCreating] = useState(false);
   const unsubscribe = useRef<(() => void) | null>(null);
   const researchStartedAt = useRef<string | null>(null);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef);
 
   useEffect(() => {
     return () => {
@@ -192,7 +195,13 @@ export default function CreateMapModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:rounded-3xl sm:p-7">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-map-modal-title"
+        className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:rounded-3xl sm:p-7"
+      >
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
             <Sparkles size={14} />
@@ -203,7 +212,10 @@ export default function CreateMapModal({
             ✕
           </button>
         </div>
-        <h2 className="text-3xl font-semibold tracking-[-0.045em] text-slate-950">
+        <h2
+          id="create-map-modal-title"
+          className="text-3xl font-semibold tracking-[-0.045em] text-slate-950"
+        >
           Map the whole account.
         </h2>
         <p className="mb-6 mt-2 max-w-md text-sm leading-6 text-slate-500">
@@ -216,6 +228,8 @@ export default function CreateMapModal({
             autoFocus
             className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-sm outline-none"
             placeholder="acme.com"
+            aria-label="Company domain"
+            autoComplete="off"
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
             onKeyDown={(e) => {
@@ -239,7 +253,10 @@ export default function CreateMapModal({
         </div>
 
         {researching && (
-          <div className="mt-5 overflow-hidden rounded-2xl bg-slate-950 p-4 text-white">
+          <div
+            role="status"
+            className="mt-5 overflow-hidden rounded-2xl bg-slate-950 p-4 text-white"
+          >
             <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
               <span>Live research</span>
               <span>
@@ -345,7 +362,10 @@ export default function CreateMapModal({
         )}
 
         {error && (
-          <div className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div
+            role="alert"
+            className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+          >
             {error}
           </div>
         )}
