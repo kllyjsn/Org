@@ -144,9 +144,9 @@ DELETE FROM analytics_events
 
 async function getPool(): Promise<pg.Pool> {
   if (pool) return pool;
-  const connectionString =
-    process.env.POSTGRES_URL || process.env.DATABASE_URL;
-  if (!connectionString) throw new Error('POSTGRES_URL/DATABASE_URL is not set');
+  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  if (!connectionString)
+    throw new Error('POSTGRES_URL/DATABASE_URL is not set');
   pool = new pg.Pool({
     connectionString,
     ssl: /localhost|127\.0\.0\.1/.test(connectionString)

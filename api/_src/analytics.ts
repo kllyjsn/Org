@@ -123,7 +123,10 @@ export function sanitizeClientEvent(
   eventName: unknown,
   input: unknown
 ): { eventName: ProductEventName; properties: EventProperties } | null {
-  if (typeof eventName !== 'string' || !CLIENT_EVENTS.has(eventName as ProductEventName)) {
+  if (
+    typeof eventName !== 'string' ||
+    !CLIENT_EVENTS.has(eventName as ProductEventName)
+  ) {
     return null;
   }
   const name = eventName as ProductEventName;
@@ -132,7 +135,11 @@ export function sanitizeClientEvent(
       ? (input as Record<string, unknown>)
       : {};
 
-  if (name === 'map_viewed' || name === 'briefing_opened' || name === 'strategy_opened') {
+  if (
+    name === 'map_viewed' ||
+    name === 'briefing_opened' ||
+    name === 'strategy_opened'
+  ) {
     return {
       eventName: name,
       properties: {

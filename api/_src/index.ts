@@ -4,12 +4,9 @@ import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { answerAccountQuestion } from './account-agent.js';
-import {
-  buildAccountBriefing,
-  deepenAccountBriefing,
-} from './briefing.js';
+import { buildAccountBriefing, deepenAccountBriefing } from './briefing.js';
 import type { AccountBriefing } from './briefing.js';
-import { deepenAccountStrategy } from './strategy.js';
+import { deepenAccountStrategy, strategyContext } from './strategy.js';
 import type { StrategyInsights } from './strategy.js';
 import { refreshNextDueMap } from './background-refresh.js';
 import { compareMapStates } from './changes.js';
@@ -46,6 +43,7 @@ import type {
   ShareLinkRow,
   WorkspaceRow,
   SellerProfile,
+  AccountStrategyPlan,
 } from './types.js';
 
 type Vars = { user: UserRow };
@@ -114,9 +112,7 @@ async function workspaceRoleFor(
   user: UserRow,
   workspaceId: string
 ): Promise<MemberRow['role'] | null> {
-  return isSuperAdmin(user)
-    ? 'owner'
-    : memberRole(user.id, workspaceId);
+  return isSuperAdmin(user) ? 'owner' : memberRole(user.id, workspaceId);
 }
 
 async function workspacesFor(user: UserRow) {
@@ -188,19 +184,97 @@ function mapRefinementCounts(previous: MapState, next: MapState) {
       'role',
       'confidence',
     ] as const) {
-      if ((person[field] ?? null) !== (updated[field] ?? null)) fieldChanges += 1;
+      if ((person[field] ?? null) !== (updated[field] ?? null))
+        fieldChanges += 1;
     }
   }
   const edgeKey = (edge: MapState['edges'][number]) =>
-    [edge.from, edge.to, edge.kind, edge.inferred ? 'inferred' : 'sourced'].join(
-      ':'
-    );
+    [
+      edge.from,
+      edge.to,
+      edge.kind,
+      edge.inferred ? 'inferred' : 'sourced',
+    ].join(':');
   const previousEdges = new Set((previous.edges ?? []).map(edgeKey));
   const nextEdges = new Set((next.edges ?? []).map(edgeKey));
   const relationshipChanges =
     [...previousEdges].filter((key) => !nextEdges.has(key)).length +
     [...nextEdges].filter((key) => !previousEdges.has(key)).length;
   return { fieldChanges, relationshipChanges };
+}
+
+function sanitizeStrategyPlan(input: unknown): AccountStrategyPlan | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const value = input as Record<string, unknown>;
+  const rawStakeholders =
+    value.stakeholders && typeof value.stakeholders === 'object'
+      ? (value.stakeholders as Record<string, unknown>)
+      : {};
+  const stakeholders = Object.fromEntries(
+    Object.entries(rawStakeholders)
+      .slice(0, 500)
+      .map(([id, item]) => {
+        const row =
+          item && typeof item === 'object'
+            ? (item as Record<string, unknown>)
+            : {};
+        const stance: AccountStrategyPlan['stakeholders'][string]['stance'] =
+          row.stance === 'advocate' ||
+          row.stance === 'neutral' ||
+          row.stance === 'skeptic' ||
+          row.stance === 'unknown'
+            ? row.stance
+            : 'unknown';
+        return [
+          id,
+          {
+            stance,
+            nextStep:
+              typeof row.nextStep === 'string'
+                ? row.nextStep.slice(0, 500)
+                : '',
+            note: typeof row.note === 'string' ? row.note.slice(0, 500) : '',
+          },
+        ];
+      })
+  );
+  const tasks = Array.isArray(value.tasks)
+    ? value.tasks
+        .slice(0, 50)
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const row = item as Record<string, unknown>;
+          if (typeof row.id !== 'string' || typeof row.title !== 'string') {
+            return null;
+          }
+          return {
+            id: row.id.slice(0, 200),
+            title: row.title.slice(0, 500),
+            done: row.done === true,
+            ...(typeof row.personId === 'string'
+              ? { personId: row.personId.slice(0, 200) }
+              : {}),
+            source:
+              row.source === 'manual'
+                ? ('manual' as const)
+                : ('generated' as const),
+            createdAt: typeof row.createdAt === 'string' ? row.createdAt : '',
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+    : [];
+  return {
+    ...(typeof value.entryPersonId === 'string' || value.entryPersonId === null
+      ? { entryPersonId: value.entryPersonId }
+      : {}),
+    ...(typeof value.targetPersonId === 'string' ||
+    value.targetPersonId === null
+      ? { targetPersonId: value.targetPersonId }
+      : {}),
+    stakeholders,
+    tasks,
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
+  };
 }
 
 function sanitizeState(input: unknown): MapState {
@@ -222,64 +296,7 @@ function sanitizeState(input: unknown): MapState {
   ) as MapState['people'];
   const edges = Array.isArray(s.edges) ? s.edges.slice(0, 2000) : [];
   const meta = (s.meta ?? {}) as MapState['meta'];
-  const rawStrategy = meta.strategy;
-  const strategy =
-    rawStrategy && typeof rawStrategy === 'object'
-      ? (() => {
-          const value = rawStrategy as unknown as Record<string, unknown>;
-          const rawStakeholders =
-            value.stakeholders && typeof value.stakeholders === 'object'
-              ? (value.stakeholders as Record<string, unknown>)
-              : {};
-          const stakeholders = Object.fromEntries(
-            Object.entries(rawStakeholders)
-              .slice(0, 500)
-              .map(([id, item]) => {
-                const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
-                const stance: 'advocate' | 'neutral' | 'skeptic' | 'unknown' =
-                  row.stance === 'advocate' ||
-                  row.stance === 'neutral' ||
-                  row.stance === 'skeptic' ||
-                  row.stance === 'unknown'
-                    ? row.stance
-                    : 'unknown';
-                return [
-                  id,
-                  {
-                    stance,
-                    nextStep: typeof row.nextStep === 'string' ? row.nextStep.slice(0, 500) : '',
-                    note: typeof row.note === 'string' ? row.note.slice(0, 500) : '',
-                  },
-                ];
-              })
-          );
-          const tasks = Array.isArray(value.tasks)
-            ? value.tasks
-                .slice(0, 50)
-                .map((item) => {
-                  if (!item || typeof item !== 'object') return null;
-                  const row = item as Record<string, unknown>;
-                  if (typeof row.id !== 'string' || typeof row.title !== 'string') return null;
-                  return {
-                    id: row.id.slice(0, 200),
-                    title: row.title.slice(0, 500),
-                    done: row.done === true,
-                    ...(typeof row.personId === 'string' ? { personId: row.personId.slice(0, 200) } : {}),
-                    source: row.source === 'manual' ? ('manual' as const) : ('generated' as const),
-                    createdAt: typeof row.createdAt === 'string' ? row.createdAt : '',
-                  };
-                })
-                .filter((item): item is NonNullable<typeof item> => item !== null)
-            : [];
-          return {
-            ...(typeof value.entryPersonId === 'string' || value.entryPersonId === null ? { entryPersonId: value.entryPersonId } : {}),
-            ...(typeof value.targetPersonId === 'string' || value.targetPersonId === null ? { targetPersonId: value.targetPersonId } : {}),
-            stakeholders,
-            tasks,
-            updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
-          };
-        })()
-      : undefined;
+  const strategy = sanitizeStrategyPlan(meta.strategy);
   return {
     people,
     edges,
@@ -320,9 +337,7 @@ function sanitizeState(input: unknown): MapState {
 
 // ---------- health ----------
 
-app.get('/api/health', (c) =>
-  c.json({ ok: true, provider: activeProvider() })
-);
+app.get('/api/health', (c) => c.json({ ok: true, provider: activeProvider() }));
 
 app.get('/api/cron/refresh', async (c) => {
   const secret = process.env.CRON_SECRET;
@@ -354,7 +369,8 @@ app.post('/api/billing/checkout', requireAuth, async (c) => {
   );
   const workspace = workspaces[0];
   if (!workspace) return bad(c, 'workspace not found', 404);
-  if (workspace.plan === 'pro') return bad(c, 'workspace is already on Pro', 409);
+  if (workspace.plan === 'pro')
+    return bad(c, 'workspace is already on Pro', 409);
 
   try {
     const origin = process.env.PUBLIC_APP_URL || 'https://topdown.sh';
@@ -377,7 +393,8 @@ app.post('/api/billing/checkout', requireAuth, async (c) => {
       checkoutParams.customer_email = user.email;
     }
     const session = await stripePost('/checkout/sessions', checkoutParams);
-    if (typeof session.url !== 'string') throw new Error('Stripe returned no checkout URL');
+    if (typeof session.url !== 'string')
+      throw new Error('Stripe returned no checkout URL');
     return c.json({ url: session.url });
   } catch (error) {
     console.error('checkout failed', error);
@@ -405,7 +422,8 @@ app.post('/api/billing/portal', requireAuth, async (c) => {
       customer,
       return_url: `${origin}/app`,
     });
-    if (typeof session.url !== 'string') throw new Error('Stripe returned no portal URL');
+    if (typeof session.url !== 'string')
+      throw new Error('Stripe returned no portal URL');
     return c.json({ url: session.url });
   } catch (error) {
     console.error('billing portal failed', error);
@@ -477,11 +495,11 @@ app.post('/api/auth/register', async (c) => {
     return bad(c, 'password must be at least 8 characters');
   if (!name) return bad(c, 'name required');
 
-  const exists = await query(
-    'SELECT id FROM users WHERE email = $1',
-    [email.toLowerCase()]
-  );
-  if (exists.length) return bad(c, 'an account with that email already exists', 409);
+  const exists = await query('SELECT id FROM users WHERE email = $1', [
+    email.toLowerCase(),
+  ]);
+  if (exists.length)
+    return bad(c, 'an account with that email already exists', 409);
 
   const userId = randomUUID();
   await query(
@@ -492,7 +510,9 @@ app.post('/api/auth/register', async (c) => {
 
   const token = await createSession(userId);
   setSessionCookie(c, token);
-  const users = await query<UserRow>('SELECT * FROM users WHERE id = $1', [userId]);
+  const users = await query<UserRow>('SELECT * FROM users WHERE id = $1', [
+    userId,
+  ]);
   return c.json({
     user: sessionUser(users[0]),
     workspaces: await workspacesFor(users[0]),
@@ -503,10 +523,9 @@ app.post('/api/auth/login', async (c) => {
   const body = await c.req.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';
-  const users = await query<UserRow>(
-    'SELECT * FROM users WHERE email = $1',
-    [email.toLowerCase()]
-  );
+  const users = await query<UserRow>('SELECT * FROM users WHERE email = $1', [
+    email.toLowerCase(),
+  ]);
   const user = users[0];
   if (!user || !verifyPassword(password, user.password_hash)) {
     return bad(c, 'invalid email or password', 401);
@@ -572,10 +591,9 @@ app.post('/api/workspaces/:id/members', requireAuth, async (c) => {
     return bad(c, 'insufficient role', 403);
   const body = await c.req.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email.trim() : '';
-  const target = await query(
-    'SELECT id FROM users WHERE email = $1',
-    [email.toLowerCase()]
-  );
+  const target = await query('SELECT id FROM users WHERE email = $1', [
+    email.toLowerCase(),
+  ]);
   if (!target[0])
     return bad(
       c,
@@ -593,29 +611,33 @@ app.post('/api/workspaces/:id/members', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
-app.post('/api/workspaces/:id/seller-profile/research', requireAuth, async (c) => {
-  const user = c.get('user');
-  const workspaceId = param(c, 'id');
-  if (!canWrite(await workspaceRoleFor(user, workspaceId))) {
-    return bad(c, 'insufficient role', 403);
+app.post(
+  '/api/workspaces/:id/seller-profile/research',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const workspaceId = param(c, 'id');
+    if (!canWrite(await workspaceRoleFor(user, workspaceId))) {
+      return bad(c, 'insufficient role', 403);
+    }
+    const body = await c.req.json().catch(() => null);
+    const domain =
+      typeof body?.domain === 'string'
+        ? body.domain
+            .trim()
+            .toLowerCase()
+            .replace(/^https?:\/\//, '')
+            .replace(/\/.*/, '')
+        : '';
+    if (!DOMAIN_RE.test(domain)) return bad(c, 'enter a valid company domain');
+    try {
+      return c.json({ profile: await researchSellerProfile(domain) });
+    } catch (error) {
+      console.error('seller profile research failed', error);
+      return bad(c, 'company research failed', 502);
+    }
   }
-  const body = await c.req.json().catch(() => null);
-  const domain =
-    typeof body?.domain === 'string'
-      ? body.domain
-          .trim()
-          .toLowerCase()
-          .replace(/^https?:\/\//, '')
-          .replace(/\/.*/, '')
-      : '';
-  if (!DOMAIN_RE.test(domain)) return bad(c, 'enter a valid company domain');
-  try {
-    return c.json({ profile: await researchSellerProfile(domain) });
-  } catch (error) {
-    console.error('seller profile research failed', error);
-    return bad(c, 'company research failed', 502);
-  }
-});
+);
 
 app.patch('/api/workspaces/:id/seller-profile', requireAuth, async (c) => {
   const user = c.get('user');
@@ -644,11 +666,16 @@ app.post('/api/research', requireAuth, async (c) => {
   const body = await c.req.json().catch(() => null);
   const domain =
     typeof body?.domain === 'string'
-      ? body.domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*/, '')
+      ? body.domain
+          .trim()
+          .toLowerCase()
+          .replace(/^https?:\/\//, '')
+          .replace(/\/.*/, '')
       : '';
   const focus =
     typeof body?.focus === 'string' ? body.focus.trim().slice(0, 300) : '';
-  if (!DOMAIN_RE.test(domain)) return bad(c, 'enter a valid domain like acme.com');
+  if (!DOMAIN_RE.test(domain))
+    return bad(c, 'enter a valid domain like acme.com');
   try {
     const workspaceId =
       typeof body?.workspaceId === 'string' ? body.workspaceId : '';
@@ -674,16 +701,16 @@ app.post('/api/research', requireAuth, async (c) => {
       knownUrls.length > 0
         ? deadSourceUrls(new Set(knownUrls)).catch(() => new Set<string>())
         : Promise.resolve(new Set<string>());
-    const result = await researchOrg(
-      domain,
-      focus || undefined,
-      sellerProfile
-    );
+    const result = await researchOrg(domain, focus || undefined, sellerProfile);
     const deadSources = Array.from(await deadPromise);
     return c.json({ ...result, deadSources });
   } catch (err) {
     console.error('research failed', err);
-    return bad(c, 'research failed — try again or check LLM provider keys', 502);
+    return bad(
+      c,
+      'research failed — try again or check LLM provider keys',
+      502
+    );
   }
 });
 
@@ -703,8 +730,7 @@ app.get('/api/maps', requireAuth, async (c) => {
     maps: rows.map(({ state, ...m }) => ({
       ...m,
       peopleCount: (state as MapState).people?.length ?? 0,
-      initiativeCount:
-        (state as MapState).meta?.initiatives?.length ?? 0,
+      initiativeCount: (state as MapState).meta?.initiatives?.length ?? 0,
     })),
   });
 });
@@ -728,7 +754,8 @@ app.post('/api/maps', requireAuth, async (c) => {
     if (Number(counts[0]?.count ?? 0) >= 2) {
       return c.json(
         {
-          error: 'Free workspaces include two account maps. Upgrade to Pro for unlimited maps.',
+          error:
+            'Free workspaces include two account maps. Upgrade to Pro for unlimited maps.',
           code: 'plan_limit',
         },
         402
@@ -809,23 +836,27 @@ app.post('/api/maps/:id/ask', requireAuth, async (c) => {
   if (!map || !role) return bad(c, 'not found', 404);
   const body = await c.req.json().catch(() => null);
   const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
-  const messages = rawMessages.flatMap(
-    (message: unknown): { role: 'user' | 'assistant'; content: string }[] => {
-      if (!message || typeof message !== 'object') return [];
-      const candidate = message as Record<string, unknown>;
-      if (
-        (candidate.role !== 'user' && candidate.role !== 'assistant') ||
-        typeof candidate.content !== 'string' ||
-        !candidate.content.trim()
-      ) {
-        return [];
+  const messages = rawMessages
+    .flatMap(
+      (message: unknown): { role: 'user' | 'assistant'; content: string }[] => {
+        if (!message || typeof message !== 'object') return [];
+        const candidate = message as Record<string, unknown>;
+        if (
+          (candidate.role !== 'user' && candidate.role !== 'assistant') ||
+          typeof candidate.content !== 'string' ||
+          !candidate.content.trim()
+        ) {
+          return [];
+        }
+        return [
+          {
+            role: candidate.role,
+            content: candidate.content.trim().slice(0, 2_000),
+          },
+        ];
       }
-      return [{
-        role: candidate.role,
-        content: candidate.content.trim().slice(0, 2_000),
-      }];
-    }
-  ).slice(-10);
+    )
+    .slice(-10);
   if (messages.length === 0 || messages.at(-1)?.role !== 'user') {
     return bad(c, 'a user question is required');
   }
@@ -857,7 +888,9 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
   const body = await c.req.json().catch(() => null);
   const name = typeof body?.name === 'string' ? body.name.trim() : map.name;
   const state =
-    body?.state !== undefined ? sanitizeState(body.state) : (map.state as MapState);
+    body?.state !== undefined
+      ? sanitizeState(body.state)
+      : (map.state as MapState);
   const refinements =
     body?.state !== undefined
       ? mapRefinementCounts(map.state as MapState, state)
@@ -867,7 +900,14 @@ app.patch('/api/maps/:id', requireAuth, async (c) => {
   if (body?.state !== undefined) {
     await query(
       'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
-      [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
+      [
+        randomUUID(),
+        map.id,
+        map.name,
+        JSON.stringify(map.state),
+        user.id,
+        now(),
+      ]
     );
   }
   await query(
@@ -908,7 +948,8 @@ app.post('/api/maps/:id/opportunity', requireAuth, async (c) => {
   const user = c.get('user');
   const [map, role] = await mapForUser(user, param(c, 'id'));
   if (!map || !role) return bad(c, 'not found', 404);
-  if (!canWrite(role)) return bad(c, 'viewers cannot update opportunity status', 403);
+  if (!canWrite(role))
+    return bad(c, 'viewers cannot update opportunity status', 403);
   const body = await c.req.json().catch(() => null);
   if (typeof body?.live !== 'boolean') return bad(c, 'live status required');
   await query(
@@ -1044,62 +1085,11 @@ app.get('/api/maps/:id/strategy', requireAuth, async (c) => {
   );
   if (!c.req.query('refresh') && cached[0]) return c.json(cached[0].insights);
 
-  const rolePriority: Record<string, number> = {
-    champion: 100,
-    economic_buyer: 90,
-    decision_maker: 80,
-    technical_buyer: 70,
-    influencer: 50,
-    blocker: 10,
-    none: 0,
-  };
-  const targetPriority: Record<string, number> = {
-    economic_buyer: 100,
-    decision_maker: 90,
-    technical_buyer: 70,
-    champion: 40,
-    influencer: 30,
-    blocker: 10,
-    none: 0,
-  };
-  const entry = [...state.people].sort((a, b) => (rolePriority[b.role] ?? 0) - (rolePriority[a.role] ?? 0))[0];
-  const target =
-    [...state.people]
-      .filter((person) => person.id !== entry?.id)
-      .sort((a, b) => (targetPriority[b.role] ?? 0) - (targetPriority[a.role] ?? 0))[0] ?? entry;
-  const pathIds = entry && target ? (() => {
-    const adjacency = new Map<string, string[]>();
-    for (const edge of state.edges ?? []) {
-      adjacency.set(edge.from, [...(adjacency.get(edge.from) ?? []), edge.to]);
-      adjacency.set(edge.to, [...(adjacency.get(edge.to) ?? []), edge.from]);
-    }
-    const queue = entry ? [entry.id] : [];
-    const previous = new Map<string, string>();
-    const seen = new Set(queue);
-    while (queue.length) {
-      const current = queue.shift()!;
-      if (current === target?.id) break;
-      for (const next of adjacency.get(current) ?? []) {
-        if (seen.has(next)) continue;
-        seen.add(next);
-        previous.set(next, current);
-        queue.push(next);
-      }
-    }
-    if (!target || (!seen.has(target.id) && target.id !== entry?.id)) return [];
-    const ids = [target.id];
-    while (ids[0] !== entry?.id) ids.unshift(previous.get(ids[0])!);
-    return ids;
-  })() : [];
-  const pathNames = pathIds.map((id) => state.people.find((person) => person.id === id)?.name ?? id);
-  const risks = [
-    ...state.people.filter((person) => person.role === 'blocker').map((person) => `Blocker mapped: ${person.name}`),
-    ...(state.people.some((person) => person.role === 'economic_buyer') ? [] : ['Economic buyer is not mapped']),
-  ];
-  const objections = target?.role === 'technical_buyer'
-    ? ['Security, integration effort, and architecture fit']
-    : ['Priority, timing, and ownership of the problem'];
-  const insights = await deepenAccountStrategy(state, sellerProfile, { entry, target, pathNames, risks, objections });
+  const insights = await deepenAccountStrategy(
+    state,
+    sellerProfile,
+    strategyContext(state)
+  );
   await query(
     `INSERT INTO account_strategies
        (map_id, map_updated_at, seller_profile, insights, generated_at)
@@ -1114,27 +1104,38 @@ app.get('/api/maps/:id/strategy', requireAuth, async (c) => {
   return c.json(insights);
 });
 
-app.post('/api/maps/:id/versions/:versionId/restore', requireAuth, async (c) => {
-  const user = c.get('user');
-  const [map, role] = await mapForUser(user, param(c, 'id'));
-  if (!map || !role) return bad(c, 'not found', 404);
-  if (!canWrite(role)) return bad(c, 'viewers cannot restore versions', 403);
-  const versions = await query<{ name: string; state: MapState }>(
-    'SELECT name, state FROM map_versions WHERE id = $1 AND map_id = $2',
-    [param(c, 'versionId'), map.id]
-  );
-  const version = versions[0];
-  if (!version) return bad(c, 'version not found', 404);
-  await query(
-    'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
-    [randomUUID(), map.id, map.name, JSON.stringify(map.state), user.id, now()]
-  );
-  await query(
-    'UPDATE maps SET name = $1, state = $2, updated_at = $3 WHERE id = $4',
-    [version.name, JSON.stringify(version.state), now(), map.id]
-  );
-  return c.json({ name: version.name, state: version.state });
-});
+app.post(
+  '/api/maps/:id/versions/:versionId/restore',
+  requireAuth,
+  async (c) => {
+    const user = c.get('user');
+    const [map, role] = await mapForUser(user, param(c, 'id'));
+    if (!map || !role) return bad(c, 'not found', 404);
+    if (!canWrite(role)) return bad(c, 'viewers cannot restore versions', 403);
+    const versions = await query<{ name: string; state: MapState }>(
+      'SELECT name, state FROM map_versions WHERE id = $1 AND map_id = $2',
+      [param(c, 'versionId'), map.id]
+    );
+    const version = versions[0];
+    if (!version) return bad(c, 'version not found', 404);
+    await query(
+      'INSERT INTO map_versions (id, map_id, name, state, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+      [
+        randomUUID(),
+        map.id,
+        map.name,
+        JSON.stringify(map.state),
+        user.id,
+        now(),
+      ]
+    );
+    await query(
+      'UPDATE maps SET name = $1, state = $2, updated_at = $3 WHERE id = $4',
+      [version.name, JSON.stringify(version.state), now(), map.id]
+    );
+    return c.json({ name: version.name, state: version.state });
+  }
+);
 
 app.post('/api/maps/:id/presence', requireAuth, async (c) => {
   const user = c.get('user');
@@ -1274,9 +1275,7 @@ app.get('/api/workspaces/:id/value', requireAuth, async (c) => {
   if (!(await workspaceRoleFor(user, workspaceId))) {
     return bad(c, 'not a member', 403);
   }
-  return c.json(
-    await valueSummary(user.id, workspaceId, isSuperAdmin(user))
-  );
+  return c.json(await valueSummary(user.id, workspaceId, isSuperAdmin(user)));
 });
 
 app.get('/api/maps/:id/share', requireAuth, async (c) => {

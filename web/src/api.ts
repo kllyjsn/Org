@@ -44,7 +44,9 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     throw new ApiError(
-      typeof data.error === 'string' ? data.error : `request failed (${res.status})`,
+      typeof data.error === 'string'
+        ? data.error
+        : `request failed (${res.status})`,
       res.status
     );
   }
@@ -52,8 +54,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  me: () =>
-    req<{ user: SessionUser; workspaces: Workspace[] }>('/api/me'),
+  me: () => req<{ user: SessionUser; workspaces: Workspace[] }>('/api/me'),
   login: (email: string, password: string) =>
     req<{ user: SessionUser; workspaces: Workspace[] }>('/api/auth/login', {
       method: 'POST',
@@ -77,9 +78,9 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
   listMembers: (workspaceId: string) =>
-    req<{ members: { id: string; name: string; email: string; role: string }[] }>(
-      `/api/workspaces/${workspaceId}/members`
-    ),
+    req<{
+      members: { id: string; name: string; email: string; role: string }[];
+    }>(`/api/workspaces/${workspaceId}/members`),
   addMember: (workspaceId: string, email: string) =>
     req<{ ok: true }>(`/api/workspaces/${workspaceId}/members`, {
       method: 'POST',
@@ -184,7 +185,9 @@ export const api = {
   getBriefing: (mapId: string) =>
     req<AccountBriefing>(`/api/maps/${mapId}/briefing`),
   getStrategyInsights: (mapId: string, refresh = false) =>
-    req<StrategyInsights>(`/api/maps/${mapId}/strategy${refresh ? '?refresh=1' : ''}`),
+    req<StrategyInsights>(
+      `/api/maps/${mapId}/strategy${refresh ? '?refresh=1' : ''}`
+    ),
   askMap: (mapId: string, messages: AccountAgentMessage[]) =>
     req<AccountAgentAnswer>(`/api/maps/${mapId}/ask`, {
       method: 'POST',
@@ -206,7 +209,7 @@ export const api = {
     req<{ people: MapPresence[]; selfId: string }>(
       `/api/maps/${mapId}/presence`,
       {
-      method: 'POST',
+        method: 'POST',
         body: JSON.stringify(presence ?? {}),
       }
     ),
@@ -227,7 +230,9 @@ export const api = {
   listShares: (mapId: string) =>
     req<{ links: ShareLink[] }>(`/api/maps/${mapId}/share`),
   deleteShare: (mapId: string, token: string) =>
-    req<{ ok: true }>(`/api/maps/${mapId}/share/${token}`, { method: 'DELETE' }),
+    req<{ ok: true }>(`/api/maps/${mapId}/share/${token}`, {
+      method: 'DELETE',
+    }),
 
   shareView: (token: string) =>
     req<{
