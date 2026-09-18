@@ -392,9 +392,6 @@ function addAccountSheet(
   const buHeaderRow = sheet.getRow(21);
   buHeaderRow.font = { bold: true };
   buHeaderRow.height = 17.25;
-  const peopleColumn = buHeaders.findIndex((header) =>
-    /people|contact/i.test(header)
-  );
   departments.forEach((department) => {
     const relevant = initiatives
       .filter((initiative) =>
@@ -404,7 +401,7 @@ function addAccountSheet(
       )
       .map((initiative) => initiative.name)
       .join('; ');
-    const values: (string | null)[] = [
+    const row = sheet.addRow([
       department ? safeText(department) : '',
       '',
       '',
@@ -414,16 +411,7 @@ function addAccountSheet(
       '',
       '',
       safeText(relevant),
-    ];
-    if (peopleColumn >= 0 && department) {
-      values[peopleColumn] = safeText(
-        people
-          .filter((person) => normalized(person.department) === normalized(department))
-          .map((person) => person.name)
-          .join(', ')
-      );
-    }
-    const row = sheet.addRow(values);
+    ]);
     row.getCell(1).font = { bold: true };
   });
 
