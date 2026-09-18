@@ -27,11 +27,11 @@ export default function RailButton({
       title={label}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
-      className={`flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl transition sm:h-9 sm:w-full sm:justify-start sm:px-3 ${
+      className={`flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl transition active:scale-[.96] sm:h-9 sm:w-full sm:justify-start sm:px-3 ${
         active
           ? 'bg-white/15 text-white'
           : accent
-            ? 'bg-[#5b4cf0] text-white hover:bg-[#6b5cf8]'
+            ? 'bg-brand text-white hover:bg-brand-hover'
             : 'text-slate-400 hover:bg-white/10 hover:text-white'
       } ${disabled ? 'cursor-not-allowed opacity-35' : ''}`}
     >

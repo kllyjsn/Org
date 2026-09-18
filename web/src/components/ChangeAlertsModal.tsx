@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import {
   BellRing,
   BriefcaseBusiness,
@@ -6,6 +8,7 @@ import {
   Loader2,
   UserMinus,
   UserPlus,
+  X,
 } from 'lucide-react';
 import { api } from '../api';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -50,17 +53,28 @@ export default function ChangeAlertsModal({
   }, [mapId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="change-alerts-modal-title"
-        className="max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-7"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-sheet p-5 shadow-2xl sm:max-w-2xl sm:rounded-3xl sm:p-7"
       >
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
               <BellRing size={13} />
               Account movement
             </div>
@@ -77,9 +91,10 @@ export default function ChangeAlertsModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+            aria-label="Close"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
           >
-            Close
+            <X size={16} />
           </button>
         </div>
 
@@ -120,9 +135,9 @@ export default function ChangeAlertsModal({
                 key={change.id}
                 onClick={() => person && onFocusPerson(person)}
                 disabled={!person}
-                className="flex w-full items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left td-card-shadow enabled:hover:border-[#5b4cf0]/30 enabled:hover:bg-[#fbfaff]"
+                className="flex w-full items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left td-card-shadow enabled:hover:border-brand/30 enabled:hover:bg-brand-tint"
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#eeecff] text-[#5b4cf0]">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
                   <AlertIcon type={change.type} />
                 </span>
                 <span className="min-w-0">
@@ -142,7 +157,7 @@ export default function ChangeAlertsModal({
                             target="_blank"
                             rel="noreferrer"
                             onClick={(event) => event.stopPropagation()}
-                            className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500 hover:text-[#5b4cf0]"
+                            className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500 hover:text-brand"
                           >
                             Source {index + 1}
                           </a>
@@ -162,7 +177,7 @@ export default function ChangeAlertsModal({
             );
           })}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

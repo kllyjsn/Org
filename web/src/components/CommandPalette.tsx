@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, paletteVariants } from '../lib/motion';
 import {
   ArrowRight,
   BellRing,
@@ -300,7 +301,12 @@ export default function CommandPalette({
   };
 
   return (
-    <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
       className="fixed inset-0 z-[70] flex justify-center bg-slate-950/45 px-3 pt-[5vh] backdrop-blur-sm sm:pt-[9vh]"
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose();
@@ -311,17 +317,17 @@ export default function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Search and commands"
-        initial={{ y: -12, opacity: 0, scale: 0.985 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: -8, opacity: 0, scale: 0.99 }}
-        transition={{ duration: 0.16, ease: 'easeOut' }}
-        className="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border border-white/70 bg-[#fbfcf9]/95 shadow-[0_30px_100px_rgba(15,23,42,.35)] backdrop-blur-2xl"
+        variants={paletteVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border border-white/70 bg-sheet/95 shadow-[0_30px_100px_rgba(15,23,42,.35)] backdrop-blur-2xl"
       >
         <div className="flex items-center gap-3 border-b border-slate-200/80 px-4 py-3.5 sm:px-5">
           {conversation.length > 0 ? (
-            <Sparkles size={20} className="shrink-0 text-[#5b4cf0]" />
+            <Sparkles size={20} className="shrink-0 text-brand" />
           ) : (
-            <Search size={20} className="shrink-0 text-[#5b4cf0]" />
+            <Search size={20} className="shrink-0 text-brand" />
           )}
           <input
             ref={inputRef}
@@ -368,7 +374,7 @@ export default function CommandPalette({
           <button
             onClick={onClose}
             aria-label="Close search"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm transition hover:text-slate-700 sm:hidden"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm transition hover:text-slate-700 sm:h-9 sm:w-9 sm:hidden"
           >
             <X size={16} />
           </button>
@@ -400,7 +406,7 @@ export default function CommandPalette({
                                 href={citation.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#eeecff] px-2.5 py-1 text-[10px] font-semibold text-[#5b4cf0] hover:bg-[#e3e0ff]"
+                                className="inline-flex max-w-full items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-[10px] font-semibold text-brand hover:bg-brand-softer"
                               >
                                 {citation.id} · {citation.label}
                                 <ExternalLink size={10} className="shrink-0" />
@@ -417,10 +423,10 @@ export default function CommandPalette({
                         </div>
                       )}
                       {message.canvasAction && (
-                        <div className="mt-3 rounded-2xl border border-[#ddd9ff] bg-[#f5f4ff] p-3">
+                        <div className="mt-3 rounded-2xl border border-brand-softer bg-brand-tint p-3">
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#5b4cf0]">
+                              <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-brand">
                                 Canvas preview
                               </div>
                               <div className="mt-1 text-sm font-semibold text-slate-950">
@@ -496,7 +502,7 @@ export default function CommandPalette({
                               onClick={() =>
                                 runCanvasCommand(message.canvasAction, index)
                               }
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6b5cf8]"
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand-hover"
                             >
                               <Send size={12} /> Apply
                             </button>
@@ -526,7 +532,7 @@ export default function CommandPalette({
                                   onRunAgentAction(action);
                                   onClose();
                                 }}
-                                className="rounded-xl border border-slate-200 bg-[#fbfcf9] px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-[#5b4cf0] hover:text-[#5b4cf0]"
+                                className="rounded-xl border border-slate-200 bg-sheet px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-brand hover:text-brand"
                               >
                                 {action.label}
                               </button>
@@ -544,7 +550,7 @@ export default function CommandPalette({
                   role="status"
                   className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500"
                 >
-                  <Loader2 size={14} className="animate-spin text-[#5b4cf0]" />
+                  <Loader2 size={14} className="animate-spin text-brand" />
                   Reading the map and its evidence…
                 </div>
               )}
@@ -584,10 +590,10 @@ export default function CommandPalette({
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => run(choice)}
                         className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
-                          active ? 'bg-[#eeecff]' : 'hover:bg-slate-100'
+                          active ? 'bg-brand-soft' : 'hover:bg-slate-100'
                         }`}
                       >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#5b4cf0] shadow-sm">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-brand shadow-sm">
                           <UserRound size={18} />
                         </span>
                         <span className="min-w-0 flex-1">
@@ -601,13 +607,13 @@ export default function CommandPalette({
                           </span>
                         </span>
                         {person.teamEvidence === 'inferred' && (
-                          <span className="rounded-full bg-amber-50 px-2 py-1 text-[9px] font-semibold uppercase text-amber-700">
+                          <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase text-amber-700">
                             inferred
                           </span>
                         )}
                         <ArrowRight
                           size={15}
-                          className={active ? 'text-[#5b4cf0]' : 'text-slate-300'}
+                          className={active ? 'text-brand' : 'text-slate-300'}
                         />
                       </button>
                     );
@@ -623,10 +629,10 @@ export default function CommandPalette({
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => run(choice)}
                         className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
-                          active ? 'bg-[#eeecff]' : 'hover:bg-slate-100'
+                          active ? 'bg-brand-soft' : 'hover:bg-slate-100'
                         }`}
                       >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#5b4cf0] shadow-sm">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-brand shadow-sm">
                           <Icon size={18} />
                         </span>
                         <span className="min-w-0 flex-1">
@@ -658,8 +664,8 @@ export default function CommandPalette({
                       <span
                         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                           active
-                            ? 'bg-[#c9f04b] text-slate-950'
-                            : 'bg-slate-950 text-[#c9f04b]'
+                            ? 'bg-accent text-slate-950'
+                            : 'bg-slate-950 text-accent'
                         }`}
                       >
                         <Sparkles size={18} />
@@ -701,6 +707,6 @@ export default function CommandPalette({
           )}
         </div>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

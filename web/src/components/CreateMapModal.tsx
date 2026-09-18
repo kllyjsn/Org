@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Building2, Loader2, Search, Sparkles, Users } from 'lucide-react';
+import { Building2, Loader2, Search, Sparkles, Users, X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { api, ApiError } from '../api';
 import { stateFromResearch } from '../lib/layout';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -70,6 +72,7 @@ export default function CreateMapModal({
   const [domain, setDomain] = useState('');
   const [researching, setResearching] = useState(false);
   const [stage, setStage] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<ResearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -81,11 +84,16 @@ export default function CreateMapModal({
   useEffect(() => {
     if (!researching) return;
     timer.current = window.setInterval(
-      () => setStage((s) => (s + 1) % STAGES.length),
-      1800
+      () => setStage((s) => Math.min(s + 1, STAGES.length - 1)),
+      9_000
+    );
+    const elapsedTimer = window.setInterval(
+      () => setElapsed((value) => value + 1),
+      1_000
     );
     return () => {
       if (timer.current) window.clearInterval(timer.current);
+      window.clearInterval(elapsedTimer);
     };
   }, [researching]);
 
@@ -94,6 +102,7 @@ export default function CreateMapModal({
     setResult(null);
     setResearching(true);
     setStage(0);
+    setElapsed(0);
     researchStartedAt.current = new Date().toISOString();
     try {
       const r = await api.research(
@@ -164,22 +173,36 @@ export default function CreateMapModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-map-modal-title"
-        className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:rounded-3xl sm:p-7"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-sheet p-5 shadow-2xl sm:rounded-3xl sm:p-7"
       >
         <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-brand">
             <Sparkles size={14} />
             New intelligence map
           </div>
-          <button            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700" aria-label="Close">
-            ✕
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
+            aria-label="Close"
+          >
+            <X size={16} />
           </button>
         </div>
         <h2
@@ -193,7 +216,7 @@ export default function CreateMapModal({
           lines, and the initiatives shaping their priorities.
         </p>
 
-        <div className="flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm focus-within:border-[#5b4cf0] focus-within:ring-4 focus-within:ring-[#5b4cf0]/10">
+        <div className="flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10">
           <input
             autoFocus
             className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-sm outline-none"
@@ -211,7 +234,7 @@ export default function CreateMapModal({
           <button
             onClick={() => void research()}
             disabled={!domain.trim() || researching || creating}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-[#5b4cf0] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#4b3ddd] disabled:opacity-60"
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-deep disabled:opacity-60"
           >
             {researching ? (
               <Loader2 size={15} className="animate-spin" />
@@ -229,16 +252,22 @@ export default function CreateMapModal({
           >
             <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
               <span>Live research</span>
-              <span>{stage + 1} / {STAGES.length}</span>
+              <span>{stage + 1} / {STAGES.length} · {elapsed}s</span>
             </div>
-            <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={STAGES.length}
+              aria-valuenow={stage + 1}
+              className="mb-3 h-1 overflow-hidden rounded-full bg-white/10"
+            >
               <div
-                className="h-full rounded-full bg-[#c9f04b] transition-all duration-500"
-                style={{ width: `${((stage + 1) / STAGES.length) * 100}%` }}
+                className="h-full w-full origin-left rounded-full bg-accent transition-transform duration-500"
+                style={{ transform: `scaleX(${(stage + 0.5) / STAGES.length})` }}
               />
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <Loader2 size={14} className="animate-spin text-[#c9f04b]" />
+              <Loader2 size={14} className="animate-spin text-accent" />
               {STAGES[stage]}
             </div>
           </div>
@@ -272,7 +301,7 @@ export default function CreateMapModal({
                     className={`px-3 py-3 ${index > 0 ? 'border-l border-white/10' : ''}`}
                   >
                     <div className="text-lg font-semibold">{value}</div>
-                    <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       {label}
                     </div>
                   </div>
@@ -315,18 +344,18 @@ export default function CreateMapModal({
               <button
                 onClick={() => void createFromTemplate('executive')}
                 disabled={!domain.trim() || creating}
-                className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-[#b9b2ff] disabled:opacity-50"
+                className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-brand-line disabled:opacity-50"
               >
-                <Building2 size={17} className="mb-2 text-[#5b4cf0]" />
+                <Building2 size={17} className="mb-2 text-brand" />
                 <span className="block text-sm font-medium">Executive map</span>
                 <span className="text-xs text-slate-500">CEO and functional leaders</span>
               </button>
               <button
                 onClick={() => void createFromTemplate('buying-committee')}
                 disabled={!domain.trim() || creating}
-                className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-[#b9b2ff] disabled:opacity-50"
+                className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-brand-line disabled:opacity-50"
               >
-                <Users size={17} className="mb-2 text-[#5b4cf0]" />
+                <Users size={17} className="mb-2 text-brand" />
                 <span className="block text-sm font-medium">Buying committee</span>
                 <span className="text-xs text-slate-500">Roles for a live opportunity</span>
               </button>
@@ -346,13 +375,13 @@ export default function CreateMapModal({
             <button
               onClick={() => void create(false)}
               disabled={creating}
-              className="rounded-xl bg-[#5b4cf0] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(91,76,240,.2)] hover:bg-[#4b3ddd] disabled:opacity-60"
+              className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-cta hover:bg-brand-deep disabled:opacity-60"
             >
               {creating ? 'Creating…' : 'Open chart →'}
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

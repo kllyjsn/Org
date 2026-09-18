@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import {
   Activity,
   Clock3,
@@ -34,7 +36,7 @@ function Metric({
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow">
       <div className="flex items-center justify-between">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eeecff] text-[#5b4cf0]">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand">
           <Icon size={17} />
         </span>
         <span className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">
@@ -67,17 +69,28 @@ export default function ValueDashboardModal({
   }, [workspaceId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="value-dashboard-modal-title"
-        className="max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-[#f6f7f2] shadow-2xl sm:max-w-5xl sm:rounded-3xl"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-paper shadow-2xl sm:max-w-5xl sm:rounded-3xl"
       >
-        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200/80 bg-[#f6f7f2]/95 px-5 py-5 backdrop-blur-xl sm:px-7">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200/80 bg-paper/95 px-5 py-5 backdrop-blur-xl sm:px-7">
           <div>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[.18em] text-[#5b4cf0]">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[.18em] text-brand">
               Value realized
             </div>
             <h2
@@ -91,8 +104,11 @@ export default function ValueDashboardModal({
               source text, and private deal content never enter these metrics.
             </p>
           </div>
-          <button            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
+            aria-label="Close"
+          >
             <X size={16} />
           </button>
         </div>
@@ -144,7 +160,7 @@ export default function ValueDashboardModal({
               <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
                 <section className="rounded-2xl bg-slate-950 p-5 text-white">
                   <div className="mb-5 flex items-center gap-2">
-                    <Activity size={16} className="text-[#c9f04b]" />
+                    <Activity size={16} className="text-accent" />
                     <h3 className="font-semibold">Your operating rhythm</h3>
                   </div>
                   <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/10 sm:grid-cols-4">
@@ -169,7 +185,7 @@ export default function ValueDashboardModal({
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 td-card-shadow">
                   <div className="mb-4 flex items-center gap-2">
-                    <Users size={16} className="text-[#5b4cf0]" />
+                    <Users size={16} className="text-brand" />
                     <h3 className="font-semibold text-slate-900">Team value</h3>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm">
@@ -208,10 +224,10 @@ export default function ValueDashboardModal({
               </div>
 
               {summary.platform && (
-                <section className="mt-4 rounded-2xl border border-[#5b4cf0]/20 bg-[#eeecff] p-5">
+                <section className="mt-4 rounded-2xl border border-brand/20 bg-brand-soft p-5">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+                      <div className="text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
                         Platform view
                       </div>
                       <h3 className="mt-1 font-semibold text-slate-950">
@@ -253,7 +269,7 @@ export default function ValueDashboardModal({
             </>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

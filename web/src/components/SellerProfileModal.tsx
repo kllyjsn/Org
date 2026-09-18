@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { Building2, Loader2, Sparkles, X } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -28,7 +30,7 @@ function ListField({
         {label}
       </span>
       <textarea
-        className="min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm leading-5 outline-none transition focus:border-[#796df5] focus:bg-white"
+        className="min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm leading-5 outline-none transition focus:border-brand-muted focus:bg-white"
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => onChange(list(draft))}
@@ -85,17 +87,28 @@ export default function SellerProfileModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="seller-profile-modal-title"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         className="max-h-[94vh] w-full max-w-4xl overflow-auto rounded-3xl bg-white shadow-2xl"
       >
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-100 bg-white/95 px-5 py-5 backdrop-blur sm:px-7">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-brand">
               <Sparkles size={14} /> Your selling context
             </div>
             <h2
@@ -111,17 +124,17 @@ export default function SellerProfileModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
             aria-label="Close"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
         <div className="p-5 sm:p-7">
           {!profile ? (
             <div className="mx-auto max-w-xl py-8 sm:py-16">
-              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eeecff] text-[#5b4cf0]">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft text-brand">
                 <Building2 size={25} />
               </div>
               <label className="block text-sm font-semibold text-slate-800">
@@ -129,7 +142,7 @@ export default function SellerProfileModal({
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                   <input
                     autoFocus
-                    className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-[#796df5]"
+                    className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-muted"
                     placeholder="stripe.com"
                     aria-label="Company domain"
                     value={domain}
@@ -166,7 +179,7 @@ export default function SellerProfileModal({
                     Company
                   </span>
                   <input
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#796df5]"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-muted"
                     value={profile.companyName}
                     onChange={(event) =>
                       setProfile({ ...profile, companyName: event.target.value })
@@ -178,7 +191,7 @@ export default function SellerProfileModal({
                     What you do
                   </span>
                   <textarea
-                    className="min-h-28 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-5 outline-none focus:border-[#796df5]"
+                    className="min-h-28 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-5 outline-none focus:border-brand-muted"
                     value={profile.summary}
                     onChange={(event) =>
                       setProfile({ ...profile, summary: event.target.value })
@@ -223,14 +236,14 @@ export default function SellerProfileModal({
                     Positioning
                   </span>
                   <textarea
-                    className="min-h-36 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-5 outline-none focus:border-[#796df5]"
+                    className="min-h-36 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-5 outline-none focus:border-brand-muted"
                     value={profile.positioning}
                     onChange={(event) =>
                       setProfile({ ...profile, positioning: event.target.value })
                     }
                   />
                 </label>
-                <div className="rounded-2xl bg-[#f6f7f2] p-4 text-xs leading-5 text-slate-500">
+                <div className="rounded-2xl bg-paper p-4 text-xs leading-5 text-slate-500">
                   This context personalizes initiative angles, account
                   briefings, and recommendations. You remain the editor.
                 </div>
@@ -254,13 +267,13 @@ export default function SellerProfileModal({
             <button
               onClick={() => void save()}
               disabled={loading || !profile.companyName.trim()}
-              className="rounded-xl bg-[#5b4cf0] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#4d3fe0] disabled:opacity-50"
+              className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-deep disabled:opacity-50"
             >
               {loading ? 'Saving…' : 'Use this selling context'}
             </button>
           </div>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

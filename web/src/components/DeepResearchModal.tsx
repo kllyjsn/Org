@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { Building2, Loader2, Search, Sparkles, UsersRound, X } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useFocusTrap } from '../lib/useFocusTrap';
@@ -35,6 +37,7 @@ export default function DeepResearchModal({
   const [focus, setFocus] = useState(initialFocus || selected?.name || '');
   const [researching, setResearching] = useState(false);
   const [stage, setStage] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<ResearchResult | null>(null);
   const [error, setError] = useState('');
   const [merged, setMerged] = useState('');
@@ -45,11 +48,16 @@ export default function DeepResearchModal({
   useEffect(() => {
     if (!researching) return;
     timer.current = window.setInterval(
-      () => setStage((value) => (value + 1) % STAGES.length),
-      1_800
+      () => setStage((value) => Math.min(value + 1, STAGES.length - 1)),
+      9_000
+    );
+    const elapsedTimer = window.setInterval(
+      () => setElapsed((value) => value + 1),
+      1_000
     );
     return () => {
       if (timer.current) window.clearInterval(timer.current);
+      window.clearInterval(elapsedTimer);
     };
   }, [researching]);
 
@@ -70,6 +78,7 @@ export default function DeepResearchModal({
     setMerged('');
     setError('');
     setStage(0);
+    setElapsed(0);
     try {
       setResult(
         await api.research(
@@ -91,17 +100,28 @@ export default function DeepResearchModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[65] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-[65] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="deep-research-modal-title"
-        className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-[28px] bg-[#f9faf7] p-5 shadow-2xl sm:rounded-[28px] sm:p-7"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-[28px] bg-sheet p-5 shadow-2xl sm:rounded-[28px] sm:p-7"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
               <Sparkles size={13} />
               Targeted enrichment
             </div>
@@ -116,15 +136,18 @@ export default function DeepResearchModal({
               into this map without rebuilding it.
             </p>
           </div>
-          <button            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
+            aria-label="Close"
+          >
             <X size={16} />
           </button>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm focus-within:border-[#5b4cf0] focus-within:ring-4 focus-within:ring-[#5b4cf0]/10">
+        <div className="rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10">
           <div className="flex items-center gap-2 px-3 py-2">
-            <Search size={17} className="shrink-0 text-[#5b4cf0]" />
+            <Search size={17} className="shrink-0 text-brand" />
             <input
               autoFocus
               value={focus}
@@ -144,9 +167,9 @@ export default function DeepResearchModal({
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
           >
             {researching ? (
-              <Loader2 size={15} className="animate-spin text-[#c9f04b]" />
+              <Loader2 size={15} className="animate-spin text-accent" />
             ) : (
-              <Sparkles size={15} className="text-[#c9f04b]" />
+              <Sparkles size={15} className="text-accent" />
             )}
             {researching ? 'Researching the public web…' : 'Run deep research'}
           </button>
@@ -156,7 +179,7 @@ export default function DeepResearchModal({
           <div className="mt-4">
             <button
               onClick={() => void run(true)}
-              className="mb-3 w-full rounded-xl border border-[#b9b2ff] bg-[#eeecff] px-3 py-2 text-xs font-semibold text-[#5144d7] transition hover:bg-[#e4e0ff]"
+              className="mb-3 w-full rounded-xl border border-brand-line bg-brand-soft px-3 py-2 text-xs font-semibold text-brand-text transition hover:bg-brand-softer"
             >
               Refresh the entire account against current public sources
             </button>
@@ -165,7 +188,7 @@ export default function DeepResearchModal({
                 <button
                   key={suggestion}
                   onClick={() => setFocus(suggestion)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:border-[#b9b2ff] hover:text-[#5144d7]"
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:border-brand-line hover:text-brand-text"
                 >
                   {suggestion}
                 </button>
@@ -181,16 +204,22 @@ export default function DeepResearchModal({
           >
             <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
               <span>Deep research · {domain}</span>
-              <span>{stage + 1} / {STAGES.length}</span>
+              <span>{stage + 1} / {STAGES.length} · {elapsed}s</span>
             </div>
-            <div className="mb-3 h-1 overflow-hidden rounded-full bg-white/10">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={STAGES.length}
+              aria-valuenow={stage + 1}
+              className="mb-3 h-1 overflow-hidden rounded-full bg-white/10"
+            >
               <div
-                className="h-full rounded-full bg-[#c9f04b] transition-all duration-500"
-                style={{ width: `${((stage + 1) / STAGES.length) * 100}%` }}
+                className="h-full w-full origin-left rounded-full bg-accent transition-transform duration-500"
+                style={{ transform: `scaleX(${(stage + 0.5) / STAGES.length})` }}
               />
             </div>
             <p className="flex items-center gap-2 text-sm text-slate-200">
-              <Loader2 size={14} className="animate-spin text-[#c9f04b]" />
+              <Loader2 size={14} className="animate-spin text-accent" />
               {STAGES[stage]}
             </p>
           </div>
@@ -216,14 +245,14 @@ export default function DeepResearchModal({
                   {result.provider} · public-web research
                 </p>
               </div>
-              <span className="flex items-center gap-1 rounded-full bg-[#effbd0] px-2.5 py-1 text-[10px] font-semibold text-slate-700">
+              <span className="flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-[10px] font-semibold text-slate-700">
                 <Building2 size={11} /> {domain}
               </span>
             </div>
             <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
               {result.people.map((person, index) => (
                 <div key={`${person.name}-${index}`} className="flex items-start gap-3 px-4 py-3">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eeecff] text-[#5b4cf0]">
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
                     <UsersRound size={15} />
                   </span>
                   <div className="min-w-0">
@@ -263,7 +292,7 @@ export default function DeepResearchModal({
                     );
                   }}
                   disabled={Boolean(merged)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#5b4cf0] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#4b3ddd] disabled:bg-emerald-600"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-deep disabled:bg-emerald-600"
                 >
                   <Sparkles size={15} />
                   {merged || 'Merge into this map'}
@@ -277,7 +306,7 @@ export default function DeepResearchModal({
           Only publicly supported people are added. Inferred team assignments
           stay visibly labeled.
         </p>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

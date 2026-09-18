@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import {
   ArrowRight,
   Check,
@@ -7,6 +9,7 @@ import {
   ShieldQuestion,
   Sparkles,
   Target,
+  X,
 } from 'lucide-react';
 import {
   personProductFit,
@@ -252,17 +255,28 @@ export default function AccountStrategyModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
+    <motion.div
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-4"
+    >
+      <motion.div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="account-strategy-modal-title"
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-[#f9faf7] p-5 shadow-2xl sm:max-w-4xl sm:rounded-3xl sm:p-7"
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-sheet p-5 shadow-2xl sm:max-w-4xl sm:rounded-3xl sm:p-7"
       >
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
               <Sparkles size={13} />
               Evidence into action
             </div>
@@ -277,7 +291,7 @@ export default function AccountStrategyModal({
               the people, relationships, and initiatives already on this map.
             </p>
             {sellerProfile && buyingFunction && (
-              <p className="mt-2 text-xs font-medium text-[#5b4cf0]">
+              <p className="mt-2 text-xs font-medium text-brand">
                 Prioritized for {sellerProfile.companyName}'s {buyingFunction}{' '}
                 use case.
               </p>
@@ -285,9 +299,10 @@ export default function AccountStrategyModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100"
+            aria-label="Close"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
           >
-            Close
+            <X size={16} />
           </button>
         </div>
 
@@ -347,7 +362,7 @@ export default function AccountStrategyModal({
         </div>
 
         <section className="mt-3 rounded-2xl bg-slate-950 p-4 text-white sm:p-5">
-          <div className="mb-4 text-[10px] font-semibold uppercase tracking-[.14em] text-[#c9f04b]">
+          <div className="mb-4 text-[10px] font-semibold uppercase tracking-[.14em] text-accent">
             Strongest mapped hypothesis
           </div>
           {strategy.path.people.length > 0 ? (
@@ -384,7 +399,7 @@ export default function AccountStrategyModal({
           <section className="rounded-2xl border border-slate-200 bg-white p-4 td-card-shadow sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#5b4cf0]">
+                <div className="text-[10px] font-semibold uppercase tracking-[.14em] text-brand">
                   One-click account brief
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
@@ -393,7 +408,7 @@ export default function AccountStrategyModal({
               </div>
               <button
                 onClick={() => void copyBrief()}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6b5cf8]"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand-hover"
               >
                 {copied ? <Check size={14} /> : <Copy size={14} />}
                 {copied ? 'Copied' : 'Copy brief'}
@@ -422,7 +437,7 @@ export default function AccountStrategyModal({
             </ul>
           </section>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

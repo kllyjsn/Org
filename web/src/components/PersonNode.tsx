@@ -21,8 +21,8 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
 
   return (
     <div
-      className={`relative h-full min-h-[86px] w-full min-w-[220px] overflow-hidden rounded-2xl border bg-white px-3.5 py-3 text-left shadow-[0_8px_24px_rgba(15,23,42,.08)] transition ${
-        selected ? 'border-[#5b4cf0] ring-4 ring-[#5b4cf0]/15' : 'border-slate-200'
+      className={`relative h-full min-h-[86px] w-full min-w-[220px] overflow-hidden rounded-2xl border bg-white px-3.5 py-3 text-left shadow-node transition ${
+        selected ? 'border-brand ring-4 ring-brand/15' : 'border-slate-200'
       } ${
         unverified || needsReview
           ? 'border-dashed border-amber-300'
@@ -66,26 +66,26 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
         <div className="mt-2.5 flex flex-wrap items-center gap-1 pl-1">
           {role.label && (
             <span
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${role.chip}`}
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${role.chip}`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${role.dot}`} />
               {role.label}
             </span>
           )}
           {p.metWith && (
-            <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700">
+            <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               Met
             </span>
           )}
           {p.team && (
-            <span className="max-w-28 truncate rounded-full bg-[#eeecff] px-2 py-0.5 text-[9px] font-medium text-[#5144d7]">
+            <span className="max-w-28 truncate rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-medium text-brand-text">
               {p.team}
               {p.teamEvidence === 'inferred' ? ' · inferred' : ''}
             </span>
           )}
           {!p.team && p.department && (
-            <span className="max-w-28 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[9px] text-slate-600">
+            <span className="max-w-28 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
               {p.department}
             </span>
           )}
@@ -104,7 +104,7 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
             </span>
           )}
           {(p.sources ?? []).length > 0 && !needsReview && !unverified && (
-            <span className="ml-auto flex items-center gap-1 text-[9px] font-medium text-slate-400">
+            <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-slate-400">
               <BookOpen size={10} aria-hidden="true" /> {(p.sources ?? []).length}
             </span>
           )}

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { overlayTransition, overlayVariants, sheetVariants } from '../lib/motion';
 import { CheckCircle2, CircleAlert, Users, X } from 'lucide-react';
 import {
   matchMeetingPeople,
@@ -89,9 +90,11 @@ export default function MeetingsImportModal({
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={overlayTransition}
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-6"
     >
       <motion.div
@@ -99,15 +102,16 @@ export default function MeetingsImportModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="meetings-import-modal-title"
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 40, opacity: 0 }}
+        variants={sheetVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-[#f9faf7] shadow-2xl sm:rounded-3xl"
+        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-sheet shadow-2xl sm:rounded-3xl"
       >
         <div className="flex items-start justify-between border-b border-slate-200/80 px-5 py-4">
           <div>
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[#5b4cf0]">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-brand">
               Meetings import
             </div>
             <h2
@@ -124,7 +128,7 @@ export default function MeetingsImportModal({
           <button
             onClick={onClose}
             aria-label="Close meetings import"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm hover:text-slate-700 sm:h-9 sm:w-9"
           >
             <X size={15} />
           </button>
@@ -141,7 +145,7 @@ export default function MeetingsImportModal({
                 placeholder={
                   '- Yi Gu — Head of Talent Experience Engineering\n- Jonathan Carter — Principal Security Engineer\n\nAbhishek Kottamasu; Alex Kreidler; Rahul Chalamala…'
                 }
-                className="w-full resize-y rounded-2xl border border-slate-200 bg-white p-4 font-mono text-xs leading-5 text-slate-800 outline-none transition focus:border-[#5b4cf0] focus:ring-4 focus:ring-[#5b4cf0]/10"
+                className="w-full resize-y rounded-2xl border border-slate-200 bg-white p-4 font-mono text-xs leading-5 text-slate-800 outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
               />
               <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
                 <span>
@@ -162,7 +166,7 @@ export default function MeetingsImportModal({
                 </span>
                 <button
                   onClick={() => setParsed(null)}
-                  className="ml-auto font-medium text-[#5b4cf0] hover:underline"
+                  className="ml-auto font-medium text-brand hover:underline"
                 >
                   Edit paste
                 </button>
@@ -179,7 +183,7 @@ export default function MeetingsImportModal({
                         type="checkbox"
                         checked={!off}
                         onChange={() => toggleExcluded(index)}
-                        className="h-4 w-4 shrink-0 accent-[#5b4cf0]"
+                        className="h-4 w-4 shrink-0 accent-brand"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13px] font-medium text-slate-800">
@@ -229,7 +233,7 @@ export default function MeetingsImportModal({
               type="checkbox"
               checked={addUnmatched}
               onChange={(event) => setAddUnmatched(event.target.checked)}
-              className="h-4 w-4 accent-[#5b4cf0]"
+              className="h-4 w-4 accent-brand"
             />
             Add unmatched people to the map
           </label>
@@ -238,7 +242,7 @@ export default function MeetingsImportModal({
             <button
               onClick={() => setParsed(matchMeetingPeople(entries, people))}
               disabled={entries.length === 0}
-              className="flex items-center gap-1.5 rounded-xl bg-[#5b4cf0] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#6b5cf8] disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-hover disabled:opacity-40"
             >
               <Users size={14} /> Match {entries.length || ''}
             </button>
@@ -246,7 +250,7 @@ export default function MeetingsImportModal({
             <button
               onClick={apply}
               disabled={matchedCount === 0 && (!addUnmatched || unmatchedCount === 0)}
-              className="flex items-center gap-1.5 rounded-xl bg-[#5b4cf0] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#6b5cf8] disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-hover disabled:opacity-40"
             >
               <CheckCircle2 size={14} /> Mark {matchedCount} met
               {addUnmatched && unmatchedCount > 0

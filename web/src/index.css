@@ -15,6 +15,13 @@ body,
   --td-line: #dde1d8;
   --td-violet: #5b4cf0;
   --td-lime: #c9f04b;
+  --td-violet-deep: #4b3ddd;
+  --td-violet-soft: #eeecff;
+  --td-sheet: #f9faf7;
+  --td-dur-fast: 120ms;
+  --td-dur-base: 200ms;
+  --td-dur-slow: 300ms;
+  --td-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
@@ -24,7 +31,7 @@ body {
 }
 
 ::selection {
-  background: #d9d4ff;
+  background: var(--td-violet-soft);
   color: var(--td-ink);
 }
 
@@ -73,13 +80,13 @@ textarea:focus-visible {
 
 .react-flow__controls {
   overflow: hidden;
-  border: 1px solid rgb(226 232 240);
+  border: 1px solid var(--td-line);
   border-radius: 12px;
   box-shadow: 0 8px 28px rgb(15 23 42 / 10%);
 }
 
 .react-flow__controls-button {
-  border-bottom-color: rgb(226 232 240);
+  border-bottom-color: var(--td-line);
   background: rgb(255 255 255 / 92%);
 }
 
@@ -120,6 +127,7 @@ textarea:focus-visible {
     0 16px 40px rgb(15 23 42 / 7%);
 }
 
+
 /* a11y: contrast floors for muted text (WCAG 1.4.3) */
 @layer utilities {
   .text-slate-400 {
@@ -127,5 +135,36 @@ textarea:focus-visible {
   }
   .text-slate-500 {
     color: #55637a;
+  }
+}
+
+.react-flow__edge-path {
+  transition:
+    stroke var(--td-dur-fast) var(--td-ease-out),
+    stroke-width var(--td-dur-fast) var(--td-ease-out);
+}
+
+.react-flow__edge:hover .react-flow__edge-path,
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--td-violet) !important;
+  stroke-width: 2.5 !important;
+}
+
+.react-flow__node.dragging {
+  cursor: grabbing;
+}
+
+.react-flow__node.dragging > div {
+  box-shadow: 0 18px 44px rgb(15 23 42 / 18%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *:not(.animate-spin),
+  *:not(.animate-spin)::before,
+  *:not(.animate-spin)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

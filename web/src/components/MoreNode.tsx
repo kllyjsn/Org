@@ -18,7 +18,7 @@ function MoreNode({ data }: NodeProps<MoreNodeData>) {
       type="button"
       onClick={() => data.onExpand?.(data.lane)}
       aria-label={`Show ${data.count} more in ${data.lane}`}
-      className="nodrag flex h-[52px] w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 text-xs font-semibold text-slate-500 transition hover:border-[#5b4cf0] hover:bg-[#f5f4ff] hover:text-[#5b4cf0]"
+      className="nodrag flex h-[52px] w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 text-xs font-semibold text-slate-500 transition active:scale-[.98] hover:border-brand hover:bg-brand-tint hover:text-brand"
     >
       <Plus size={14} className="shrink-0" />
       {data.count} more
