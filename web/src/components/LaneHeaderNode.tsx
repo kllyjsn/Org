@@ -1,6 +1,7 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import type { NodeProps } from 'reactflow';
 import { deptColor } from '../lib/colors';
+import type { EvidenceKind } from '../types';
 
 export interface LaneHeaderData {
   label: string;
@@ -12,9 +13,14 @@ export interface LaneHeaderData {
   span?: number;
   colGap?: number;
   onToggle?: (lane: string) => void;
+  suggested?: {
+    confidence: 'high' | 'medium' | 'low';
+    evidenceCounts: Partial<Record<EvidenceKind, number>>;
+  };
 }
 
 function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
+  const [whyOpen, setWhyOpen] = useState(false);
   const collapsible = data.shown !== undefined && data.shown < data.count;
   const expanded = data.expanded === true;
   const width =
@@ -55,6 +61,44 @@ function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
           >
             {expanded ? 'Show fewer' : `Show all ${data.count}`}
           </button>
+        )}
+        {data.suggested && (
+          <div className="relative">
+            <button
+              type="button"
+              className="nodrag nopan pointer-events-auto rounded-full border border-dashed border-[#5b4cf0] px-2 py-1 text-[9px] font-semibold text-[#5144d7]"
+              onClick={() => setWhyOpen((open) => !open)}
+            >
+              Why this structure?
+            </button>
+            {whyOpen && (
+              <div className="pointer-events-auto absolute left-0 top-8 z-20 w-64 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-semibold text-slate-800">Evidence</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold capitalize">
+                    {data.suggested.confidence}
+                  </span>
+                </div>
+                {(
+                  [
+                    ['sumble_relationship', 'Sumble relationships'],
+                    ['research_reportsTo', 'research reporting lines'],
+                    ['title_inference', 'inferred from titles'],
+                    ['llm', 'moved by guidance'],
+                  ] as const
+                ).map(([kind, label]) =>
+                  data.suggested?.evidenceCounts[kind] ? (
+                    <div key={kind} className="flex justify-between gap-2 py-0.5">
+                      <span>{label}</span>
+                      <span className="font-semibold text-slate-800">
+                        {data.suggested.evidenceCounts[kind]}
+                      </span>
+                    </div>
+                  ) : null
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
       <div className="mt-1.5 h-px w-full bg-slate-200" />

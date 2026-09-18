@@ -120,6 +120,64 @@ export interface MapState {
   people: Person[];
   edges: MapEdge[];
   meta: MapMeta;
+  groups?: MapGroup[];
+}
+
+export interface MapGroup {
+  id: string;
+  name: string;
+  parentGroupId: string | null;
+  function?: string | null;
+}
+
+export type EvidenceKind =
+  | 'sumble_relationship'
+  | 'research_reportsTo'
+  | 'title_inference'
+  | 'llm';
+
+export interface SuggestedGroup {
+  id: string;
+  name: string;
+  parentGroupId: string | null;
+  function: Fn | null;
+  confidence: Confidence;
+}
+
+export interface SuggestedPerson {
+  rosterId: string;
+  name: string;
+  title: string;
+  function: Fn;
+  seniority: Seniority;
+  groupId: string;
+  reportsToRosterId: string | null;
+  reportsToPersonId: string | null;
+  confidence: Confidence;
+  evidence: {
+    kind: EvidenceKind;
+    sourceUrl?: string;
+    note?: string;
+  };
+}
+
+export interface ChartSuggestion {
+  groups: SuggestedGroup[];
+  people: SuggestedPerson[];
+  stats: {
+    candidates: number;
+    suggested: number;
+    withEvidenceEdges: number;
+  };
+}
+
+export interface SuggestChartRequest {
+  functions?: Fn[];
+  minSeniority?: Seniority;
+  limit?: number;
+  personasOnly?: boolean;
+  guidance?: string;
+  excludeRosterIds?: string[];
 }
 
 export interface SessionUser {

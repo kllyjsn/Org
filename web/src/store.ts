@@ -1,12 +1,25 @@
 import { create } from 'zustand';
 import { api } from './api';
 import type {
+  ChartSuggestion,
   MapCoverage,
   Persona,
   PersonaInput,
   SessionUser,
+  SuggestChartRequest,
   Workspace,
 } from './types';
+
+export interface SuggestChartState {
+  mapId: string | null;
+  suggestion: ChartSuggestion | null;
+  params: SuggestChartRequest;
+  confirmed: Set<string>;
+  declined: Set<string>;
+  generating: boolean;
+  applying: boolean;
+  error: string | null;
+}
 
 interface SessionState {
   user: SessionUser | null;
@@ -38,6 +51,25 @@ interface SessionState {
   loadCoverage: (mapId: string) => Promise<void>;
   /** Debounced refetch; call after every map save. */
   scheduleCoverage: (mapId: string) => void;
+  suggestChart: SuggestChartState;
+  setSuggestion: (
+    mapId: string,
+    suggestion: ChartSuggestion,
+    params: SuggestChartRequest
+  ) => void;
+  mergeRefined: (
+    suggestion: ChartSuggestion,
+    params: SuggestChartRequest
+  ) => void;
+  confirm: (rosterId: string) => void;
+  unconfirm: (rosterId: string) => void;
+  decline: (rosterId: string) => void;
+  confirmAll: () => void;
+  confirmHighOnly: () => void;
+  clearSuggestion: () => void;
+  setSuggestionStatus: (
+    status: Partial<Pick<SuggestChartState, 'generating' | 'applying' | 'error'>>
+  ) => void;
 }
 
 const COVERAGE_DEBOUNCE_MS = 800;
@@ -147,6 +179,129 @@ export const useSession = create<SessionState>((set, get) => ({
       void get().loadCoverage(mapId);
     }, COVERAGE_DEBOUNCE_MS);
   },
+
+  suggestChart: {
+    mapId: null,
+    suggestion: null,
+    params: {},
+    confirmed: new Set(),
+    declined: new Set(),
+    generating: false,
+    applying: false,
+    error: null,
+  },
+  setSuggestion: (mapId, suggestion, params) => {
+    set({
+      suggestChart: {
+        mapId,
+        suggestion,
+        params,
+        confirmed: new Set(),
+        declined: new Set(),
+        generating: false,
+        applying: false,
+        error: null,
+      },
+    });
+  },
+  mergeRefined: (suggestion, params) => {
+    set((state) => {
+      const previous = state.suggestChart.suggestion;
+      const confirmed = new Set(state.suggestChart.confirmed);
+      const declined = new Set(state.suggestChart.declined);
+      if (previous) {
+        const nextIds = new Set(suggestion.people.map((person) => person.rosterId));
+        const retained = previous.people.filter(
+          (person) =>
+            confirmed.has(person.rosterId) &&
+            !declined.has(person.rosterId) &&
+            !nextIds.has(person.rosterId)
+        );
+        if (retained.length > 0) {
+          suggestion = {
+            ...suggestion,
+            people: [...suggestion.people, ...retained],
+            stats: {
+              ...suggestion.stats,
+              suggested: suggestion.people.length + retained.length,
+            },
+          };
+        }
+      }
+      return {
+        suggestChart: {
+          ...state.suggestChart,
+          suggestion,
+          params,
+          generating: false,
+          error: null,
+        },
+      };
+    });
+  },
+  confirm: (rosterId) =>
+    set((state) => {
+      const confirmed = new Set(state.suggestChart.confirmed);
+      confirmed.add(rosterId);
+      return { suggestChart: { ...state.suggestChart, confirmed } };
+    }),
+  unconfirm: (rosterId) =>
+    set((state) => {
+      const confirmed = new Set(state.suggestChart.confirmed);
+      confirmed.delete(rosterId);
+      return { suggestChart: { ...state.suggestChart, confirmed } };
+    }),
+  decline: (rosterId) =>
+    set((state) => {
+      const declined = new Set(state.suggestChart.declined);
+      declined.add(rosterId);
+      const confirmed = new Set(state.suggestChart.confirmed);
+      confirmed.delete(rosterId);
+      return { suggestChart: { ...state.suggestChart, declined, confirmed } };
+    }),
+  confirmAll: () =>
+    set((state) => {
+      const confirmed = new Set(state.suggestChart.confirmed);
+      for (const person of state.suggestChart.suggestion?.people ?? []) {
+        if (!state.suggestChart.declined.has(person.rosterId)) {
+          confirmed.add(person.rosterId);
+        }
+      }
+      return { suggestChart: { ...state.suggestChart, confirmed } };
+    }),
+  confirmHighOnly: () =>
+    set((state) => ({
+      suggestChart: {
+        ...state.suggestChart,
+        confirmed: new Set(
+          (state.suggestChart.suggestion?.people ?? [])
+            .filter(
+              (person) =>
+                person.confidence === 'high' &&
+                !state.suggestChart.declined.has(person.rosterId)
+            )
+            .map((person) => person.rosterId)
+        ),
+      },
+    })),
+  clearSuggestion: () =>
+    set((state) => ({
+      suggestChart: {
+        ...state.suggestChart,
+        mapId: null,
+        suggestion: null,
+        params: {},
+        confirmed: new Set(),
+        declined: new Set(),
+        generating: false,
+        applying: false,
+        error: null,
+      },
+    })),
+  setSuggestionStatus: (status) =>
+    set((state) => ({
+      suggestChart: { ...state.suggestChart, ...status },
+    })),
 
   refreshWorkspaces: async () => {
     const { workspaces } = await api.me();

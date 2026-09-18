@@ -10,6 +10,7 @@ import type {
   MapChangeAlert,
   MapComment,
   MapCoverage,
+  ChartSuggestion,
   Persona,
   PersonaInput,
   MapListItem,
@@ -19,6 +20,9 @@ import type {
   ProductEventName,
   ProductValueSummary,
   Confidence,
+  SuggestedGroup,
+  SuggestedPerson,
+  SuggestChartRequest,
   ResearchEvent,
   ResearchJob,
   ResearchResult,
@@ -498,6 +502,38 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ids }),
     }),
+  suggestChart: (mapId: string, body: SuggestChartRequest) =>
+    req<{ suggestion: ChartSuggestion; tookMs: number }>(
+      `/api/maps/${mapId}/suggest-chart`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }
+    ),
+  applyChartSuggestion: (
+    mapId: string,
+    body: {
+      accept: {
+        groups: SuggestedGroup[];
+        people: Pick<
+          SuggestedPerson,
+          | 'rosterId'
+          | 'groupId'
+          | 'reportsToRosterId'
+          | 'reportsToPersonId'
+          | 'confidence'
+        >[];
+      };
+      decline: { rosterIds: string[] };
+    }
+  ) =>
+    req<{ map: LoadedMap; added: number; declined: number }>(
+      `/api/maps/${mapId}/suggest-chart/apply`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }
+    ),
   importRoster: (
     mapId: string,
     body: { csv: string } | { linkedinUrls: string[] }
