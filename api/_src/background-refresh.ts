@@ -1,10 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { query, now } from './db.js';
-import {
-  canonicalPersonName,
-  researchOrg,
-  type ResearchResult,
-} from './research.js';
+import { matchPerson } from './identity.js';
+import { researchOrg, type ResearchResult } from './research.js';
 import type { MapRow, MapState, Person, SellerProfile } from './types.js';
 
 function nextRefreshAt(cadence: MapState['meta']['refreshCadence']): string {
@@ -37,12 +34,9 @@ export function mergeBackgroundResearch(
   result: ResearchResult
 ): MapState {
   const people = (state.people ?? []).map((person) => ({ ...person }));
-  const byName = new Map(
-    people.map((person, index) => [
-      canonicalPersonName(person.name ?? ''),
-      index,
-    ])
-  );
+  // Identity keys (LinkedIn → email → canonical name) survive renames;
+  // each existing person is claimed by at most one researched row.
+  const matchedIds = new Set<string>();
   const maxY =
     people.length > 0 ? Math.max(...people.map((person) => person.y ?? 0)) : 0;
   const minX =
@@ -50,13 +44,17 @@ export function mergeBackgroundResearch(
   let added = 0;
 
   for (const researched of result.people) {
-    const index = byName.get(canonicalPersonName(researched.name));
-    if (index !== undefined) {
-      const existing = people[index];
+    const match = matchPerson(
+      researched,
+      people.filter((person) => !matchedIds.has(person.id))
+    );
+    if (match) {
+      matchedIds.add(match.id);
+      const existing = match;
       const evidence = mergedSources(existing, researched);
       const titleChanged =
         (existing.title ?? '').trim().toLowerCase() !== (researched.title ?? '').trim().toLowerCase();
-      people[index] = {
+      Object.assign(existing, {
         ...existing,
         // Background research may only replace a user's title when direct
         // source inspection verified the new claim.
@@ -92,7 +90,7 @@ export function mergeBackgroundResearch(
           titleChanged && researched.researchStatus !== 'verified'
             ? 'conflicting'
             : researched.researchStatus,
-      };
+      });
       continue;
     }
 
@@ -119,7 +117,6 @@ export function mergeBackgroundResearch(
       x: minX + (added % 3) * 280,
       y: maxY + 240 + Math.floor(added / 3) * 180,
     };
-    byName.set(canonicalPersonName(person.name), people.length);
     people.push(person);
     added += 1;
   }

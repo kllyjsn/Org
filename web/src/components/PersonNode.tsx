@@ -3,6 +3,7 @@ import { Handle, NodeResizer, Position } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import { BookOpen, StickyNote } from 'lucide-react';
 import { deptColor, initials, ROLE_META } from '../lib/colors';
+import { evidenceScore } from '../lib/researchQuality';
 import type { Person } from '../types';
 
 export interface PersonNodeData {
@@ -18,6 +19,11 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
     p.researchStatus === 'conflicting' ||
     p.researchStatus === 'possibly_stale' ||
     p.freshness === 'stale';
+  const touchMs = p.lastTouchAt ? Date.parse(p.lastTouchAt) : Number.NaN;
+  const staleTouch =
+    Number.isFinite(touchMs) &&
+    Date.now() - touchMs > 30 * 86_400_000 &&
+    ['champion', 'economic_buyer', 'decision_maker'].includes(p.role ?? 'none');
 
   return (
     <div
@@ -70,6 +76,12 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
             >
               <span className={`h-1.5 w-1.5 rounded-full ${role.dot}`} />
               {role.label}
+              {staleTouch && (
+                <span
+                  title="No touch in 30+ days"
+                  className="ml-0.5 h-1.5 w-1.5 rounded-full bg-amber-400"
+                />
+              )}
             </span>
           )}
           {p.metWith && (
@@ -104,9 +116,24 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
             </span>
           )}
           {(p.sources ?? []).length > 0 && !needsReview && !unverified && (
-            <span className="ml-auto flex items-center gap-1 text-[9px] font-medium text-slate-400">
-              <BookOpen size={10} aria-hidden="true" /> {(p.sources ?? []).length}
-            </span>
+            (() => {
+              const evidence = evidenceScore(p);
+              const tone =
+                evidence.band === 'strong'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : evidence.band === 'moderate'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-rose-50 text-rose-700';
+              return (
+                <span
+                  title={evidence.reasons.join(' · ')}
+                  className={`ml-auto flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${tone}`}
+                >
+                  <BookOpen size={10} aria-hidden="true" />
+                  Evidence {evidence.score}
+                </span>
+              );
+            })()
           )}
         </div>
       )}

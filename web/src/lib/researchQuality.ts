@@ -1,4 +1,4 @@
-import type { ResearchSource } from '../types';
+import type { Person, ResearchSource } from '../types';
 
 // Public suffixes where the meaningful publisher boundary sits one level up.
 const MULTI_PART_SUFFIXES = new Set([
@@ -132,4 +132,91 @@ export function canonicalPersonName(name: string): string {
   const first = FIRST_NAME_ALIASES[parts[0] ?? ''];
   if (first) parts[0] = first;
   return parts.join(' ');
+}
+
+export type EvidenceBand = 'strong' | 'moderate' | 'weak';
+
+/**
+ * 0–100 evidence score for one person: how well public sources back the
+ * current claim. Corroboration dominates, then freshness, research status,
+ * confidence, and whether any source is official.
+ */
+export function evidenceScore(
+  person: Person,
+  nowMs = Date.now()
+): { score: number; band: EvidenceBand; reasons: string[] } {
+  const sourceDetails = person.sourceDetails ?? [];
+  const corroboration =
+    person.corroborationCount ?? corroborationCount(sourceDetails);
+  const sourceCount = (person.sources ?? []).length + sourceDetails.length;
+  if (sourceCount === 0 && corroboration === 0) {
+    return { score: 0, band: 'weak', reasons: ['No public evidence'] };
+  }
+
+  const reasons: string[] = [];
+  let score =
+    corroboration >= 3
+      ? 75
+      : corroboration === 2
+        ? 60
+        : corroboration === 1
+          ? 40
+          : 10;
+  if (corroboration >= 2) {
+    reasons.push(`${corroboration} independent sources`);
+  } else if (corroboration === 1) {
+    reasons.push('Single source');
+  } else {
+    reasons.push('No independent corroboration');
+  }
+
+  const freshness =
+    person.freshness ?? evidenceFreshness(sourceDetails, nowMs);
+  if (freshness === 'fresh') {
+    score += 15;
+    reasons.push('Recent evidence');
+  } else if (freshness === 'aging') {
+    score += 5;
+    reasons.push('Aging evidence');
+  } else if (freshness === 'stale') {
+    score -= 15;
+    reasons.push('Stale evidence');
+  } else {
+    reasons.push('No dated evidence');
+  }
+
+  if (person.researchStatus === 'verified') {
+    score += 10;
+    reasons.push('Verified against sources');
+  } else if (person.researchStatus === 'possibly_stale') {
+    score -= 10;
+    reasons.push('May be stale');
+  } else if (person.researchStatus === 'conflicting') {
+    score -= 25;
+    reasons.push('Titles conflict across sources');
+  }
+
+  if (person.confidence === 'high') {
+    score += 5;
+    reasons.push('High confidence');
+  } else if (person.confidence === 'low') {
+    score -= 10;
+    reasons.push('Low confidence');
+  }
+
+  if (
+    sourceDetails.some(
+      (source) => source.sourceType === 'official' || source.sourceType === 'filing'
+    )
+  ) {
+    score += 10;
+    reasons.push('Official source');
+  }
+
+  score = Math.max(0, Math.min(100, score));
+  return {
+    score,
+    band: score >= 70 ? 'strong' : score >= 40 ? 'moderate' : 'weak',
+    reasons,
+  };
 }

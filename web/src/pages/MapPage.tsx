@@ -36,31 +36,13 @@ import { AnimatePresence } from 'framer-motion';
 import {
   AlignHorizontalDistributeCenter,
   AlignStartHorizontal,
-  ArrowLeft,
-  BellRing,
-  Compass,
   Copy,
-  Download,
-  FileUp,
-  History,
-  LayoutGrid,
+  Group,
   Lightbulb,
   Loader2,
-  Radar,
-  Redo2,
   Search,
-  Share2,
   Sparkles,
   Ungroup,
-  Undo2,
-  Waypoints,
-  Group,
-  Handshake,
-  MessageSquare,
-  Network,
-  Rows3,
-  UserCheck,
-  UserPlus,
 } from 'lucide-react';
 import { api } from '../api';
 import { useSession } from '../store';
@@ -90,7 +72,7 @@ import MoreNode from '../components/MoreNode';
 import type { MoreNodeData } from '../components/MoreNode';
 import PersonPanel from '../components/PersonPanel';
 import MeetingsImportModal from '../components/MeetingsImportModal';
-import RailButton, { RailSeparator } from '../components/RailButton';
+import MapRail from '../components/MapRail';
 import RosterView from '../components/RosterView';
 import ShareModal from '../components/ShareModal';
 import {
@@ -111,6 +93,7 @@ import {
   evidenceFreshness,
   canonicalPersonName,
 } from '../lib/researchQuality';
+import { matchPerson } from '../lib/identity';
 import type {
   AccountAgentAction,
   AccountAgentMessage,
@@ -1048,6 +1031,22 @@ function MapInner() {
     [nodes, rf, setNodes, laneOf]
   );
 
+  // Server-applied verification result: replace the person in place
+  // without an undo entry (it isn't a local edit) or a dirty flag (the
+  // route already persisted the state).
+  const applyVerifiedPerson = useCallback(
+    (verified: Person) => {
+      const next = nodesRef.current.map((node) =>
+        node.id === verified.id
+          ? { ...node, data: { ...node.data, person: verified } }
+          : node
+      );
+      nodesRef.current = next;
+      setNodes(next);
+    },
+    [setNodes]
+  );
+
   const deletePerson = useCallback(
     (personId: string) => {
       recordHistory();
@@ -1950,15 +1949,15 @@ function MapInner() {
           'url'
         );
         const notes = pick(row, 'notes', 'note', 'comments', 'description');
-        const matchIndex = next.findIndex((node) => {
-          const person = node.data.person;
-          return (
-            (!!email &&
-              !!person.email &&
-              person.email.toLowerCase() === email.toLowerCase()) ||
-            (!!name && person.name.toLowerCase() === name.toLowerCase())
-          );
-        });
+        // Identity keys: LinkedIn > email > canonical name, so a renamed
+        // contact still enriches their existing card.
+        const matched = matchPerson(
+          { name: name || email, email: email || null, linkedin: linkedin || null },
+          next.map((node) => node.data.person)
+        );
+        const matchIndex = matched
+          ? next.findIndex((node) => node.data.person === matched)
+          : -1;
         const enrichment = {
           ...(title ? { title } : {}),
           ...(department ? { department } : {}),
@@ -2316,152 +2315,38 @@ function MapInner() {
 
   return (
     <div className="flex h-full overflow-hidden bg-[#f6f7f2]">
-      <nav
-        aria-label="Map tools"
-        className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-[#101828] py-2 sm:w-56 sm:items-stretch sm:px-3"
-      >
-        <Link
-          to="/app"
-          title="Back to accounts"
-          aria-label="Back to accounts"
-          className="flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-white sm:h-9 sm:w-full sm:justify-start sm:px-3"
-        >
-          <ArrowLeft size={17} className="shrink-0" />
-          <span className="hidden truncate text-[13px] font-medium sm:block">
-            Accounts
-          </span>
-        </Link>
-        <RailSeparator />
-        <RailButton
-          icon={<Waypoints size={16} />}
-          label="Canvas"
-          active={viewMode === 'canvas'}
-          onClick={() => setViewMode('canvas')}
-        />
-        <RailButton
-          icon={<Rows3 size={16} />}
-          label="Roster"
-          active={viewMode === 'roster'}
-          onClick={() => setViewMode('roster')}
-        />
-        {!readOnly && (
-          <>
-            <RailSeparator />
-            <RailButton
-              icon={<Sparkles size={16} />}
-              label="Deep research"
-              onClick={() => {
-                setDeepResearchFocus('');
-                setShowDeepResearch(true);
-              }}
-            />
-            <RailButton
-              icon={<Radar size={16} />}
-              label="Briefing"
-              onClick={() => {
-                setBriefingEntry('toolbar');
-                setShowBriefing(true);
-              }}
-            />
-            <RailButton
-              icon={<Compass size={16} />}
-              label="Strategy"
-              onClick={() => setShowStrategy(true)}
-            />
-            <RailButton
-              icon={<UserCheck size={16} />}
-              label="Meetings"
-              onClick={() => setShowMeetings(true)}
-            />
-            <RailSeparator />
-            <RailButton
-              icon={<Undo2 size={16} />}
-              label="Undo"
-              onClick={undo}
-              disabled={past.length === 0}
-            />
-            <RailButton
-              icon={<Redo2 size={16} />}
-              label="Redo"
-              onClick={redo}
-              disabled={future.length === 0}
-            />
-            <RailButton
-              icon={<UserPlus size={16} />}
-              label="Add person"
-              onClick={() => addPerson()}
-            />
-            <RailButton
-              icon={<LayoutGrid size={16} />}
-              label="Arrange by department"
-              active={laneGrouping === 'department'}
-              onClick={() => autoLayout('department')}
-            />
-            <RailButton
-              icon={<Network size={16} />}
-              label="Arrange by team"
-              active={laneGrouping === 'team'}
-              onClick={() => autoLayout('team')}
-            />
-            <RailButton
-              icon={<Handshake size={16} />}
-              label="Met vs unmet by team"
-              active={laneGrouping === 'met'}
-              onClick={() => autoLayout('met')}
-            />
-            <RailButton
-              icon={<FileUp size={16} />}
-              label="Import CRM"
-              onClick={() => crmInput.current?.click()}
-            />
-            <input
-              ref={crmInput}
-              type="file"
-              accept=".csv,text/csv"
-              aria-label="Import CRM CSV"
-              className="hidden"
-              onChange={(event) => void importCrmCsv(event)}
-            />
-            <RailButton
-              icon={<History size={16} />}
-              label="History"
-              onClick={openHistory}
-            />
-            <RailButton
-              icon={<BellRing size={16} />}
-              label="Changes"
-              onClick={() => setShowChanges(true)}
-            />
-            {(meta?.initiatives?.length ?? 0) > 0 && (
-              <RailButton
-                icon={<Lightbulb size={16} />}
-                label="Initiatives"
-                onClick={() => setShowInitiatives(true)}
-              />
-            )}
-          </>
-        )}
-        <RailSeparator />
-        <RailButton
-          icon={<Download size={16} />}
-          label="Export PNG"
-          onClick={() => void exportPng()}
-        />
-        <RailButton
-          icon={<MessageSquare size={16} />}
-          label="Send feedback"
-          onClick={() => setShowFeedback(true)}
-        />
-        <div className="flex-1" />
-        {!readOnly && (
-          <RailButton
-            icon={<Share2 size={16} />}
-            label="Share"
-            accent
-            onClick={() => setShowShare(true)}
-          />
-        )}
-      </nav>
+      <MapRail
+        viewMode={viewMode}
+        onViewMode={setViewMode}
+        readOnly={readOnly}
+        onDeepResearch={() => {
+          setDeepResearchFocus('');
+          setShowDeepResearch(true);
+        }}
+        onBriefing={() => {
+          setBriefingEntry('toolbar');
+          setShowBriefing(true);
+        }}
+        onStrategy={() => setShowStrategy(true)}
+        onMeetings={() => setShowMeetings(true)}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={past.length > 0}
+        canRedo={future.length > 0}
+        onAddPerson={() => addPerson()}
+        laneGrouping={laneGrouping}
+        onAutoLayout={autoLayout}
+        onImportCrm={() => crmInput.current?.click()}
+        crmInputRef={crmInput}
+        onCrmFile={(event) => void importCrmCsv(event)}
+        onHistory={openHistory}
+        onChanges={() => setShowChanges(true)}
+        hasInitiatives={(meta?.initiatives?.length ?? 0) > 0}
+        onInitiatives={() => setShowInitiatives(true)}
+        onExportPng={() => void exportPng()}
+        onFeedback={() => setShowFeedback(true)}
+        onShare={() => setShowShare(true)}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 py-2 backdrop-blur sm:gap-3 sm:px-4">
@@ -2854,6 +2739,7 @@ function MapInner() {
               initiatives={meta?.initiatives}
               readOnly={readOnly}
               onChange={updatePerson}
+              onVerify={applyVerifiedPerson}
               onSetManager={setManager}
               onAddInfluence={addInfluence}
               onDelete={deletePerson}

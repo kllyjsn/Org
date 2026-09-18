@@ -6,6 +6,8 @@ import type {
   FeedbackCategory,
   FeedbackItem,
   FeedbackStatus,
+  IntegrationStatus,
+  IntegrationSyncResult,
   LoadedMap,
   MapChangeAlert,
   MapComment,
@@ -13,6 +15,7 @@ import type {
   MapPresence,
   MapState,
   MapVersion,
+  Person,
   ProductEventName,
   ProductValueSummary,
   ResearchEvent,
@@ -103,6 +106,22 @@ export const api = {
         body: JSON.stringify({ profile }),
       }
     ),
+
+  listIntegrations: (workspaceId: string) =>
+    req<{ providers: IntegrationStatus[] }>(
+      `/api/workspaces/${workspaceId}/integrations`
+    ),
+  connectIntegration: (workspaceId: string, provider: string) =>
+    req<{ url: string }>(
+      `/api/workspaces/${workspaceId}/integrations/${provider}/connect`,
+      { method: 'POST' }
+    ),
+  syncIntegration: (id: string) =>
+    req<IntegrationSyncResult>(`/api/integrations/${id}/sync`, {
+      method: 'POST',
+    }),
+  disconnectIntegration: (id: string) =>
+    req<{ ok: true }>(`/api/integrations/${id}`, { method: 'DELETE' }),
 
   sendFeedback: (input: {
     category: FeedbackCategory;
@@ -291,6 +310,10 @@ export const api = {
     }),
   deleteMap: (id: string) =>
     req<{ ok: true }>(`/api/maps/${id}`, { method: 'DELETE' }),
+  verifyPerson: (mapId: string, personId: string) =>
+    req<{ person: Person }>(`/api/maps/${mapId}/people/${personId}/verify`, {
+      method: 'POST',
+    }),
   setLiveOpportunity: (id: string, live: boolean) =>
     req<{ live: boolean }>(`/api/maps/${id}/opportunity`, {
       method: 'POST',

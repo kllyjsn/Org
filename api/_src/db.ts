@@ -139,6 +139,38 @@ CREATE TABLE IF NOT EXISTS research_jobs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS integrations (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('google','microsoft')),
+  account_email TEXT,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT,
+  expires_at TEXT,
+  scopes TEXT,
+  status TEXT NOT NULL DEFAULT 'connected' CHECK (status IN ('connected','error','revoked')),
+  last_error TEXT,
+  last_synced_at TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(workspace_id, user_id, provider)
+);
+CREATE TABLE IF NOT EXISTS touchpoints (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  person_id TEXT NOT NULL,
+  integration_id TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('meeting','email')),
+  external_id TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  subject TEXT,
+  participants JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TEXT NOT NULL,
+  UNIQUE(integration_id, external_id, person_id)
+);
+CREATE INDEX IF NOT EXISTS idx_touchpoints_map ON touchpoints(map_id);
+CREATE INDEX IF NOT EXISTS idx_integrations_workspace ON integrations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
 CREATE INDEX IF NOT EXISTS research_jobs_status_idx
   ON research_jobs (status, created_at);
