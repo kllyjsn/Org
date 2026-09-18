@@ -129,37 +129,38 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
               <BookOpen size={10} aria-hidden="true" /> {(p.sources ?? []).length}
             </span>
           )}
-          {suggestion && (
-            <div className="ml-auto flex items-center gap-1">
-              <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${confidenceChip}`}>
-                {suggestion.confidence[0].toUpperCase() + suggestion.confidence.slice(1)}
-              </span>
-              <button
-                type="button"
-                aria-label="Confirm suggestion"
-                title="Confirm suggestion"
-                className="nodrag nopan flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-50 px-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100 sm:min-h-8 sm:min-w-8"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  suggestion.onConfirm();
-                }}
-              >
-                ✓
-              </button>
-              <button
-                type="button"
-                aria-label="Decline suggestion"
-                title="Decline suggestion"
-                className="nodrag nopan flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-red-50 px-2 text-sm font-bold text-red-600 hover:bg-red-100 sm:min-h-8 sm:min-w-8"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  suggestion.onDecline();
-                }}
-              >
-                ✕
-              </button>
-            </div>
-          )}
+        </div>
+      )}
+      {suggestion && (
+        <div className="mt-2 flex items-center gap-1 pl-1">
+          <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${confidenceChip}`}>
+            {suggestion.confidence[0].toUpperCase() + suggestion.confidence.slice(1)}
+          </span>
+          <span className="flex-1" />
+          <button
+            type="button"
+            aria-label="Confirm suggestion"
+            title="Confirm suggestion"
+            className="nodrag nopan flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-50 px-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100 sm:min-h-8 sm:min-w-8"
+            onClick={(event) => {
+              event.stopPropagation();
+              suggestion.onConfirm();
+            }}
+          >
+            ✓
+          </button>
+          <button
+            type="button"
+            aria-label="Decline suggestion"
+            title="Decline suggestion"
+            className="nodrag nopan flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-red-50 px-2 text-sm font-bold text-red-600 hover:bg-red-100 sm:min-h-8 sm:min-w-8"
+            onClick={(event) => {
+              event.stopPropagation();
+              suggestion.onDecline();
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
       <Handle type="source" position={Position.Bottom} className="!bg-slate-400" />

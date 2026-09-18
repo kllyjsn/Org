@@ -175,6 +175,7 @@ const COMMITTEE_ROLES: BuyingRole[] = [
 
 // Tighter column spacing on phones so two lanes fit the viewport.
 const MOBILE_COL_GAP = 270;
+const GHOST_NODE_H = 148;
 
 const MemoMiniMap = memo(MiniMap);
 
@@ -908,9 +909,9 @@ function MapInner() {
         selectable: false,
         connectable: false,
         deletable: false,
-        style: { width: 250, height: 96 },
+        style: { width: 250, height: GHOST_NODE_H },
         width: 250,
-        height: 96,
+        height: GHOST_NODE_H,
       };
       ghostNodeCache.current.set(key, node);
       return [node];
