@@ -63,7 +63,7 @@ export interface RosterPerson {
   linkedin: string | null;
   email: string | null;
   manager_key: string | null;
-  source: 'sumble' | 'crustdata' | 'csv' | 'linkedin_url' | 'research';
+  source: 'sumble' | 'csv' | 'linkedin_url' | 'research';
   source_url: string | null;
   confidence: Confidence;
   status: 'suggested' | 'added' | 'dismissed';

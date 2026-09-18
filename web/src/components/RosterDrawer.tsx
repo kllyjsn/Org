@@ -98,12 +98,10 @@ const FUNCTION_LABELS: Record<RosterFn, string> = {
 
 const PROVIDER_LABELS: Record<string, string> = {
   sumble: 'Sumble',
-  crustdata: 'Crustdata',
 };
 
 const SOURCE_LABELS: Record<RosterPerson['source'], string> = {
   sumble: 'Sumble',
-  crustdata: 'Crustdata',
   csv: 'CSV',
   linkedin_url: 'LinkedIn URL',
   research: 'Research',
@@ -561,7 +559,7 @@ export default function RosterDrawer({
                 ? `Configured: ${response.providers
                     .map((provider) => PROVIDER_LABELS[provider] ?? provider)
                     .join(', ')}`
-                : 'No providers configured — set SUMBLE_API_KEY or CRUSTDATA_API_KEY, or import a CSV / LinkedIn URLs below'}
+                : 'No providers configured — set SUMBLE_API_KEY, or import a CSV / LinkedIn URLs below'}
             </p>
           </div>
         )}

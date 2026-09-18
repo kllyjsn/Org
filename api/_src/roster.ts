@@ -3,7 +3,7 @@ import { canonicalPersonName } from './research.js';
 import { classifyTitle, SENIORITY_ORDER, seniorityFromLevel, type Fn } from './classify.js';
 import { now, query } from './db.js';
 
-export type RosterSource = 'sumble' | 'crustdata' | 'csv' | 'linkedin_url' | 'research';
+export type RosterSource = 'sumble' | 'csv' | 'linkedin_url' | 'research';
 export type RosterStatus = 'suggested' | 'added' | 'dismissed';
 export interface RosterPersonRow {
   id: string;
@@ -70,7 +70,7 @@ export function mergeRosterRows(
   const seniority =
     seniorityFromLevel(incoming.jobLevel) ?? titleClassification.seniority;
   const fn = classification.function as Fn;
-  const bulk = incoming.source === 'sumble' || incoming.source === 'crustdata';
+  const bulk = incoming.source === 'sumble';
   const source =
     existing &&
     (existing.source === 'linkedin_url' || existing.source === 'csv') &&

@@ -115,7 +115,7 @@ export async function runRosterSync(jobId: string) {
             : candidate.managerName
               ? canonicalPersonName(candidate.managerName)
               : null,
-          source: provider.id,
+          source: 'sumble',
           sourceUrl: candidate.sourceUrl,
           confidence: 'medium',
           raw: candidate.raw,
