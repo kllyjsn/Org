@@ -20,6 +20,11 @@ export function registerSystemRoutes(app: App): void {
         `DELETE FROM research_jobs
          WHERE created_at::timestamptz < NOW() - INTERVAL '7 days'`
       );
+      // Retention sweep — used to run at every cold start; cron owns it now.
+      await query(
+        `DELETE FROM analytics_events
+         WHERE occurred_at::timestamptz < NOW() - INTERVAL '24 months'`
+      );
       return c.json(await refreshNextDueMap());
     } catch (error) {
       console.error('background refresh failed', error);
