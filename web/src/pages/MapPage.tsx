@@ -64,6 +64,7 @@ import {
   UserCheck,
   UserPlus,
   Users,
+  Wand2,
 } from 'lucide-react';
 import { api } from '../api';
 import { useSession } from '../store';
@@ -127,8 +128,10 @@ import type {
   AccountStrategyPlan,
   BriefingAction,
   BuyingRole,
+  ChartSuggestion,
   LoadedMap,
   MapEdge,
+  MapGroup,
   MapPresence,
   MapState,
   MapVersion,
@@ -137,6 +140,7 @@ import type {
   Person,
   ResearchResult,
 } from '../types';
+import SuggestChartPanel from '../components/SuggestChartPanel';
 
 /**
  * `org:persona-filter` — dispatched on `window` when a user clicks a persona
@@ -172,6 +176,7 @@ const COMMITTEE_ROLES: BuyingRole[] = [
 
 // Tighter column spacing on phones so two lanes fit the viewport.
 const MOBILE_COL_GAP = 270;
+const GHOST_NODE_H = 148;
 
 const MemoMiniMap = memo(MiniMap);
 
@@ -197,7 +202,8 @@ function toFlow(
 function toState(
   nodes: Node<PersonNodeData>[],
   edges: FlowEdge[],
-  meta: MapState['meta']
+  meta: MapState['meta'],
+  groups: MapGroup[]
 ): MapState {
   return {
     people: nodes.map((n) => ({
@@ -209,6 +215,7 @@ function toState(
     })),
     edges: edges.map(edgeToMap),
     meta,
+    ...(groups.length > 0 ? { groups } : {}),
   };
 }
 
@@ -274,6 +281,17 @@ function MapInner() {
   useDocumentTitle(`${mapName || 'Map'} — TopDown`);
   const [showMeetings, setShowMeetings] = useState(false);
   const [showRoster, setShowRoster] = useState(false);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const suggestChart = useSession((session) => session.suggestChart);
+  const confirmSuggestion = useSession((session) => session.confirm);
+  const declineSuggestion = useSession((session) => session.decline);
+  const confirmHighOnly = useSession((session) => session.confirmHighOnly);
+  const applySuggestion = useSession((session) => session.applySuggestion);
+  const clearSuggestion = useSession((session) => session.clearSuggestion);
+  const suggestionMapId = suggestChart.mapId;
+  const suggestion = suggestChart.suggestion;
+  const confirmedSuggestions = suggestChart.confirmed;
+  const declinedSuggestions = suggestChart.declined;
   const [rosterCounts, setRosterCounts] = useState<{
     suggested: number;
     added: number;
@@ -312,6 +330,7 @@ function MapInner() {
   const clipboard = useRef<CanvasSnapshot | null>(null);
   const crmInput = useRef<HTMLInputElement | null>(null);
   const metaRef = useRef<MapState['meta'] | null>(null);
+  const groupsRef = useRef<MapGroup[]>([]);
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   const remoteUpdatedAt = useRef('');
   const saveStateRef = useRef<SaveState>('saved');
@@ -398,6 +417,7 @@ function MapInner() {
     mapRequest
       .then(({ map }) => {
         const flow = toFlow(map.state, map.role === 'viewer');
+        groupsRef.current = map.state.groups ?? [];
         // Default view for accounts with meeting coverage: met/unmet lanes
         // segmented by team. Pure arrangement — nothing marked dirty.
         let anchorPeople = map.state.people ?? [];
@@ -516,6 +536,7 @@ function MapInner() {
           if (map.updated_at <= remoteUpdatedAt.current) return;
           remoteUpdatedAt.current = map.updated_at;
           const flow = toFlow(map.state, map.role === 'viewer');
+          groupsRef.current = map.state.groups ?? [];
           setMapName(map.name);
           setMeta(map.state.meta);
           nodesRef.current = flow.nodes;
@@ -544,6 +565,7 @@ function MapInner() {
       try {
         const restored = await api.restoreVersion(mapId, versionId);
         const flow = toFlow(restored.state, readOnly);
+        groupsRef.current = restored.state.groups ?? [];
         setMapName(restored.name);
         setMeta(restored.state.meta);
         nodesRef.current = flow.nodes;
@@ -573,7 +595,7 @@ function MapInner() {
       saveStateRef.current = 'saving';
       setSaveState('saving');
       api
-        .patchMap(mapId, { state: toState(ns, es, metaRef.current) })
+        .patchMap(mapId, { state: toState(ns, es, metaRef.current, groupsRef.current) })
         .then(({ updatedAt }) => {
           remoteUpdatedAt.current = updatedAt;
           saveStateRef.current = 'saved';
@@ -619,7 +641,8 @@ function MapInner() {
         state: toState(
           nodesRef.current,
           edgesRef.current,
-          metaRef.current
+          metaRef.current,
+          groupsRef.current
         ),
       });
       remoteUpdatedAt.current = updatedAt;
@@ -638,6 +661,7 @@ function MapInner() {
       setMapName(updatedMap.name);
       setDomain(updatedMap.domain);
       setMeta(updatedMap.state.meta);
+      groupsRef.current = updatedMap.state.groups ?? [];
       nodesRef.current = flow.nodes;
       edgesRef.current = flow.edges;
       setNodes(flow.nodes);
@@ -784,9 +808,171 @@ function MapInner() {
   const [committeeOpen, setCommitteeOpen] = useState(false);
   const [laneGrouping, setLaneGrouping] = useState<LaneGrouping>('department');
   const laneOf = useCallback(
-    (person: Person) => laneKey(person, laneGrouping),
+    (person: Person) =>
+      person.id.startsWith('ghost:')
+        ? person.department ?? 'Suggested'
+        : laneKey(person, laneGrouping),
     [laneGrouping]
   );
+
+  const ghostPeople = useMemo(
+    () =>
+      mapId && suggestionMapId === mapId && suggestion
+        ? suggestion.people.filter(
+            (person) => !declinedSuggestions.has(person.rosterId)
+          )
+        : [],
+    [declinedSuggestions, mapId, suggestion, suggestionMapId]
+  );
+  const ghostLaneLabelByGroupId = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const group of suggestion?.groups ?? []) {
+      labels.set(group.id, group.name);
+    }
+    return labels;
+  }, [suggestion]);
+  const realMaxY = useMemo(
+    () =>
+      nodes.length
+        ? Math.round(Math.max(...nodes.map((node) => node.position.y)) / 100) * 100
+        : 0,
+    [nodes]
+  );
+  const ghostNodeCache = useRef(
+    new Map<string, Node<PersonNodeData>>()
+  );
+  const ghostSuggestionRef = useRef<ChartSuggestion | null>(null);
+  const ghostNodes = useMemo(() => {
+    if (ghostSuggestionRef.current !== suggestion) {
+      ghostNodeCache.current.clear();
+      ghostSuggestionRef.current = suggestion;
+    }
+    if (ghostPeople.length === 0 || !suggestion) return [];
+    const ghostPersons: Person[] = ghostPeople.map((person) => ({
+      id: `ghost:${person.rosterId}`,
+      name: person.name,
+      title: person.title,
+      department: `Suggested · ${
+        ghostLaneLabelByGroupId.get(person.groupId) ?? FN_LABELS[person.function]
+      }`,
+      team: null,
+      role: 'none',
+      confidence: person.confidence,
+      sources: person.evidence.sourceUrl ? [person.evidence.sourceUrl] : [],
+      notes: '',
+      email: null,
+      linkedin: null,
+      jobLevel:
+        person.seniority === 'c_level'
+          ? 'cxo'
+          : person.seniority === 'evp_svp'
+            ? 'evp'
+            : person.seniority,
+      groupId: person.groupId,
+      x: 0,
+      y: 0,
+    }));
+    const laid = applyLanes(
+      ghostPersons,
+      isMobile ? 2 : 4,
+      'department',
+      isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
+    );
+    const byId = new Map(
+      ghostPeople.map((person) => [`ghost:${person.rosterId}`, person])
+    );
+    const shiftY =
+      realMaxY + 200;
+    return laid.flatMap((person) => {
+      const source = byId.get(person.id);
+      if (!source) return [];
+      const x = person.x;
+      const y = person.y + shiftY;
+      const confirmed = confirmedSuggestions.has(source.rosterId);
+      const key = `${source.rosterId}:${x}:${y}:${confirmed}`;
+      const cached = ghostNodeCache.current.get(key);
+      if (cached) return [cached];
+      const node: Node<PersonNodeData> = {
+        id: person.id,
+        type: 'person',
+        position: { x, y },
+        data: {
+          person: { ...person, x, y },
+          readOnly: true,
+          suggested: {
+            confidence: source.confidence,
+            evidence: source.evidence,
+            confirmed,
+            onConfirm: () => confirmSuggestion(source.rosterId),
+            onDecline: () => declineSuggestion(source.rosterId),
+          },
+        },
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        deletable: false,
+        style: { width: 250, height: GHOST_NODE_H },
+        width: 250,
+        height: GHOST_NODE_H,
+      };
+      ghostNodeCache.current.set(key, node);
+      return [node];
+    });
+  }, [
+    confirmSuggestion,
+    declineSuggestion,
+    ghostPeople,
+    ghostLaneLabelByGroupId,
+    isMobile,
+    realMaxY,
+    suggestion,
+    confirmedSuggestions,
+  ]);
+
+  const ghostLaneEvidence = useMemo(() => {
+    const evidence = new Map<
+      string,
+      {
+        confidence: 'high' | 'medium' | 'low';
+        evidenceCounts: Record<string, number>;
+      }
+    >();
+    for (const person of ghostPeople) {
+      const lane = `Suggested · ${
+        ghostLaneLabelByGroupId.get(person.groupId) ?? FN_LABELS[person.function]
+      }`;
+      const current = evidence.get(lane) ?? {
+        confidence: 'low' as const,
+        evidenceCounts: {},
+      };
+      current.evidenceCounts[person.evidence.kind] =
+        (current.evidenceCounts[person.evidence.kind] ?? 0) + 1;
+      if (
+        person.confidence === 'high' ||
+        (person.confidence === 'medium' && current.confidence === 'low')
+      ) {
+        current.confidence = person.confidence;
+      }
+      evidence.set(lane, current);
+    }
+    return evidence;
+  }, [ghostLaneLabelByGroupId, ghostPeople]);
+  const fitSuggestionRef = useRef<ChartSuggestion | null>(null);
+  useEffect(() => {
+    if (
+      !suggestion ||
+      fitSuggestionRef.current === suggestion ||
+      ghostNodes.length === 0
+    ) {
+      return;
+    }
+    fitSuggestionRef.current = suggestion;
+    const timer = window.setTimeout(
+      () => void rf.fitView({ nodes: ghostNodes, padding: 0.2, duration: 450 }),
+      80
+    );
+    return () => window.clearTimeout(timer);
+  }, [ghostNodes, rf, suggestion]);
 
   const toggleLane = useCallback((lane: string) => {
     setExpandedLanes((prev) => {
@@ -805,14 +991,14 @@ function MapInner() {
 
   const laneItems = useMemo(
     () =>
-      nodes.map((n) => ({
+      [...nodes, ...ghostNodes].map((n) => ({
         id: n.id,
         x: n.position.x,
         y: n.position.y,
         person: n.data.person,
         dragging: n.dragging,
       })),
-    [nodes]
+    [ghostNodes, nodes]
   );
   const view = useMemo(
     () =>
@@ -851,6 +1037,9 @@ function MapInner() {
         shown: header.shown,
         expanded: header.expanded,
         onToggle: toggleLane,
+        ...(ghostLaneEvidence.has(header.lane)
+          ? { suggested: ghostLaneEvidence.get(header.lane) }
+          : {}),
       },
       draggable: false,
       selectable: false,
@@ -873,7 +1062,7 @@ function MapInner() {
       deletable: false,
       focusable: false,
     }));
-    const visibleNodes = nodes
+    const visibleNodes = [...nodes, ...ghostNodes]
       .filter((node) => view.visibleIds.has(node.id))
       .map((node) => {
         const person = node.data.person;
@@ -904,7 +1093,14 @@ function MapInner() {
       hiddenCount: view.hiddenCount,
       laneOrder: view.laneOrder,
     };
-  }, [nodes, view, isMobile, toggleLane]);
+  }, [
+    ghostNodes,
+    ghostLaneEvidence,
+    nodes,
+    view,
+    isMobile,
+    toggleLane,
+  ]);
 
   const displayNodes = laneView.nodes;
 
@@ -943,8 +1139,28 @@ function MapInner() {
   }, [displayNodes, rf]);
 
   const displayEdges = useMemo(() => {
-    const nameById = new Map(people.map((person) => [person.id, person.name]));
-    return edges.map((edge) => {
+    const nameById = new Map([
+      ...people.map((person) => [person.id, person.name] as const),
+      ...ghostPeople.map((person) => [`ghost:${person.rosterId}`, person.name] as const),
+    ]);
+    const displayedIds = new Set(
+      displayNodes.filter((node) => node.type === 'person').map((node) => node.id)
+    );
+    const ghostEdges = ghostPeople.flatMap((person) => {
+      const target = `ghost:${person.rosterId}`;
+      const manager = person.reportsToRosterId
+        ? `ghost:${person.reportsToRosterId}`
+        : person.reportsToPersonId;
+      if (!manager || !displayedIds.has(manager) || !displayedIds.has(target)) {
+        return [];
+      }
+      return [{
+        ...reportsEdge(manager, target, `ghost-edge:${person.rosterId}`, true),
+        style: { opacity: 0.6, stroke: '#c7d2fe', strokeDasharray: '5 4' },
+        selectable: false,
+      }];
+    });
+    return [...edges, ...ghostEdges].map((edge) => {
       const sourceName = nameById.get(edge.source) ?? edge.source;
       const targetName = nameById.get(edge.target) ?? edge.target;
       const ariaLabel =
@@ -953,7 +1169,7 @@ function MapInner() {
           : `${sourceName} influences ${targetName}${edge.data?.label ? ': ' + edge.data.label : ''}`;
       return { ...edge, ariaLabel };
     });
-  }, [edges, people]);
+  }, [displayNodes, edges, ghostPeople, people]);
 
   const knownSourceUrls = useMemo(() => {
     const urls = new Set<string>();
@@ -1384,6 +1600,65 @@ function MapInner() {
       isMobile,
     ]
   );
+
+  const handleSuggestedApplied = useCallback(
+    (updatedMap: LoadedMap) => {
+      const laid = applyLanes(
+        updatedMap.state.people,
+        isMobile ? 2 : 4,
+        laneGrouping,
+        isMobile ? MOBILE_COL_GAP : LANE_COL_GAP
+      );
+      const laidMap = {
+        ...updatedMap,
+        state: { ...updatedMap.state, people: laid },
+      };
+      handleRosterMapUpdated(laidMap);
+      setShowSuggest(false);
+      markDirty(nodesRef.current, edgesRef.current);
+      window.setTimeout(
+        () => void rf.fitView({ padding: 0.2, duration: 450 }),
+        80
+      );
+      if (mapId) {
+        void api
+          .getRoster(mapId, { pageSize: 1 })
+          .then(({ counts }) => setRosterCounts(counts))
+          .catch(() => undefined);
+      }
+    },
+    [
+      handleRosterMapUpdated,
+      isMobile,
+      laneGrouping,
+      markDirty,
+      mapId,
+      rf,
+    ]
+  );
+
+  useEffect(() => {
+    if (suggestChart.mapId && suggestChart.mapId !== mapId) {
+      clearSuggestion();
+    }
+  }, [clearSuggestion, mapId, suggestChart.mapId]);
+
+  useEffect(() => {
+    const hasGhosts =
+      suggestChart.mapId === mapId &&
+      Boolean(
+        suggestChart.suggestion?.people.some(
+          (person) => !suggestChart.declined.has(person.rosterId)
+        )
+      );
+    if (!hasGhosts) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [mapId, suggestChart]);
 
   const selectedNodes = useMemo(
     () => nodes.filter((node) => node.selected),
@@ -2736,12 +3011,22 @@ function MapInner() {
           active={showRoster}
           onClick={() => {
             setSelectedId(null);
+            setShowSuggest(false);
             setShowRoster((value) => !value);
           }}
         />
         {!readOnly && (
           <>
             <RailSeparator />
+            <RailButton
+              icon={<Wand2 size={16} />}
+              label="Suggest org chart"
+              active={showSuggest}
+              onClick={() => {
+                setShowRoster(false);
+                setShowSuggest((value) => !value);
+              }}
+            />
             <RailButton
               icon={<Sparkles size={16} />}
               label="Deep research"
@@ -3167,6 +3452,58 @@ function MapInner() {
           </div>
         )}
 
+        {ghostPeople.length > 0 && (
+          <div className={`pointer-events-auto absolute left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 whitespace-nowrap rounded-2xl border border-white/80 bg-white/95 px-3 py-1.5 text-xs text-slate-600 shadow-[0_10px_35px_rgba(15,23,42,.12)] backdrop-blur-xl ${isMobile ? 'bottom-20' : 'top-16'}`}>
+            <span className="font-semibold">{ghostPeople.length} suggested</span>
+            <button
+              type="button"
+              disabled={suggestChart.applying || !mapId}
+              onClick={() => {
+                if (!mapId) return;
+                void applySuggestion(mapId, 'all', flushPendingPersist).then(
+                  (result) => {
+                    if (result) handleSuggestedApplied(result.map);
+                  }
+                );
+              }}
+              className="font-semibold text-[#5144d7] disabled:opacity-40"
+            >
+              Confirm all
+            </button>
+            <button
+              type="button"
+              disabled={suggestChart.applying}
+              onClick={() => {
+                confirmHighOnly();
+                setShowSuggest(true);
+              }}
+              className="font-semibold text-[#5144d7] disabled:opacity-40"
+            >
+              High-confidence
+            </button>
+            <button
+              type="button"
+              disabled={suggestChart.applying || !mapId}
+              onClick={() => {
+                if (!mapId) return;
+                void applySuggestion(
+                  mapId,
+                  'declineAll',
+                  flushPendingPersist
+                ).then((result) => {
+                  if (result) handleSuggestedApplied(result.map);
+                });
+              }}
+              className="font-semibold text-red-600 disabled:opacity-40"
+            >
+              Decline all
+            </button>
+            <button type="button" onClick={() => setShowSuggest(true)} className="font-semibold text-slate-500">
+              Open panel
+            </button>
+          </div>
+        )}
+
         {/* density control — collapse/expand every lane at once */}
         {(laneView.hiddenCount > 0 || showAllLanes || collapsedLanes.size > 0 || expandedLanes.size > 0) && (
           <div className={`pointer-events-auto absolute left-1/2 z-10 -translate-x-1/2 ${!readOnly && selectedNodes.length > 1 ? 'bottom-16' : 'bottom-3'}`}>
@@ -3183,7 +3520,7 @@ function MapInner() {
                 <>Collapse lanes</>
               ) : (
                 <>
-                  Showing {laneView.shownCount} of {people.length}
+                  Showing {laneView.shownCount} of {people.length + ghostPeople.length}
                   <span className="text-[#5b4cf0]">Show all</span>
                 </>
               )}
@@ -3380,7 +3717,7 @@ function MapInner() {
           </div>
         )}
 
-        {people.length === 0 && (
+        {people.length === 0 && ghostPeople.length === 0 && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
             <div className="rounded-2xl border border-slate-200 bg-white/90 px-6 py-4 text-center text-sm text-slate-500 shadow-sm">
               This map is empty.
@@ -3389,6 +3726,16 @@ function MapInner() {
                   {' '}
                   Add people with <b>+ Person</b> or drag a connection between
                   nodes to build reporting lines.
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoster(false);
+                      setShowSuggest(true);
+                    }}
+                    className="pointer-events-auto mt-3 block w-full rounded-xl bg-[#5b4cf0] px-3 py-2 text-xs font-semibold text-white hover:bg-[#6b5cf8]"
+                  >
+                    Suggest org chart
+                  </button>
                 </>
               )}
             </div>
@@ -3408,6 +3755,16 @@ function MapInner() {
               onMapUpdated={handleRosterMapUpdated}
               onCountsChange={setRosterCounts}
               beforeAdd={flushPendingPersist}
+            />
+          )}
+          {showSuggest && mapId && (
+            <SuggestChartPanel
+              mapId={mapId}
+              readOnly={readOnly}
+              peopleCount={people.length}
+              onClose={() => setShowSuggest(false)}
+              onApplied={handleSuggestedApplied}
+              beforeApply={flushPendingPersist}
             />
           )}
           {selected && mapId && (

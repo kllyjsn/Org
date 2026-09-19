@@ -1,6 +1,8 @@
-import { memo } from 'react';
+import { memo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { NodeProps } from 'reactflow';
 import { deptColor } from '../lib/colors';
+import type { EvidenceKind } from '../types';
 
 export interface LaneHeaderData {
   label: string;
@@ -12,9 +14,17 @@ export interface LaneHeaderData {
   span?: number;
   colGap?: number;
   onToggle?: (lane: string) => void;
+  suggested?: {
+    confidence: 'high' | 'medium' | 'low';
+    evidenceCounts: Partial<Record<EvidenceKind, number>>;
+  };
 }
 
 function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
+  const [whyOpen, setWhyOpen] = useState<{ left: number; top: number } | null>(
+    null
+  );
+  const whyButton = useRef<HTMLButtonElement>(null);
   const collapsible = data.shown !== undefined && data.shown < data.count;
   const expanded = data.expanded === true;
   const width =
@@ -55,6 +65,53 @@ function LaneHeaderNode({ data }: NodeProps<LaneHeaderData>) {
           >
             {expanded ? 'Show fewer' : `Show all ${data.count}`}
           </button>
+        )}
+        {data.suggested && (
+          <div className="relative">
+            <button
+              type="button"
+              className="nodrag nopan pointer-events-auto rounded-full border border-dashed border-[#5b4cf0] px-2 py-1 text-[9px] font-semibold text-[#5144d7]"
+              ref={whyButton}
+              onClick={() => {
+                if (whyOpen) return setWhyOpen(null);
+                const rect = whyButton.current?.getBoundingClientRect();
+                if (rect) setWhyOpen({ left: rect.left, top: rect.bottom + 6 });
+              }}
+            >
+              Why this structure?
+            </button>
+            {whyOpen &&
+              createPortal(
+              <div
+                className="fixed z-50 w-64 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-xl"
+                style={whyOpen}
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-semibold text-slate-800">Evidence</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold capitalize">
+                    {data.suggested.confidence}
+                  </span>
+                </div>
+                {(
+                  [
+                    ['sumble_relationship', 'Sumble relationships'],
+                    ['research_reportsTo', 'research reporting lines'],
+                    ['title_inference', 'inferred from titles'],
+                    ['llm', 'moved by guidance'],
+                  ] as const
+                ).map(([kind, label]) =>
+                  data.suggested?.evidenceCounts[kind] ? (
+                    <div key={kind} className="py-0.5">
+                      {data.suggested.evidenceCounts[kind]}{' '}
+                      {kind === 'sumble_relationship' ? 'edges from ' : 'from '}
+                      {label}
+                    </div>
+                  ) : null
+                )}
+              </div>,
+              document.body
+            )}
+          </div>
         )}
       </div>
       <div className="mt-1.5 h-px w-full bg-slate-200" />

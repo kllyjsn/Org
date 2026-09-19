@@ -3,11 +3,18 @@ import { Handle, NodeResizer, Position } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import { BookOpen, StickyNote } from 'lucide-react';
 import { deptColor, initials, ROLE_META } from '../lib/colors';
-import type { Person } from '../types';
+import type { EvidenceKind, Person } from '../types';
 
 export interface PersonNodeData {
   person: Person;
   readOnly?: boolean;
+  suggested?: {
+    confidence: 'high' | 'medium' | 'low';
+    evidence: { kind: EvidenceKind; note?: string; sourceUrl?: string };
+    confirmed: boolean;
+    onConfirm(): void;
+    onDecline(): void;
+  };
 }
 
 function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
@@ -18,14 +25,28 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
     p.researchStatus === 'conflicting' ||
     p.researchStatus === 'possibly_stale' ||
     p.freshness === 'stale';
+  const suggestion = data.suggested;
+  const confidenceChip =
+    suggestion?.confidence === 'high'
+      ? 'bg-emerald-50 text-emerald-700'
+      : suggestion?.confidence === 'medium'
+        ? 'bg-amber-50 text-amber-700'
+        : 'bg-slate-100 text-slate-600';
 
   return (
     <div
+      title={suggestion?.evidence.note}
       className={`relative h-full min-h-[86px] w-full min-w-[220px] overflow-hidden rounded-2xl border bg-white px-3.5 py-3 text-left shadow-[0_8px_24px_rgba(15,23,42,.08)] transition ${
         selected ? 'border-[#5b4cf0] ring-4 ring-[#5b4cf0]/15' : 'border-slate-200'
       } ${
         unverified || needsReview
           ? 'border-dashed border-amber-300'
+          : ''
+      } ${
+        suggestion
+          ? suggestion.confirmed
+            ? 'border-solid border-emerald-500 opacity-100 ring-2 ring-emerald-200'
+            : 'border-dashed border-2 opacity-70'
           : ''
       }`}
     >
@@ -108,6 +129,38 @@ function PersonNode({ data, selected }: NodeProps<PersonNodeData>) {
               <BookOpen size={10} aria-hidden="true" /> {(p.sources ?? []).length}
             </span>
           )}
+        </div>
+      )}
+      {suggestion && (
+        <div className="mt-2 flex items-center gap-1 pl-1">
+          <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${confidenceChip}`}>
+            {suggestion.confidence[0].toUpperCase() + suggestion.confidence.slice(1)}
+          </span>
+          <span className="flex-1" />
+          <button
+            type="button"
+            aria-label="Confirm suggestion"
+            title="Confirm suggestion"
+            className="nodrag nopan flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-50 px-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100 sm:min-h-8 sm:min-w-8"
+            onClick={(event) => {
+              event.stopPropagation();
+              suggestion.onConfirm();
+            }}
+          >
+            ✓
+          </button>
+          <button
+            type="button"
+            aria-label="Decline suggestion"
+            title="Decline suggestion"
+            className="nodrag nopan flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-red-50 px-2 text-sm font-bold text-red-600 hover:bg-red-100 sm:min-h-8 sm:min-w-8"
+            onClick={(event) => {
+              event.stopPropagation();
+              suggestion.onDecline();
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
       <Handle type="source" position={Position.Bottom} className="!bg-slate-400" />

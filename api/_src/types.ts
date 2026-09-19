@@ -49,6 +49,7 @@ export interface Person {
   email: string | null;
   linkedin: string | null;
   jobLevel?: string | null;
+  groupId?: string;
   x: number;
   y: number;
 }
@@ -130,6 +131,14 @@ export interface MapState {
   people: Person[];
   edges: MapEdge[];
   meta: MapMeta;
+  groups?: MapGroup[];
+}
+
+export interface MapGroup {
+  id: string;
+  name: string;
+  parentGroupId: string | null;
+  function?: string | null;
 }
 
 export interface UserRow {
