@@ -13,9 +13,11 @@ import {
   publicUser,
 } from './auth.js';
 import {
+  isExtensionOrigin,
   lookupExtensionUser,
   makeRequireExtensionAuth,
 } from './extension-tokens.js';
+import { allowedWebOrigin } from './http.js';
 import type {
   MapRow,
   MapState,
@@ -36,6 +38,33 @@ export const requireExtensionAuth = makeRequireExtensionAuth(
 );
 
 export { createSession, deleteSession, getSessionUser };
+
+// CSRF guard for cookie-authed mutating requests. Sessions ride
+// SameSite=None cookies when COOKIE_SECURE=1 (production), so the Origin
+// header is the only CSRF signal — enforce it there. Requests without the
+// session cookie (extension bearer auth, Stripe webhook, cron) skip the
+// check entirely.
+export async function csrfOriginGuard(c: Context, next: Next) {
+  if (process.env.COOKIE_SECURE !== '1') {
+    await next();
+    return;
+  }
+  const method = c.req.method;
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    await next();
+    return;
+  }
+  if (!getCookie(c, SESSION_COOKIE)) {
+    await next();
+    return;
+  }
+  const origin = c.req.header('origin');
+  if (origin && (allowedWebOrigin(origin) || isExtensionOrigin(origin))) {
+    await next();
+    return;
+  }
+  return c.json({ error: 'forbidden origin' }, 403);
+}
 
 export function setSessionCookie(c: Context, token: string) {
   // COOKIE_SECURE=1 for production (https + cross-site preview origins).

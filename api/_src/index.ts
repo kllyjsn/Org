@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { isExtensionOrigin } from './extension-tokens.js';
+import { csrfOriginGuard } from './authz.js';
 import { allowedWebOrigin, type App, type Vars } from './http.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { registerBillingRoutes } from './routes/billing.js';
@@ -36,6 +37,7 @@ app.use(
     credentials: true,
   })
 );
+app.use('/api/*', csrfOriginGuard);
 
 registerSystemRoutes(app);
 registerBillingRoutes(app);
