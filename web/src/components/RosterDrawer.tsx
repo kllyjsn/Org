@@ -104,6 +104,7 @@ const SOURCE_LABELS: Record<RosterPerson['source'], string> = {
   sumble: 'Sumble',
   csv: 'CSV',
   linkedin_url: 'LinkedIn URL',
+  sales_navigator: 'Sales Navigator',
   research: 'Research',
 };
 
@@ -127,7 +128,9 @@ function labelForSeniority(value: RosterSeniority): string {
 
 function SourceIcon({ source }: { source: RosterPerson['source'] }) {
   if (source === 'csv') return <FileSpreadsheet size={14} />;
-  if (source === 'linkedin_url') return <LinkIcon size={14} />;
+  if (source === 'linkedin_url' || source === 'sales_navigator') {
+    return <LinkIcon size={14} />;
+  }
   if (source === 'research') return <Sparkles size={14} />;
   return <Database size={14} />;
 }

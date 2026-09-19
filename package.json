@@ -2,16 +2,17 @@
   "name": "org",
   "private": true,
   "version": "0.1.0",
-  "description": "Org — org charts that build themselves. AI-researched account maps for sales teams.",
+  "description": "Org \u2014 org charts that build themselves. AI-researched account maps for sales teams.",
   "workspaces": [
     "web",
-    "api"
+    "api",
+    "extension"
   ],
   "scripts": {
     "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w api\" \"npm run dev -w web\"",
-    "build": "npm run build -w api && npm run build -w web",
-    "lint": "npm run lint -w api && npm run lint -w web",
-    "typecheck": "npm run typecheck -w api && npm run typecheck -w web"
+    "build": "npm run build -w api && npm run build -w web && npm run build -w extension",
+    "lint": "npm run lint -w api && npm run lint -w web && npm run lint -w extension",
+    "typecheck": "npm run typecheck -w api && npm run typecheck -w web && npm run typecheck -w extension"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"

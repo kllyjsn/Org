@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>TopDown extension options</title>
+  <link rel="stylesheet" href="./popup.css">
+  <style>
+    body { width: auto; max-width: 440px; }
+  </style>
+</head>
+<body>
+  <header class="bar"><span class="wordmark"><span class="mark">T</span>TopDown options</span></header>
+  <main>
+    <form id="form" style="display:grid;gap:12px">
+      <label>API base URL
+        <input id="apiUrl" type="url" placeholder="https://api.topdown.sh" required>
+        <span class="muted">Use <code>http://localhost:8787</code> for a local API. Chrome will ask for permission to that host.</span>
+      </label>
+      <label>Extension token
+        <input id="token" type="password" placeholder="tdx_…" autocomplete="off">
+        <span class="muted">Created in TopDown under Accounts → Chrome extension. Stored only in this browser.</span>
+      </label>
+      <label>Default workspace
+        <select id="workspace"><option value="">(first available)</option></select>
+      </label>
+      <div class="row">
+        <button class="primary" type="submit">Save</button>
+        <button id="clear" type="button">Forget token</button>
+      </div>
+      <p id="status" class="muted" aria-live="polite"></p>
+    </form>
+  </main>
+  <script type="module" src="./options.ts"></script>
+</body>
+</html>

@@ -70,7 +70,7 @@ export interface RosterPerson {
   linkedin: string | null;
   email: string | null;
   manager_key: string | null;
-  source: 'sumble' | 'csv' | 'linkedin_url' | 'research';
+  source: 'sumble' | 'csv' | 'linkedin_url' | 'sales_navigator' | 'research';
   source_url: string | null;
   confidence: Confidence;
   status: 'suggested' | 'added' | 'dismissed';
@@ -105,6 +105,13 @@ export interface RosterSyncJob {
   events: RosterSyncEvent[];
   summary: { message?: string; providers?: RosterSyncEvent[]; total?: unknown } | null;
   error: string | null;
+}
+
+export interface ExtensionToken {
+  id: string;
+  label: string;
+  createdAt: string;
+  lastUsedAt: string | null;
 }
 
 export class ApiError extends Error {
@@ -231,6 +238,15 @@ export const api = {
       `/api/workspaces/${workspaceId}/members/${userId}/access`,
       { method: 'PATCH', body: JSON.stringify(access) }
     ),
+  listExtensionTokens: () =>
+    req<{ tokens: ExtensionToken[] }>('/api/extension/tokens'),
+  createExtensionToken: (label: string) =>
+    req<{ token: string; record: ExtensionToken }>('/api/extension/tokens', {
+      method: 'POST',
+      body: JSON.stringify({ label }),
+    }),
+  revokeExtensionToken: (id: string) =>
+    req<{ ok: true }>(`/api/extension/tokens/${id}`, { method: 'DELETE' }),
   revokeInvite: (workspaceId: string, inviteId: string) =>
     req<{ ok: true }>(
       `/api/workspaces/${workspaceId}/invites/${inviteId}`,

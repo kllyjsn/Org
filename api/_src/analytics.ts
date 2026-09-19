@@ -13,7 +13,8 @@ export type ProductEventName =
   | 'deep_research_completed'
   | 'comment_added'
   | 'share_created'
-  | 'live_opportunity_set';
+  | 'live_opportunity_set'
+  | 'roster_imported';
 
 type EventProperties = Record<string, string | number | boolean | null>;
 

@@ -222,6 +222,15 @@ CREATE TABLE IF NOT EXISTS roster_people (
   UNIQUE (workspace_id, domain, person_key)
 );
 CREATE INDEX IF NOT EXISTS roster_people_ws_domain ON roster_people(workspace_id, domain);
+CREATE TABLE IF NOT EXISTS extension_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT UNIQUE NOT NULL,
+  label TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS extension_tokens_user ON extension_tokens(user_id);
 CREATE TABLE IF NOT EXISTS roster_sync_jobs (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
