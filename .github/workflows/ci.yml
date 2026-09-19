@@ -34,4 +34,6 @@ jobs:
         run: npm run build
 
       - name: Audit
-        run: npm audit --audit-level=high
+        # node 22's npm 10.x POSTs the retired /audits/quick endpoint (400s);
+        # npm 11 uses the maintained bulk-advisory endpoint.
+        run: npx --yes npm@11 audit --audit-level=high
