@@ -526,6 +526,8 @@ export default function AccountsPage() {
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [pageError, setPageError] = useState('');
   const [exportingTerritory, setExportingTerritory] = useState(false);
+  const [verifySent, setVerifySent] = useState(false);
+  const [verifyBusy, setVerifyBusy] = useState(false);
   const workspace = workspaces.find((item) => item.id === workspaceId);
   useDocumentTitle('Accounts — TopDown');
   const totalPeople = maps.reduce((sum, map) => sum + map.peopleCount, 0);
@@ -801,6 +803,29 @@ export default function AccountsPage() {
           <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {pageError}
           </p>
+        )}
+        {user && !user.emailVerified && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <span>
+              Confirm your email address{verifySent ? ' — link sent. Check your inbox.' : ' to secure your account.'}
+            </span>
+            {!verifySent && (
+              <button
+                disabled={verifyBusy}
+                onClick={() => {
+                  setVerifyBusy(true);
+                  api
+                    .requestEmailVerification()
+                    .then(() => setVerifySent(true))
+                    .catch(() => undefined)
+                    .finally(() => setVerifyBusy(false));
+                }}
+                className="shrink-0 rounded-md bg-amber-200/70 px-2.5 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-200 disabled:opacity-50"
+              >
+                {verifyBusy ? 'Sending…' : 'Resend verification email'}
+              </button>
+            )}
+          </div>
         )}
         <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>

@@ -189,6 +189,26 @@ export const api = {
       body: JSON.stringify({ email, password, name, workspaceName }),
     }),
   logout: () => req<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
+  forgotPassword: (email: string) =>
+    req<{ ok: true }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (token: string, password: string) =>
+    req<{ ok: true }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    }),
+  requestEmailVerification: () =>
+    req<{ ok: true; sent?: boolean; alreadyVerified?: boolean }>(
+      '/api/auth/verify/request',
+      { method: 'POST' }
+    ),
+  confirmEmailVerification: (token: string) =>
+    req<{ ok: true }>('/api/auth/verify/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
 
   createWorkspace: (name: string) =>
     req<{ workspace: Workspace }>('/api/workspaces', {

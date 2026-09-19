@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight,
   BarChart3,
@@ -267,6 +267,16 @@ export default function LoginPage() {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                 />
+                {mode === 'login' && (
+                  <div className="text-right">
+                    <Link
+                      to="/forgot-password"
+                      className="text-xs font-medium text-slate-400 hover:text-slate-700"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                )}
                 {error && (
                   <div
                     role="alert"
