@@ -87,5 +87,10 @@ export async function memberRole(
 }
 
 export function publicUser(u: UserRow) {
-  return { id: u.id, email: u.email, name: u.name };
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    emailVerified: Boolean(u.email_verified_at),
+  };
 }

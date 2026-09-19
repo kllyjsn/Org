@@ -204,6 +204,7 @@ export interface SessionUser {
   email: string;
   name: string;
   isAdmin?: boolean;
+  emailVerified?: boolean;
 }
 
 export type FeedbackCategory = 'bug' | 'idea' | 'research_quality' | 'other';
