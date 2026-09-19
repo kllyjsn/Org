@@ -25,6 +25,7 @@ import { compareMapStates } from '../changes.js';
 import { computeCoverage } from '../coverage.js';
 import { ensureDefaultPersonas } from '../personas.js';
 import { upsertRosterPeople } from '../roster.js';
+import { perUser } from '../rate-limit.js';
 import { mapCreationMetrics } from '../analytics.js';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -161,7 +162,7 @@ export function registerMapRoutes(app: App): void {
     return c.json(computeCoverage(personas, state.people ?? []));
   });
 
-  app.post('/api/maps/:id/ask', requireAuth, async (c) => {
+  app.post('/api/maps/:id/ask', requireAuth, perUser('ask', 60, 60 * 60_000), async (c) => {
     const user = c.get('user');
     const [map, role] = await mapForUser(user, param(c, 'id'));
     if (!map || !role) return bad(c, 'not found', 404);
@@ -310,7 +311,7 @@ export function registerMapRoutes(app: App): void {
     return c.json({ baselineAt: baseline.created_at, changes });
   });
 
-  app.get('/api/maps/:id/briefing', requireAuth, async (c) => {
+  app.get('/api/maps/:id/briefing', requireAuth, perUser('briefing', 30, 60 * 60_000), async (c) => {
     const user = c.get('user');
     const [map, role] = await mapForUser(user, param(c, 'id'));
     if (!map || !role) return bad(c, 'not found', 404);
@@ -369,7 +370,7 @@ export function registerMapRoutes(app: App): void {
     return c.json(deepBriefing);
   });
 
-  app.get('/api/maps/:id/strategy', requireAuth, async (c) => {
+  app.get('/api/maps/:id/strategy', requireAuth, perUser('strategy', 30, 60 * 60_000), async (c) => {
     const user = c.get('user');
     const [map, role] = await mapForUser(user, param(c, 'id'));
     if (!map || !role) return bad(c, 'not found', 404);
