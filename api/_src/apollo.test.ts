@@ -20,7 +20,7 @@ interface Call {
 /** Mock fetch that routes by URL path to canned responses. */
 function mockFetch(handlers: Record<string, (call: Call) => unknown>) {
   const calls: Call[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     const path = url.replace('https://api.apollo.io/api/v1', '');
     const call: Call = {
