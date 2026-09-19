@@ -1,3 +1,4 @@
+import { apolloOrgPeople } from './apollo.js';
 import {
   sumbleAllPeople,
   sumbleRelatedPeople,
@@ -80,8 +81,31 @@ const sumbleProvider: RosterProvider = {
   },
 };
 
+const apolloProvider: RosterProvider = {
+  id: 'apollo',
+  label: 'Apollo',
+  available: () => !!process.env.APOLLO_API_KEY,
+  async fetch(domain, opts) {
+    const org = await apolloOrgPeople(domain, opts);
+    if (!org) return [];
+    return org.people.map((person) => ({
+      name: person.name,
+      title: person.title,
+      location: person.location,
+      linkedin: person.linkedin,
+      email: person.email,
+      managerName: null,
+      managerLinkedin: null,
+      jobLevel: person.jobLevel,
+      functionHint: person.functionHint,
+      sourceUrl: person.sourceUrl,
+      raw: person.raw,
+    }));
+  },
+};
+
 export function rosterProviders(): RosterProvider[] {
-  return [sumbleProvider];
+  return [sumbleProvider, apolloProvider];
 }
 
 export function configuredRosterProviders(): string[] {

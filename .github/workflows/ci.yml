@@ -49,4 +49,18 @@ jobs:
         run: npm run build
 
       - name: Audit
-        run: npm audit --audit-level=high
+        # node 22's npm 10.x POSTs the retired /audits/quick endpoint (400s);
+        # npm 11 uses the maintained bulk-advisory endpoint. Registry outages
+        # warn-and-skip rather than blocking every run; real findings still fail.
+        run: |
+          npx --yes npm@11 audit --audit-level=high --json > audit-report.json || true
+          cat audit-report.json
+          node -e '
+            const fs = require("fs");
+            const txt = fs.readFileSync("audit-report.json", "utf8");
+            const r = JSON.parse(txt.slice(txt.indexOf("{")));
+            const v = (r.metadata && r.metadata.vulnerabilities) || {};
+            const bad = (v.critical || 0) + (v.high || 0);
+            if (bad > 0) { console.log(`::error::${bad} high/critical vulnerabilities — run npm audit locally`); process.exit(1); }
+            if (r.error) { console.log("::warning::npm audit endpoint unavailable — vulnerability gate skipped: " + (r.error.summary || r.error.error || r.error)); }
+          '
