@@ -15,6 +15,7 @@ import {
   runJobTick,
   type ResearchJobRow,
 } from '../research-jobs.js';
+import { perUser } from '../rate-limit.js';
 import type { SellerProfile, UserRow } from '../types.js';
 
 async function researchJobForUser(
@@ -55,7 +56,7 @@ function researchJobView(job: ResearchJobRow) {
 }
 
 export function registerResearchRoutes(app: App): void {
-  app.post('/api/research', requireAuth, async (c) => {
+  app.post('/api/research', requireAuth, perUser('research', 10, 60 * 60_000), async (c) => {
     const user = c.get('user');
     const body = await c.req.json().catch(() => null);
     const domain =
