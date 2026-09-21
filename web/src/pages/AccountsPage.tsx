@@ -992,6 +992,7 @@ export default function AccountsPage() {
       {showSignals && workspaceId && (
         <SignalsModal
           workspaceId={workspaceId}
+          onDismissed={() => setSignalCount((c) => Math.max(0, c - 1))}
           onClose={() => setShowSignals(false)}
           onOpenMap={(id) => navigate(`/app/maps/${id}`)}
           onResearchCompany={(domain, companyName) => {

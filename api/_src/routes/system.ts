@@ -21,11 +21,11 @@ export function registerSystemRoutes(app: App): void {
         `DELETE FROM research_jobs
          WHERE created_at::timestamptz < NOW() - INTERVAL '7 days'`
       );
-      const refreshed = await refreshNextDueMap();
       const watches = await processDueWatches(3).catch((error) => {
         console.error('watch checks failed', error);
         return { processed: 0, errors: 0 };
       });
+      const refreshed = await refreshNextDueMap();
       return c.json({ ...refreshed, watches });
     } catch (error) {
       console.error('background refresh failed', error);

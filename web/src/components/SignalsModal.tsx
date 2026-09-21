@@ -9,11 +9,13 @@ export default function SignalsModal({
   onClose,
   onOpenMap,
   onResearchCompany,
+  onDismissed,
 }: {
   workspaceId: string;
   onClose: () => void;
   onOpenMap: (mapId: string) => void;
   onResearchCompany: (domain: string, companyName: string | null) => void;
+  onDismissed?: () => void;
 }) {
   const [signals, setSignals] = useState<PersonSignal[] | null>(null);
   const [error, setError] = useState('');
@@ -31,6 +33,7 @@ export default function SignalsModal({
     try {
       await api.dismissSignal(workspaceId, signalId);
       setSignals((items) => items?.filter((s) => s.id !== signalId) ?? null);
+      onDismissed?.();
     } catch {
       setError('Could not dismiss the signal.');
     }
