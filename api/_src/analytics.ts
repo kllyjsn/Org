@@ -15,7 +15,8 @@ export type ProductEventName =
   | 'share_created'
   | 'live_opportunity_set'
   | 'roster_imported'
-  | 'outreach_drafted';
+  | 'outreach_drafted'
+  | 'person_watch_set';
 
 type EventProperties = Record<string, string | number | boolean | null>;
 
