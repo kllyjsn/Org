@@ -16,10 +16,15 @@ import {
   setSessionCookie,
   workspacesFor,
 } from '../authz.js';
+import { perIp } from '../rate-limit.js';
 import type { UserRow } from '../types.js';
 
+// 10 attempts per IP per 5 minutes on credential endpoints — enough for a
+// human who typos, far too small for brute force.
+const authLimit = perIp('auth', 10, 5 * 60_000);
+
 export function registerAuthRoutes(app: App): void {
-  app.post('/api/auth/register', async (c) => {
+  app.post('/api/auth/register', authLimit, async (c) => {
     const body = await c.req.json().catch(() => null);
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
     const password = typeof body?.password === 'string' ? body.password : '';
@@ -53,7 +58,7 @@ export function registerAuthRoutes(app: App): void {
     });
   });
 
-  app.post('/api/auth/login', async (c) => {
+  app.post('/api/auth/login', authLimit, async (c) => {
     const body = await c.req.json().catch(() => null);
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
     const password = typeof body?.password === 'string' ? body.password : '';

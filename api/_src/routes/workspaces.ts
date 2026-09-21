@@ -31,6 +31,7 @@ import {
   normalizeEmail,
   parseAccessRequest,
 } from '../invites.js';
+import { perIp, perUser } from '../rate-limit.js';
 import { sendEmail } from '../email.js';
 import { DOMAIN_RE } from '../research.js';
 import {
@@ -321,7 +322,7 @@ export function registerWorkspaceRoutes(app: App): void {
     });
   });
 
-  app.post('/api/invites/:token/accept', async (c) => {
+  app.post('/api/invites/:token/accept', perIp('invite-accept', 10, 5 * 60_000), async (c) => {
     c.header('Cache-Control', 'no-store');
     const rows = await query<{
       id: string;
@@ -402,7 +403,7 @@ export function registerWorkspaceRoutes(app: App): void {
     });
   });
 
-  app.post('/api/workspaces/:id/seller-profile/research', requireAuth, async (c) => {
+  app.post('/api/workspaces/:id/seller-profile/research', requireAuth, perUser('seller-research', 12, 60 * 60_000), async (c) => {
     const user = c.get('user');
     const workspaceId = param(c, 'id');
     if (!canWrite(await workspaceRoleFor(user, workspaceId))) {
@@ -476,7 +477,7 @@ export function registerWorkspaceRoutes(app: App): void {
     return c.json({ personas: await replacePersonas(workspaceId, personas) });
   });
 
-  app.post('/api/workspaces/:id/personas/suggest', requireAuth, async (c) => {
+  app.post('/api/workspaces/:id/personas/suggest', requireAuth, perUser('personas-suggest', 12, 60 * 60_000), async (c) => {
     const user = c.get('user');
     const workspaceId = param(c, 'id');
     if (!canWrite(await workspaceRoleFor(user, workspaceId))) {

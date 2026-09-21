@@ -23,6 +23,7 @@ import {
   type Confidence,
 } from '../suggest-chart.js';
 import { listPersonas } from '../personas.js';
+import { perUser } from '../rate-limit.js';
 import { isFn, isSeniority } from '../taxonomy.js';
 import {
   createRosterSyncJob,
@@ -217,7 +218,7 @@ export function registerRosterRoutes(app: App): void {
     });
   });
 
-  app.post('/api/maps/:id/roster/sync', requireAuth, async (c) => {
+  app.post('/api/maps/:id/roster/sync', requireAuth, perUser('roster-sync', 12, 60 * 60_000), async (c) => {
     const user = c.get('user');
     const [map, role] = await mapForUser(user, param(c, 'id'));
     if (!map || !role) return bad(c, 'not found', 404);
@@ -343,7 +344,7 @@ export function registerRosterRoutes(app: App): void {
     return c.json({ map: { ...materialized.map, role }, added: materialized.added });
   });
 
-  app.post('/api/maps/:id/suggest-chart', requireAuth, async (c) => {
+  app.post('/api/maps/:id/suggest-chart', requireAuth, perUser('suggest-chart', 15, 60 * 60_000), async (c) => {
     const user = c.get('user');
     const [map, role] = await mapForUser(user, param(c, 'id'));
     if (!map || !role) return bad(c, 'not found', 404);
