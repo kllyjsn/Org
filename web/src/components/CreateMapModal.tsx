@@ -58,14 +58,16 @@ function templateState(
 
 export default function CreateMapModal({
   workspaceId,
+  initialDomain = '',
   onClose,
   onCreated,
 }: {
   workspaceId: string;
+  initialDomain?: string;
   onClose: () => void;
   onCreated: (mapId: string) => void;
 }) {
-  const [domain, setDomain] = useState('');
+  const [domain, setDomain] = useState(initialDomain);
   const [researching, setResearching] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [events, setEvents] = useState<ResearchEvent[]>([]);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'framer-motion';
-import { PenLine, Trash2 } from 'lucide-react';
+import { Eye, Loader2, PenLine, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { ROLE_META } from '../lib/colors';
 import OutreachModal from './OutreachModal';
@@ -59,6 +59,8 @@ export default function PersonPanel({
   const [influenceTarget, setInfluenceTarget] = useState('');
   const [influenceLabel, setInfluenceLabel] = useState('');
   const [showOutreach, setShowOutreach] = useState(false);
+  const [watching, setWatching] = useState(false);
+  const [watchBusy, setWatchBusy] = useState(false);
 
   const managerId =
     edges.find((e) => e.kind === 'reports' && e.to === person.id)?.from ?? '';
@@ -131,8 +133,25 @@ export default function PersonPanel({
           setComments(r.comments.filter((cm) => cm.person_id === person.id))
         )
         .catch(() => {});
+      api
+        .getWatch(mapId, person.id)
+        .then((r) => setWatching(r.watching))
+        .catch(() => {});
     }
   }, [mapId, person.id, readOnly]);
+
+  const toggleWatch = async () => {
+    if (watchBusy) return;
+    setWatchBusy(true);
+    try {
+      const result = await api.toggleWatch(mapId, person.id);
+      setWatching(result.watching);
+    } catch {
+      setCommentError('Could not update job-move tracking.');
+    } finally {
+      setWatchBusy(false);
+    }
+  };
 
   const postComment = async (e: FormEvent) => {
     e.preventDefault();
@@ -188,13 +207,33 @@ export default function PersonPanel({
 
       <div className="flex-1 space-y-5 overflow-auto p-5">
         {!readOnly && (
-          <button
-            type="button"
-            onClick={() => setShowOutreach(true)}
-            className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-[#5b4cf0]/30 bg-[#eeecff] px-3 py-2 text-xs font-semibold text-[#5b4cf0] transition hover:bg-[#e3e0fd]"
-          >
-            <PenLine size={13} /> Draft outreach
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setShowOutreach(true)}
+              className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#5b4cf0]/30 bg-[#eeecff] px-3 py-2 text-xs font-semibold text-[#5b4cf0] transition hover:bg-[#e3e0fd]"
+            >
+              <PenLine size={13} /> Draft outreach
+            </button>
+            <button
+              type="button"
+              onClick={() => void toggleWatch()}
+              disabled={watchBusy}
+              aria-pressed={watching}
+              className={`flex min-h-11 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:opacity-60 ${
+                watching
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {watchBusy ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Eye size={13} />
+              )}
+              {watching ? 'Tracking moves' : 'Track job moves'}
+            </button>
+          </div>
         )}
 
         <label

@@ -28,6 +28,7 @@ import { api, ApiError } from '../api';
 import { useSession } from '../store';
 import type { MapListItem } from '../types';
 import CreateMapModal from '../components/CreateMapModal';
+import SignalsModal from '../components/SignalsModal';
 import FeedbackInboxModal from '../components/FeedbackInboxModal';
 import FeedbackModal from '../components/FeedbackModal';
 import ValueDashboardModal from '../components/ValueDashboardModal';
@@ -526,6 +527,9 @@ export default function AccountsPage() {
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [pageError, setPageError] = useState('');
   const [exportingTerritory, setExportingTerritory] = useState(false);
+  const [showSignals, setShowSignals] = useState(false);
+  const [signalCount, setSignalCount] = useState(0);
+  const [createDomain, setCreateDomain] = useState('');
   const workspace = workspaces.find((item) => item.id === workspaceId);
   useDocumentTitle('Accounts — TopDown');
   const totalPeople = maps.reduce((sum, map) => sum + map.peopleCount, 0);
@@ -548,6 +552,14 @@ export default function AccountsPage() {
   }, [refreshMaps]);
 
   useEffect(() => {
+    if (!workspaceId) return;
+    api
+      .listSignals(workspaceId)
+      .then((r) => setSignalCount(r.signals.length))
+      .catch(() => {});
+  }, [workspaceId]);
+
+  useEffect(() => {
     if (workspaceId && workspace && !workspace.seller_profile) {
       const key = `topdown_seller_prompted_${workspaceId}`;
       if (!window.localStorage.getItem(key)) {
@@ -568,6 +580,7 @@ export default function AccountsPage() {
       [showPricing, () => setShowPricing(false)],
       [showMembers, () => setShowMembers(false)],
       [showExtension, () => setShowExtension(false)],
+      [showSignals, () => setShowSignals(false)],
       [showCreate, () => setShowCreate(false)],
     ];
     const onEscape = (event: KeyboardEvent) => {
@@ -590,6 +603,7 @@ export default function AccountsPage() {
     showPricing,
     showMembers,
     showExtension,
+    showSignals,
     showCreate,
   ]);
 
@@ -698,6 +712,12 @@ export default function AccountsPage() {
               icon={<Target size={16} />}
               label="Personas"
               onClick={() => setShowPersonas(true)}
+            />
+            <RailButton
+              icon={<Radar size={16} />}
+              label="Signals"
+              badge={signalCount}
+              onClick={() => setShowSignals(true)}
             />
             <RailButton
               icon={<BarChart3 size={16} />}
@@ -969,10 +989,27 @@ export default function AccountsPage() {
         </div>
       </main>
 
+      {showSignals && workspaceId && (
+        <SignalsModal
+          workspaceId={workspaceId}
+          onDismissed={() => setSignalCount((c) => Math.max(0, c - 1))}
+          onClose={() => setShowSignals(false)}
+          onOpenMap={(id) => navigate(`/app/maps/${id}`)}
+          onResearchCompany={(domain, companyName) => {
+            setShowSignals(false);
+            setCreateDomain(domain || companyName || '');
+            setShowCreate(true);
+          }}
+        />
+      )}
       {showCreate && workspaceId && (
         <CreateMapModal
           workspaceId={workspaceId}
-          onClose={() => setShowCreate(false)}
+          initialDomain={createDomain}
+          onClose={() => {
+            setShowCreate(false);
+            setCreateDomain('');
+          }}
           onCreated={(id) => navigate(`/app/maps/${id}`)}
         />
       )}

@@ -11,6 +11,7 @@ export default function RailButton({
   active,
   accent = false,
   disabled = false,
+  badge,
 }: {
   icon: ReactNode;
   label: string;
@@ -18,6 +19,7 @@ export default function RailButton({
   active?: boolean;
   accent?: boolean;
   disabled?: boolean;
+  badge?: number;
 }) {
   return (
     <button
@@ -27,7 +29,7 @@ export default function RailButton({
       title={label}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
-      className={`flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl transition sm:h-9 sm:w-full sm:justify-start sm:px-3 ${
+      className={`relative flex h-11 w-11 shrink-0 items-center justify-center gap-2.5 rounded-xl transition sm:h-9 sm:w-full sm:justify-start sm:px-3 ${
         active
           ? 'bg-white/15 text-white'
           : accent
@@ -39,6 +41,11 @@ export default function RailButton({
       <span className="hidden truncate text-[13px] font-medium sm:block">
         {label}
       </span>
+      {badge !== undefined && badge > 0 && (
+        <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white sm:static sm:ml-auto">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
     </button>
   );
 }

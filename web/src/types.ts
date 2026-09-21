@@ -540,6 +540,43 @@ export interface OutreachDraft {
   evidence: string[];
 }
 
+export interface WatchedPerson {
+  id: string;
+  workspace_id: string;
+  map_id: string;
+  person_id: string;
+  person_key: string;
+  name: string;
+  title: string | null;
+  role: string | null;
+  company_name: string | null;
+  domain: string;
+  linkedin: string | null;
+  status: 'watching' | 'moved' | 'departed';
+  next_check_at: string;
+  last_checked_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface PersonSignal {
+  id: string;
+  workspace_id: string;
+  watch_id: string;
+  map_id: string;
+  map_name: string;
+  person_name: string;
+  kind: 'moved' | 'departed';
+  title: string;
+  detail: string | null;
+  new_company: string | null;
+  new_title: string | null;
+  new_domain: string | null;
+  sources: string[];
+  created_at: string;
+  dismissed_at: string | null;
+}
+
 export type ProductEventName =
   | 'map_viewed'
   | 'source_opened'
@@ -547,7 +584,8 @@ export type ProductEventName =
   | 'briefing_action_selected'
   | 'strategy_opened'
   | 'deep_research_completed'
-  | 'outreach_drafted';
+  | 'outreach_drafted'
+  | 'person_watch_set';
 
 export interface ProductValueSummary {
   personal: {
