@@ -70,7 +70,13 @@ export interface RosterPerson {
   linkedin: string | null;
   email: string | null;
   manager_key: string | null;
-  source: 'sumble' | 'csv' | 'linkedin_url' | 'sales_navigator' | 'research';
+  source:
+    | 'sumble'
+    | 'apollo'
+    | 'csv'
+    | 'linkedin_url'
+    | 'sales_navigator'
+    | 'research';
   source_url: string | null;
   confidence: Confidence;
   status: 'suggested' | 'added' | 'dismissed';

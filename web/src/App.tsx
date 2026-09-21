@@ -10,6 +10,7 @@ import InvitePage from './pages/InvitePage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import PrivacyPage from './pages/PrivacyPage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading, load } = useSession();
@@ -44,6 +45,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route
         path="/app"
         element={
