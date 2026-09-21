@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'framer-motion';
-import { Trash2 } from 'lucide-react';
+import { PenLine, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { ROLE_META } from '../lib/colors';
+import OutreachModal from './OutreachModal';
 import type {
   BuyingRole,
   MapComment,
@@ -57,6 +58,7 @@ export default function PersonPanel({
   const [commentError, setCommentError] = useState('');
   const [influenceTarget, setInfluenceTarget] = useState('');
   const [influenceLabel, setInfluenceLabel] = useState('');
+  const [showOutreach, setShowOutreach] = useState(false);
 
   const managerId =
     edges.find((e) => e.kind === 'reports' && e.to === person.id)?.from ?? '';
@@ -121,6 +123,7 @@ export default function PersonPanel({
   useEffect(() => {
     setComments([]);
     setDraft('');
+    setShowOutreach(false);
     if (!readOnly) {
       api
         .listComments(mapId)
@@ -184,6 +187,16 @@ export default function PersonPanel({
       </div>
 
       <div className="flex-1 space-y-5 overflow-auto p-5">
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setShowOutreach(true)}
+            className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-[#5b4cf0]/30 bg-[#eeecff] px-3 py-2 text-xs font-semibold text-[#5b4cf0] transition hover:bg-[#e3e0fd]"
+          >
+            <PenLine size={13} /> Draft outreach
+          </button>
+        )}
+
         <label
           className={`flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 shadow-sm ${
             readOnly ? 'pointer-events-none' : 'cursor-pointer'
@@ -706,6 +719,14 @@ export default function PersonPanel({
             <Trash2 size={13} /> Remove from map
           </button>
         </div>
+      )}
+
+      {showOutreach && (
+        <OutreachModal
+          mapId={mapId}
+          person={person}
+          onClose={() => setShowOutreach(false)}
+        />
       )}
     </motion.aside>
   );

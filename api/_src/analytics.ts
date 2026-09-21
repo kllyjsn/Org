@@ -14,7 +14,8 @@ export type ProductEventName =
   | 'comment_added'
   | 'share_created'
   | 'live_opportunity_set'
-  | 'roster_imported';
+  | 'roster_imported'
+  | 'outreach_drafted';
 
 type EventProperties = Record<string, string | number | boolean | null>;
 

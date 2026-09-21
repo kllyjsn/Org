@@ -530,13 +530,24 @@ export interface MapPresence {
   selected_person_id: string | null;
 }
 
+export interface OutreachDraft {
+  generatedAt: string;
+  provider: string;
+  subject: string;
+  emailBody: string;
+  linkedinNote: string;
+  talkingPoints: string[];
+  evidence: string[];
+}
+
 export type ProductEventName =
   | 'map_viewed'
   | 'source_opened'
   | 'briefing_opened'
   | 'briefing_action_selected'
   | 'strategy_opened'
-  | 'deep_research_completed';
+  | 'deep_research_completed'
+  | 'outreach_drafted';
 
 export interface ProductValueSummary {
   personal: {

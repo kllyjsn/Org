@@ -17,6 +17,7 @@ import type {
   MapPresence,
   MapState,
   MapVersion,
+  OutreachDraft,
   ProductEventName,
   ProductValueSummary,
   Confidence,
@@ -692,4 +693,10 @@ export const api = {
     }),
   getValueSummary: (workspaceId: string) =>
     req<ProductValueSummary>(`/api/workspaces/${workspaceId}/value`),
+
+  draftOutreach: (mapId: string, personId: string) =>
+    req<{ draft: OutreachDraft }>(
+      `/api/maps/${mapId}/people/${personId}/outreach`,
+      { method: 'POST' }
+    ),
 };
