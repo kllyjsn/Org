@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { query, now } from './db.js';
+import { flagAbsentWatchlistPeople } from './watchlist.js';
 import {
   canonicalPersonName,
   researchOrg,
@@ -190,6 +191,11 @@ export async function refreshNextDueMap(): Promise<{
     `UPDATE maps SET state = $1, company_name = $2, updated_at = $3
      WHERE id = $4`,
     [JSON.stringify(state), state.meta.companyName, timestamp, map.id]
+  );
+  // Watched people missing from the fresh research get an immediate trace
+  // next cron run — an early departure detector.
+  await flagAbsentWatchlistPeople(map, result).catch((error) =>
+    console.warn('[refresh] watchlist flagging failed', error)
   );
   return { refreshed: true, mapId: map.id, domain: map.domain };
 }

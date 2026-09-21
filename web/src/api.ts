@@ -17,6 +17,8 @@ import type {
   MapPresence,
   MapState,
   MapVersion,
+  OutreachDraft,
+  PersonSignal,
   ProductEventName,
   ProductValueSummary,
   Confidence,
@@ -29,6 +31,7 @@ import type {
   SellerProfile,
   SessionUser,
   ShareLink,
+  WatchedPerson,
   Workspace,
 } from './types';
 
@@ -692,4 +695,26 @@ export const api = {
     }),
   getValueSummary: (workspaceId: string) =>
     req<ProductValueSummary>(`/api/workspaces/${workspaceId}/value`),
+
+  draftOutreach: (mapId: string, personId: string) =>
+    req<{ draft: OutreachDraft }>(
+      `/api/maps/${mapId}/people/${personId}/outreach`,
+      { method: 'POST' }
+    ),
+  toggleWatch: (mapId: string, personId: string) =>
+    req<{ watching: boolean; watch: WatchedPerson | null }>(
+      `/api/maps/${mapId}/people/${personId}/watch`,
+      { method: 'POST' }
+    ),
+  getWatch: (mapId: string, personId: string) =>
+    req<{ watching: boolean; watch: WatchedPerson | null }>(
+      `/api/maps/${mapId}/people/${personId}/watch`
+    ),
+  listSignals: (workspaceId: string) =>
+    req<{ signals: PersonSignal[] }>(`/api/workspaces/${workspaceId}/signals`),
+  dismissSignal: (workspaceId: string, signalId: string) =>
+    req<{ ok: true }>(`/api/signals/${signalId}/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify({ workspaceId }),
+    }),
 };

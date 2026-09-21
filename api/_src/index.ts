@@ -14,6 +14,7 @@ import { registerExtensionRoutes } from './routes/extension.js';
 import { registerShareRoutes } from './routes/share.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
+import { registerPeopleRoutes } from './routes/people.js';
 
 const app: App = new Hono<{ Variables: Vars }>();
 
@@ -49,5 +50,6 @@ registerExtensionRoutes(app);
 registerShareRoutes(app);
 registerAnalyticsRoutes(app);
 registerFeedbackRoutes(app);
+registerPeopleRoutes(app);
 
 export default app;

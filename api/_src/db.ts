@@ -244,6 +244,43 @@ CREATE TABLE IF NOT EXISTS roster_sync_jobs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS watched_people (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  person_id TEXT NOT NULL,
+  person_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  title TEXT,
+  role TEXT,
+  company_name TEXT,
+  domain TEXT NOT NULL,
+  linkedin TEXT,
+  status TEXT NOT NULL DEFAULT 'watching' CHECK (status IN ('watching','moved','departed')),
+  next_check_at TEXT NOT NULL,
+  last_checked_at TEXT,
+  created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  UNIQUE (map_id, person_id)
+);
+CREATE INDEX IF NOT EXISTS idx_watched_people_due ON watched_people(next_check_at);
+CREATE INDEX IF NOT EXISTS idx_watched_people_map ON watched_people(map_id);
+CREATE TABLE IF NOT EXISTS person_signals (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  watch_id TEXT NOT NULL REFERENCES watched_people(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('moved','departed')),
+  title TEXT NOT NULL,
+  detail TEXT,
+  new_company TEXT,
+  new_title TEXT,
+  new_domain TEXT,
+  sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TEXT NOT NULL,
+  dismissed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_person_signals_ws ON person_signals(workspace_id, created_at DESC);
 `;
 
 async function getPool(): Promise<pg.Pool> {
