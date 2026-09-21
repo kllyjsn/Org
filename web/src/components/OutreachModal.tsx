@@ -58,6 +58,13 @@ export default function OutreachModal({
       .finally(() => setLoading(false));
   };
 
+  // Regenerate disables its own button while busy, which would drop focus
+  // to <body> and break the trap — park focus on the dialog instead.
+  const regenerate = () => {
+    trapRef.current?.focus();
+    generate();
+  };
+
   useEffect(generate, [mapId, person.id]);
 
   const mailto = person.email
@@ -71,7 +78,14 @@ export default function OutreachModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="outreach-modal-title"
-        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white p-6 shadow-2xl"
+        tabIndex={-1}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            onClose();
+          }
+        }}
+        className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white p-6 shadow-2xl outline-none"
       >
         <div className="mb-1 flex items-start justify-between">
           <div>
@@ -204,7 +218,7 @@ export default function OutreachModal({
           </span>
           <button
             type="button"
-            onClick={generate}
+            onClick={regenerate}
             disabled={loading}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
