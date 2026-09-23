@@ -5,6 +5,7 @@ import { now, query } from './db.js';
 
 export type RosterSource =
   | 'sumble'
+  | 'apollo'
   | 'csv'
   | 'linkedin_url'
   | 'sales_navigator'
@@ -75,7 +76,9 @@ export function mergeRosterRows(
   const seniority =
     seniorityFromLevel(incoming.jobLevel) ?? titleClassification.seniority;
   const fn = classification.function as Fn;
-  const bulk = incoming.source === 'sumble';
+  // Provider syncs are bulk data — they never overwrite a manually curated
+  // source label (csv/linkedin imports) on an existing row.
+  const bulk = incoming.source === 'sumble' || incoming.source === 'apollo';
   const source =
     existing &&
     (existing.source === 'linkedin_url' ||

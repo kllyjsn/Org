@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite build --watch",
     "build": "tsc -b --noEmit && vite build && vite build -c vite.content.config.ts",
+    "pack": "npm run build && cd dist && rm -f ../topdown-extension.zip && zip -qr ../topdown-extension.zip . && echo 'topdown-extension.zip ready — upload this to the Chrome Web Store'",
     "lint": "eslint src test",
     "typecheck": "tsc -b --noEmit",
     "test": "tsx --test test/*.test.ts"
