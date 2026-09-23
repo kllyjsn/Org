@@ -3,7 +3,7 @@ import { now, query } from './db.js';
 import { canonicalPersonName } from './research.js';
 import { linkedinSlug } from './csv.js';
 import { rosterProviders } from './roster-providers.js';
-import { rosterCounts, upsertRosterPeople } from './roster.js';
+import { rosterCounts, upsertRosterPeople, type RosterSource } from './roster.js';
 
 export interface RosterSyncJobRow {
   id: string;
@@ -115,7 +115,7 @@ export async function runRosterSync(jobId: string) {
             : candidate.managerName
               ? canonicalPersonName(candidate.managerName)
               : null,
-          source: 'sumble',
+          source: provider.id as RosterSource,
           sourceUrl: candidate.sourceUrl,
           confidence: 'medium',
           raw: candidate.raw,

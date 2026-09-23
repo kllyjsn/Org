@@ -98,10 +98,12 @@ const FUNCTION_LABELS: Record<RosterFn, string> = {
 
 const PROVIDER_LABELS: Record<string, string> = {
   sumble: 'Sumble',
+  apollo: 'Apollo',
 };
 
 const SOURCE_LABELS: Record<RosterPerson['source'], string> = {
   sumble: 'Sumble',
+  apollo: 'Apollo',
   csv: 'CSV',
   linkedin_url: 'LinkedIn URL',
   sales_navigator: 'Sales Navigator',
@@ -562,7 +564,7 @@ export default function RosterDrawer({
                 ? `Configured: ${response.providers
                     .map((provider) => PROVIDER_LABELS[provider] ?? provider)
                     .join(', ')}`
-                : 'No providers configured — set SUMBLE_API_KEY, or import a CSV / LinkedIn URLs below'}
+                : 'No providers configured — set SUMBLE_API_KEY or APOLLO_API_KEY, or import a CSV / LinkedIn URLs below'}
             </p>
           </div>
         )}

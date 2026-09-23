@@ -3,6 +3,7 @@
   "name": "TopDown for LinkedIn",
   "version": "0.1.0",
   "description": "Add the LinkedIn profile you're viewing, or a Sales Navigator lead list, to a TopDown account roster.",
+  "homepage_url": "https://topdown.sh",
   "action": {
     "default_title": "TopDown",
     "default_popup": "popup.html",
